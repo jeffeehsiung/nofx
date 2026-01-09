@@ -94,6 +94,7 @@ type TradingStats struct {
 
 // RecentOrder recently completed order (for AI input)
 type RecentOrder struct {
+	// Basic execution data
 	Symbol       string  `json:"symbol"`        // Trading pair
 	Side         string  `json:"side"`          // long/short
 	EntryPrice   float64 `json:"entry_price"`   // Entry price
@@ -103,6 +104,61 @@ type RecentOrder struct {
 	EntryTime    string  `json:"entry_time"`    // Entry time
 	ExitTime     string  `json:"exit_time"`     // Exit time
 	HoldDuration string  `json:"hold_duration"` // Hold duration, e.g. "2h30m"
+	Leverage     int     `json:"leverage,omitempty"`
+
+	// Market Microstructure (Entry)
+	EntrySpread         float64 `json:"entry_spread,omitempty"`          // Bid-ask spread % at entry
+	EntryDepth          float64 `json:"entry_depth,omitempty"`           // Available depth USD at entry
+	EntryArrivalPrice   float64 `json:"entry_arrival_price,omitempty"`   // Signal price
+	EntryFillPrice      float64 `json:"entry_fill_price,omitempty"`      // Actual execution price
+	EntrySlippage       float64 `json:"entry_slippage,omitempty"`        // Arrival → fill slippage %
+	EntrySlippageBudget float64 `json:"entry_slippage_budget,omitempty"` // Expected slippage tolerance %
+
+	// Market Microstructure (Exit)
+	ExitSpread   float64 `json:"exit_spread,omitempty"`   // Spread at exit
+	ExitDepth    float64 `json:"exit_depth,omitempty"`    // Depth at exit
+	ExitSlippage float64 `json:"exit_slippage,omitempty"` // Exit execution slippage %
+
+	// Volatility & Risk
+	ATRAtEntry           float64 `json:"atr_at_entry,omitempty"`             // ATR (14) at entry
+	RealizedVolatility   float64 `json:"realized_volatility,omitempty"`      // σ during trade hold
+	StopDistance         float64 `json:"stop_distance,omitempty"`            // Stop distance in %
+	StopDistanceVsATR    float64 `json:"stop_distance_vs_atr,omitempty"`     // Stop / ATR ratio
+	RiskPerTrade         float64 `json:"risk_per_trade,omitempty"`           // Absolute risk USD
+	RiskPerTradeVsBudget float64 `json:"risk_per_trade_vs_budget,omitempty"` // Risk / account % of risk budget
+
+	// Regime Tags
+	TrendStrength    float64 `json:"trend_strength,omitempty"`    // -1 (strong down) to +1 (strong up)
+	ChopScore        float64 `json:"chop_score,omitempty"`        // 0 (trending) to 1 (choppy)
+	VolatilityRegime string  `json:"volatility_regime,omitempty"` // "low", "normal", "high"
+	MarketRegime     string  `json:"market_regime,omitempty"`     // "trending", "sideways", "volatile"
+
+	// Flow & Participation
+	VolumeAtEntry          float64 `json:"volume_at_entry,omitempty"`           // Volume vs 24h baseline %
+	OIDeltaAtEntry         float64 `json:"oi_delta_at_entry,omitempty"`         // OI 1h change %
+	VolumeDeltaDuringTrade float64 `json:"volume_delta_during_trade,omitempty"` // Volume fade during hold
+	OIDeltaDuringTrade     float64 `json:"oi_delta_during_trade,omitempty"`     // OI change during hold
+
+	// Correlation & Risk Book
+	CorrelationToBTC     float64 `json:"correlation_to_btc,omitempty"`    // Position correlation to BTC
+	PortfolioCorrelation float64 `json:"portfolio_correlation,omitempty"` // Correlation to current book
+	TimeOfDay            int     `json:"time_of_day,omitempty"`           // 0-23 hour UTC
+	EventProximity       string  `json:"event_proximity,omitempty"`       // "pre_event", "post_event", "none"
+
+	// Excursion Metrics
+	MaxFavorableExcursion float64 `json:"max_favorable_excursion,omitempty"` // Best % profit during trade
+	MaxAdverseExcursion   float64 `json:"max_adverse_excursion,omitempty"`   // Worst % loss during trade
+	GiveBackFromPeak      float64 `json:"giveback_from_peak,omitempty"`      // % give-back from MFE
+
+	// Carry & Funding
+	FundingAccrued    float64 `json:"funding_accrued,omitempty"`     // Cumulative funding cost
+	BorrowCostAccrued float64 `json:"borrow_cost_accrued,omitempty"` // Cumulative borrow cost
+
+	// Execution Quality
+	FillQuality    float64 `json:"fill_quality,omitempty"`     // 0-1 score (1=perfect)
+	SlippageVsVWAP float64 `json:"slippage_vs_vwap,omitempty"` // Entry fill vs VWAP %
+	OrderReject    bool    `json:"order_reject,omitempty"`     // Was order rejected?
+	PartialFill    bool    `json:"partial_fill,omitempty"`     // Was fill partial?
 }
 
 // Context trading context (complete information passed to AI)
