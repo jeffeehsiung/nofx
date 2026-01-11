@@ -1365,7 +1365,63 @@ func (analysis *FeedbackAnalysis) FormatForPrompt(lang string) string {
 			sb.WriteString("\n")
 		}
 
+		// ============================================================================
+		// EXECUTION-LEVEL FAILURE ANALYSIS (Trade Failure V2 Microstructure)
+		// ============================================================================
 		if len(analysis.FailurePatterns) > 0 {
+			// Separate V2 execution failures from other patterns
+			var v2Failures []TradingPattern
+			var otherFailures []TradingPattern
+			
+			for _, pattern := range analysis.FailurePatterns {
+				// V2 failure reasons contain microstructure keywords
+				if strings.Contains(pattern.PatternType, "_") || 
+				   strings.Contains(pattern.Description, "Execution-level") {
+					v2Failures = append(v2Failures, pattern)
+				} else {
+					otherFailures = append(otherFailures, pattern)
+				}
+			}
+			
+			// Display V2 execution-level diagnostics
+			if len(v2Failures) > 0 {
+				sb.WriteString("### 📋 执行级失败诊断 (微观结构分析)\n\n")
+				sb.WriteString("**这些失败根植于市场执行条件和入场/出场时机：**\n\n")
+				
+				for i, pattern := range v2Failures {
+					if i >= 5 { // Limit to top 5
+						break
+					}
+					sb.WriteString(fmt.Sprintf("**%s**\n", pattern.Description))
+					sb.WriteString(fmt.Sprintf("   发生: %d 次 | 平均亏损: %.2f%%\n", pattern.Frequency, pattern.AvgPnLPct))
+					
+					// Display evidence (first 2 pieces)
+					if len(pattern.Evidence) > 0 {
+						for j, evidence := range pattern.Evidence {
+							if j >= 2 {
+								break
+							}
+							sb.WriteString(fmt.Sprintf("   证据: %s\n", evidence))
+						}
+					}
+					
+					sb.WriteString(fmt.Sprintf("   **行动**: %s\n\n", pattern.Recommendation))
+				}
+			}
+			
+			// Display other failure patterns
+			if len(otherFailures) > 0 {
+				sb.WriteString("### ⚠️ 其他发现的失败模式\n\n")
+				for i, pattern := range otherFailures {
+					if i >= 3 {
+						break
+					}
+					sb.WriteString(fmt.Sprintf("**%s** (发生 %d 次, 平均亏损 %.2f%%)\n",
+						pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
+					sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
+				}
+			}
+		} else if len(analysis.FailurePatterns) > 0 {
 			sb.WriteString("### ⚠️ 发现的失败模式\n\n")
 			for i, pattern := range analysis.FailurePatterns {
 				if i >= 3 {
@@ -1420,7 +1476,63 @@ func (analysis *FeedbackAnalysis) FormatForPrompt(lang string) string {
 			sb.WriteString("\n")
 		}
 
+		// ============================================================================
+		// EXECUTION-LEVEL FAILURE ANALYSIS (Trade Failure V2 Microstructure)
+		// ============================================================================
 		if len(analysis.FailurePatterns) > 0 {
+			// Separate V2 execution failures from other patterns
+			var v2Failures []TradingPattern
+			var otherFailures []TradingPattern
+			
+			for _, pattern := range analysis.FailurePatterns {
+				// V2 failure reasons contain microstructure keywords
+				if strings.Contains(pattern.PatternType, "_") || 
+				   strings.Contains(pattern.Description, "Execution-level") {
+					v2Failures = append(v2Failures, pattern)
+				} else {
+					otherFailures = append(otherFailures, pattern)
+				}
+			}
+			
+			// Display V2 execution-level diagnostics
+			if len(v2Failures) > 0 {
+				sb.WriteString("### 📋 Execution-Level Failure Diagnostics (Microstructure)\n\n")
+				sb.WriteString("**These failures are rooted in actual market execution conditions and entry/exit timing:**\n\n")
+				
+				for i, pattern := range v2Failures {
+					if i >= 5 { // Limit to top 5
+						break
+					}
+					sb.WriteString(fmt.Sprintf("**%s**\n", pattern.Description))
+					sb.WriteString(fmt.Sprintf("   Occurred: %d times | Avg Loss: %.2f%%\n", pattern.Frequency, pattern.AvgPnLPct))
+					
+					// Display evidence (first 2 pieces)
+					if len(pattern.Evidence) > 0 {
+						for j, evidence := range pattern.Evidence {
+							if j >= 2 {
+								break
+							}
+							sb.WriteString(fmt.Sprintf("   Evidence: %s\n", evidence))
+						}
+					}
+					
+					sb.WriteString(fmt.Sprintf("   **Action**: %s\n\n", pattern.Recommendation))
+				}
+			}
+			
+			// Display other failure patterns
+			if len(otherFailures) > 0 {
+				sb.WriteString("### ⚠️ Other Identified Failure Patterns\n\n")
+				for i, pattern := range otherFailures {
+					if i >= 3 {
+						break
+					}
+					sb.WriteString(fmt.Sprintf("**%s** (occurred %d times, avg loss %.2f%%)\n",
+						pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
+					sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
+				}
+			}
+		} else if len(analysis.FailurePatterns) > 0 {
 			sb.WriteString("### ⚠️ Identified Failure Patterns\n\n")
 			for i, pattern := range analysis.FailurePatterns {
 				if i >= 3 {

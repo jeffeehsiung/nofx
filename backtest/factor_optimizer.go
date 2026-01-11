@@ -203,6 +203,103 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 		improvements = append(improvements, fmt.Sprintf("Enabled aggressive drawdown monitoring due to high drawdown"))
 	}
 
+	// ============================================================================
+	// V2 EXECUTION-LEVEL FAILURE RESPONSE
+	// ============================================================================
+	// Adjust parameters based on microstructure failure patterns from Trade Failure V2
+	
+	// Helper function to check for V2 failure reason
+	hasV2Failure := func(patternType string) bool {
+		for _, pattern := range feedback.FailurePatterns {
+			if pattern.PatternType == patternType {
+				return true
+			}
+		}
+		return false
+	}
+	
+	// Helper function to count V2 failures of a specific type
+	countV2Failures := func(patternType string) int {
+		for _, pattern := range feedback.FailurePatterns {
+			if pattern.PatternType == patternType {
+				return pattern.Frequency
+			}
+		}
+		return 0
+	}
+	
+	// Execution failures - reduce slippage budget and position size
+	if hasV2Failure("chasing_entry") || hasV2Failure("slippage_exceeded") {
+		// Reduce entry tolerance for slippage
+		newConfig.MinPositionSize = newConfig.MinPositionSize * 0.85
+		improvements = append(improvements, 
+			fmt.Sprintf("Reduced min position size by 15%% due to chasing/slippage failures"))
+	}
+	
+	// Stop loss management
+	if hasV2Failure("stop_too_tight") {
+		// Increase min confidence to avoid tight stops on weak signals
+		newConfig.MinConfidence = int(math.Min(float64(newConfig.MinConfidence)*1.1, 85.0))
+		improvements = append(improvements, 
+			fmt.Sprintf("Increased min confidence by 10%% to avoid tight stops on weak signals"))
+	}
+	
+	// Liquidity-related failures
+	if hasV2Failure("liquidity_risk_high") || hasV2Failure("liquidity_dried") {
+		// Reduce position sizes for liquidity-constrained trades
+		newConfig.AltcoinMaxPositionValueRatio = newConfig.AltcoinMaxPositionValueRatio * 0.7
+		if newConfig.AltcoinMaxPositionValueRatio < 0.3 {
+			newConfig.AltcoinMaxPositionValueRatio = 0.3
+		}
+		improvements = append(improvements,
+			fmt.Sprintf("Reduced altcoin position size ratio to 0.7x due to liquidity issues"))
+	}
+	
+	// False breakouts and premature entries
+	if countV2Failures("false_breakout_v2") > 2 || countV2Failures("premature_entry") > 2 {
+		// More aggressive filtering for entry confirmation
+		newConfig.MinConfidence = int(math.Min(float64(newConfig.MinConfidence)*1.15, 85.0))
+		improvements = append(improvements,
+			fmt.Sprintf("Increased min confidence by 15%% due to false breakout/premature entry patterns"))
+	}
+	
+	// Momentum decay and late exit issues
+	if hasV2Failure("momentum_decay") || hasV2Failure("late_exit_giveback") {
+		// Tighten profit targets - exit earlier to avoid give-back
+		improvements = append(improvements,
+			fmt.Sprintf("⚠️ Monitor momentum during holds - implement trailing stops to avoid give-back"))
+	}
+	
+	// Regime mismatch
+	if countV2Failures("regime_mismatch") > 1 {
+		// Already have regime checking - note for monitoring
+		improvements = append(improvements,
+			fmt.Sprintf("Regime mismatch detected - ensure pre-entry regime checks are active"))
+	}
+	
+	// Stacked risk - reduce position count
+	if hasV2Failure("stacked_risk") {
+		if newConfig.MaxPositions > 2 {
+			newConfig.MaxPositions = newConfig.MaxPositions - 1
+		}
+		improvements = append(improvements,
+			fmt.Sprintf("Reduced max concurrent positions from %d to %d due to correlation risk",
+				oldConfig.MaxPositions, newConfig.MaxPositions))
+	}
+	
+	// Cost-related failures
+	if hasV2Failure("funding_drag") || hasV2Failure("borrowing_cost_high") {
+		// Reduce hold time / position time exposure
+		improvements = append(improvements,
+			fmt.Sprintf("⚠️ Funding/borrowing costs detected - reduce hold time for cost-sensitive trades"))
+	}
+	
+	// Technical faults
+	if hasV2Failure("technical_fault") {
+		improvements = append(improvements,
+			fmt.Sprintf("⚠️ Technical faults detected - review system reliability before next trading cycle"))
+	}
+
 	// Calculate improvement score
 	improvementPct := 0.0
 	if feedback.TotalReturnPct > 0 {
