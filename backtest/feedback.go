@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"nofx/decision"
 	"nofx/logger"
+	"nofx/market"
 	"os"
 	"path/filepath"
 	"sort"
@@ -87,6 +89,9 @@ type DecisionOutcome struct {
 
 	// What went right/wrong
 	Analysis string `json:"analysis"`
+	
+	// NEW: Detailed microstructure data for Trade Failure V2 analysis
+	RecentOrder *decision.RecentOrder `json:"recent_order,omitempty"`
 }
 
 // FeedbackConfig controls feedback loop behavior
@@ -230,6 +235,10 @@ type ClosedPosition struct {
 	RealizedPnL float64
 	EntryEvent  TradeEvent
 	ExitEvent   TradeEvent
+	
+	// Market data snapshots for microstructure analysis
+	EntryMarketData *market.Data
+	ExitMarketData  *market.Data
 }
 
 // extractClosedPositions matches open and close events to create complete trade records
@@ -269,6 +278,188 @@ func (fg *FeedbackGenerator) extractClosedPositions(events []TradeEvent) []Close
 	return closed
 }
 
+// buildRecentOrderFromPosition converts a ClosedPosition into decision.RecentOrder with microstructure data
+// This is the bridge between backtest execution and Trade Failure V2 analysis
+func buildRecentOrderFromPosition(pos ClosedPosition) *decision.RecentOrder {
+	holdDuration := pos.ExitTime.Sub(pos.EntryTime)
+	
+	order := &decision.RecentOrder{
+		Symbol:       pos.Symbol,
+		Side:         pos.Side,
+		EntryPrice:   pos.EntryPrice,
+		ExitPrice:    pos.ExitPrice,
+		RealizedPnL:  pos.RealizedPnL,
+		EntryTime:    pos.EntryTime.Format(time.RFC3339),
+		ExitTime:     pos.ExitTime.Format(time.RFC3339),
+		HoldDuration: formatDuration(holdDuration),
+		Leverage:     pos.Leverage,
+	}
+	
+	// Calculate PnL percentage
+	if pos.EntryPrice > 0 {
+		if pos.Side == "long" {
+			order.PnLPct = ((pos.ExitPrice - pos.EntryPrice) / pos.EntryPrice) * 100 * float64(pos.Leverage)
+		} else {
+			order.PnLPct = ((pos.EntryPrice - pos.ExitPrice) / pos.EntryPrice) * 100 * float64(pos.Leverage)
+		}
+	}
+	
+	// Populate microstructure data from entry event (use actual captured values)
+	order.EntrySpread = pos.EntryEvent.Spread
+	order.EntryDepth = pos.EntryEvent.Depth
+	if pos.EntryPrice > 0 {
+		order.EntrySlippage = math.Abs(pos.EntryEvent.Slippage / pos.EntryPrice)
+	}
+	order.EntrySlippageBudget = pos.EntryEvent.SlippageBudget
+	order.SignalTime = pos.EntryEvent.SignalTime
+	order.EntryFillTime = pos.EntryEvent.FillTime
+	
+	// Populate microstructure data from exit event (use actual captured values)
+	order.ExitSpread = pos.ExitEvent.Spread
+	order.ExitDepth = pos.ExitEvent.Depth
+	if pos.ExitPrice > 0 {
+		order.ExitSlippage = math.Abs(pos.ExitEvent.Slippage / pos.ExitPrice)
+	}
+	
+	// Populate market data from entry snapshot
+	if pos.EntryMarketData != nil {
+		order.ATRAtEntry = calculateATRFromSeries(pos.EntryMarketData)
+		order.TrendStrength = extractTrendStrength(pos.EntryMarketData)
+		order.ChopScore = extractChopScore(pos.EntryMarketData)
+		order.MarketRegime = extractMarketRegime(pos.EntryMarketData)
+		order.VolatilityRegime = extractVolatilityRegime(pos.EntryMarketData)
+		order.VolumeAtEntry = extractVolumeRatio(pos.EntryMarketData)
+		order.OIDeltaAtEntry = extractOIDelta(pos.EntryMarketData)
+	}
+	
+	// Calculate deltas during trade (entry vs exit market data)
+	if pos.EntryMarketData != nil && pos.ExitMarketData != nil {
+		order.VolumeDeltaDuringTrade = extractVolumeRatio(pos.ExitMarketData) - extractVolumeRatio(pos.EntryMarketData)
+		order.OIDeltaDuringTrade = extractOIDelta(pos.ExitMarketData) - extractOIDelta(pos.EntryMarketData)
+	}
+	
+	// Calculate stop distance vs ATR if we have ATR and entry spread
+	// Use entry spread + 2*ATR as reasonable stop estimate (ATR-based risk management)
+	if order.ATRAtEntry > 0 && pos.EntryPrice > 0 {
+		atrPct := order.ATRAtEntry / pos.EntryPrice
+		// Stop distance = spread + 2*ATR (standard risk management)
+		stopDistance := order.EntrySpread + (atrPct * 2.0)
+		order.StopDistance = stopDistance
+		order.StopDistanceVsATR = stopDistance / atrPct
+	}
+	
+	// Populate excursion metrics from TradeEvent
+	order.MaxFavorableExcursion = pos.EntryEvent.MaxFavorableExcursion
+	order.MaxAdverseExcursion = pos.ExitEvent.MaxAdverseExcursion
+	
+	// Calculate giveback: how much profit was left on the table after peak
+	// GiveBack = MaxFavorableExcursion - RealizedPnL
+	if order.MaxFavorableExcursion > 0 && pos.RealizedPnL > 0 {
+		order.GiveBackFromPeak = order.MaxFavorableExcursion - pos.RealizedPnL
+	}
+	
+	return order
+}
+
+// Helper functions for market data extraction
+
+func calculateATRFromSeries(data *market.Data) float64 {
+	// Try from intraday data first
+	if data.IntradaySeries != nil && data.IntradaySeries.ATR14 > 0 {
+		return data.IntradaySeries.ATR14
+	}
+	// Try from longer-term data
+	if data.LongerTermContext != nil && data.LongerTermContext.ATR14 > 0 {
+		return data.LongerTermContext.ATR14
+	}
+	// Try from timeframe data (1h or 4h)
+	if data.TimeframeData != nil {
+		if tfData, ok := data.TimeframeData["1h"]; ok && tfData.ATR14 > 0 {
+			return tfData.ATR14
+		}
+		if tfData, ok := data.TimeframeData["4h"]; ok && tfData.ATR14 > 0 {
+			return tfData.ATR14
+		}
+	}
+	return 0.0
+}
+
+func extractTrendStrength(data *market.Data) float64 {
+	// Calculate trend strength from EMA20 vs EMA50
+	if data.LongerTermContext != nil && data.LongerTermContext.EMA20 > 0 && data.LongerTermContext.EMA50 > 0 {
+		return (data.LongerTermContext.EMA20 - data.LongerTermContext.EMA50) / data.LongerTermContext.EMA50
+	}
+	return 0.0
+}
+
+func extractChopScore(data *market.Data) float64 {
+	// Estimate choppiness from ATR vs price range
+	atr := calculateATRFromSeries(data)
+	if atr > 0 && data.CurrentPrice > 0 {
+		// ATR as % of price - lower means less choppy
+		return math.Min(atr/data.CurrentPrice*10, 1.0) // scale to 0-1
+	}
+	return 0.5 // neutral default
+}
+
+func extractMarketRegime(data *market.Data) string {
+	// Determine regime from trend strength and chop
+	trendStrength := extractTrendStrength(data)
+	chopScore := extractChopScore(data)
+	
+	if chopScore > 0.6 {
+		return "sideways"
+	} else if math.Abs(trendStrength) > 0.3 {
+		return "trending"
+	}
+	return "volatile"
+}
+
+func extractVolatilityRegime(data *market.Data) string {
+	atr := calculateATRFromSeries(data)
+	if atr == 0 {
+		return "normal"
+	}
+	
+	// Classify based on ATR relative to price
+	atrPct := atr / data.CurrentPrice
+	if atrPct < 0.02 {
+		return "low"
+	} else if atrPct > 0.05 {
+		return "high"
+	}
+	return "normal"
+}
+
+func extractVolumeRatio(data *market.Data) float64 {
+	// Get latest volume as ratio of baseline (assume 1.0 = baseline)
+	if data.IntradaySeries != nil && len(data.IntradaySeries.Volume) > 0 {
+		latestVol := data.IntradaySeries.Volume[len(data.IntradaySeries.Volume)-1]
+		// Estimate baseline as average of recent volumes
+		if len(data.IntradaySeries.Volume) > 10 {
+			var sum float64
+			start := len(data.IntradaySeries.Volume) - 10
+			for i := start; i < len(data.IntradaySeries.Volume)-1; i++ {
+				sum += data.IntradaySeries.Volume[i]
+			}
+			baseline := sum / 9.0
+			if baseline > 0 {
+				return latestVol / baseline
+			}
+		}
+		return 1.0
+	}
+	return 1.0
+}
+
+func extractOIDelta(data *market.Data) float64 {
+	// Get OI delta if available
+	if data.OpenInterest != nil && data.OpenInterest.Latest > 0 && data.OpenInterest.Average > 0 {
+		return (data.OpenInterest.Latest - data.OpenInterest.Average) / data.OpenInterest.Average
+	}
+	return 0.0
+}
+
 // createDecisionOutcomes converts closed positions into decision outcomes with analysis
 func (fg *FeedbackGenerator) createDecisionOutcomes(closedPositions []ClosedPosition) []DecisionOutcome {
 	outcomes := make([]DecisionOutcome, 0, len(closedPositions))
@@ -300,6 +491,7 @@ func (fg *FeedbackGenerator) createDecisionOutcomes(closedPositions []ClosedPosi
 			RealizedPnLPct: pnlPct,
 			Success:        pos.RealizedPnL > 0,
 			Analysis:       fg.analyzeDecisionOutcome(pos, pnlPct, holdDuration),
+			RecentOrder:    buildRecentOrderFromPosition(pos), // Bridge to Trade Failure V2
 		}
 
 		outcomes = append(outcomes, outcome)
@@ -572,6 +764,74 @@ func (fg *FeedbackGenerator) identifySuccessPatterns(outcomes []DecisionOutcome,
 // identifyFailurePatterns finds patterns in losing trades
 func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome, metrics *Metrics) []TradingPattern {
 	var patterns []TradingPattern
+
+	// ============================================================================
+	// TIER 1: Execution-Level Failure Analysis (Trade Failure V2)
+	// ============================================================================
+	
+	// Analyze failures using microstructure-based Trade Failure V2
+	v2FailureReasons := make(map[string]struct {
+		count       int
+		pnlSum      float64
+		evidence    []string
+		examples    []*decision.RecentOrder
+	})
+	
+	for _, outcome := range outcomes {
+		// Only analyze failed trades that have microstructure data
+		if !outcome.Success && outcome.RecentOrder != nil {
+			// Call Trade Failure V2 analysis
+			analysis := decision.AnalyzeFailedTrade(outcome.RecentOrder)
+			if analysis != nil {
+				reason := string(analysis.PrimaryReason)
+				confidence := analysis.ConfidenceScore
+				
+				entry := v2FailureReasons[reason]
+				entry.count++
+				entry.pnlSum += outcome.RealizedPnLPct
+				
+				// Store evidence (top 3 examples per reason)
+				if len(entry.examples) < 3 {
+					entry.examples = append(entry.examples, outcome.RecentOrder)
+				}
+				
+				// Store detailed notes from V2 analysis
+				evidence := fmt.Sprintf("%s (confidence: %.0f%%)", 
+					analysis.DetailedNotes, confidence*100)
+				if len(evidence) > 100 {
+					evidence = evidence[:100] + "..."
+				}
+				entry.evidence = append(entry.evidence, evidence)
+				
+				v2FailureReasons[reason] = entry
+			}
+		}
+	}
+	
+	// Convert V2 failure reasons to trading patterns
+	for reason, data := range v2FailureReasons {
+		if data.count >= fg.config.MinPatternFrequency {
+			avgPnL := data.pnlSum / float64(data.count)
+			
+			// Get V2 recommendation
+			v2Reason := decision.TradeFailureReason(reason)
+			recommendation := getV2Recommendation(v2Reason)
+			
+			patterns = append(patterns, TradingPattern{
+				PatternType:    reason, // e.g., "chasing_entry", "stop_too_tight"
+				Frequency:      data.count,
+				AvgPnL:         0,
+				AvgPnLPct:      avgPnL,
+				Description:    fmt.Sprintf("Execution-level failure: %s", humanizeV2Reason(v2Reason)),
+				Evidence:       data.evidence,
+				Recommendation: recommendation,
+			})
+		}
+	}
+	
+	// ============================================================================
+	// TIER 2: Behavioral Pattern Detection (Original Feedback System)
+	// ============================================================================
 
 	// Pattern 1: Holding losers too long
 	longLosses := 0
@@ -1240,6 +1500,103 @@ func LoadFeedbackAnalysis(runID string) (*FeedbackAnalysis, error) {
 
 	return &analysis, nil
 }
+
+// ============================================================================
+// Trade Failure V2 Integration Helpers
+// ============================================================================
+
+// humanizeV2Reason converts Trade Failure V2 reason code to human-readable text
+func humanizeV2Reason(reason decision.TradeFailureReason) string {
+	switch reason {
+	case decision.ReasonSignalQualityLow:
+		return "Signal quality too low - weak edge"
+	case decision.ReasonRegimeMismatch:
+		return "Trade conflicted with market regime"
+	case decision.ReasonLiquidityRiskHigh:
+		return "Liquidity risk too high at entry"
+	case decision.ReasonStackedRisk:
+		return "Overexposed to same market factor"
+	case decision.ReasonChasingEntry:
+		return "Chased entry with excessive slippage"
+	case decision.ReasonFalseBreakoutV2:
+		return "False breakout - no follow-through"
+	case decision.ReasonPrematureEntry:
+		return "Entered before confirmation criteria met"
+	case decision.ReasonSizingError:
+		return "Position size too large for available liquidity"
+	case decision.ReasonSlippageExceeded:
+		return "Actual slippage exceeded budget"
+	case decision.ReasonStopTooTight:
+		return "Stop loss too tight relative to volatility"
+	case decision.ReasonMomentumDecay:
+		return "Momentum decayed - volume/OI collapsed"
+	case decision.ReasonLiquidityDried:
+		return "Market liquidity dried up during hold"
+	case decision.ReasonStopHitRegimeChange:
+		return "Stop hit due to regime change"
+	case decision.ReasonLateExitGiveBack:
+		return "Exited late with large give-back from peak"
+	case decision.ReasonTrendReversalIgnored:
+		return "Missed trend reversal signal"
+	case decision.ReasonHighSlippageExit:
+		return "Poor exit execution with high slippage"
+	case decision.ReasonFundingDrag:
+		return "Funding costs ate into profit"
+	case decision.ReasonBorrowingCostHigh:
+		return "Borrowing costs were significant"
+	case decision.ReasonTechnicalFault:
+		return "Technical or execution system error"
+	default:
+		return string(reason)
+	}
+}
+
+// getV2Recommendation provides actionable recommendations for V2 failure reasons
+func getV2Recommendation(reason decision.TradeFailureReason) string {
+	switch reason {
+	case decision.ReasonSignalQualityLow:
+		return "⚠️ SIGNALS: Only enter trades with strong, multi-confirmation signal. Model confidence alone is insufficient."
+	case decision.ReasonRegimeMismatch:
+		return "⚠️ REGIME: Check market regime before entry. Skip trades in choppy/sideways markets (ChopScore > 50)."
+	case decision.ReasonLiquidityRiskHigh:
+		return "⚠️ LIQUIDITY: Reduce position size for illiquid symbols. Monitor spread and depth at entry."
+	case decision.ReasonStackedRisk:
+		return "⚠️ CORRELATION: Don't stack positions in same sector/factor. Reduce correlation exposure."
+	case decision.ReasonChasingEntry:
+		return "⚠️ EXECUTION: Don't chase entries. Set hard limit on entry slippage. Cancel if slippage exceeds budget."
+	case decision.ReasonFalseBreakoutV2:
+		return "⚠️ CONFIRMATION: Require volume confirmation (+50% baseline) and OI increase before entering breakouts."
+	case decision.ReasonPrematureEntry:
+		return "⚠️ TIMING: Wait for all confirmation criteria. Don't enter before price pattern validates."
+	case decision.ReasonSizingError:
+		return "⚠️ SIZE: Reduce position size based on available liquidity. Use ATR-based sizing with depth checks."
+	case decision.ReasonSlippageExceeded:
+		return "⚠️ EXECUTION: Monitor actual slippage vs budget. Reduce order size or use limit orders for large positions."
+	case decision.ReasonStopTooTight:
+		return "⚠️ RISK: Widen stops to minimum 1.5x ATR. Use volatility-adjusted stops, not arbitrary percentages."
+	case decision.ReasonMomentumDecay:
+		return "⚠️ EXITS: Track momentum during hold. Use trailing stops that move with momentum, not just price."
+	case decision.ReasonLiquidityDried:
+		return "⚠️ EXITS: Monitor spread during hold. Exit immediately if spread widens >3x entry level."
+	case decision.ReasonStopHitRegimeChange:
+		return "⚠️ REGIME: Monitor regime throughout hold. Reduce exposure if regime shifts. Consider dynamic stops."
+	case decision.ReasonLateExitGiveBack:
+		return "⚠️ EXITS: Set profit targets based on momentum. Don't hold hoping for bigger moves. Exit on confirmation loss."
+	case decision.ReasonTrendReversalIgnored:
+		return "⚠️ EXITS: Monitor trend indicators. Exit if trend reversal signals appear. Don't force profits."
+	case decision.ReasonHighSlippageExit:
+		return "⚠️ EXECUTION: Use limit orders for exits. Avoid market orders in low-liquidity conditions."
+	case decision.ReasonFundingDrag:
+		return "⚠️ COSTS: Monitor funding rates. Reduce holding time if funding becomes expensive."
+	case decision.ReasonBorrowingCostHigh:
+		return "⚠️ COSTS: Check borrowing costs before entry. Skip trades where costs exceed expected profit."
+	case decision.ReasonTechnicalFault:
+		return "⚠️ SYSTEMS: Log technical faults. Improve system reliability. Skip trades until systems stabilize."
+	default:
+		return "Review execution quality and market conditions for this failure mode."
+	}
+}
+
 
 // FormatForDebate formats the feedback for multi-agent debate context
 // Emphasizes areas of contention and decision points tailored to agent roles

@@ -73,6 +73,19 @@ type Runner struct {
 	promptOptimizer   *PromptOptimizer
 	factorOptimizer   *FactorOptimizer
 	complianceTracker *ComplianceTracker
+
+	// Position excursion tracking for MFE/MAE analysis
+	excursionsMu sync.RWMutex
+	excursions   map[string]*positionExcursion
+}
+
+// positionExcursion tracks maximum favorable/adverse excursion for open positions
+type positionExcursion struct {
+	entryPrice   float64
+	entryTime    int64
+	maxFavorable float64 // Best unrealized PnL seen (in USD)
+	maxAdverse   float64 // Worst unrealized PnL seen (in USD)
+	lastUpdate   int64   // Last price update timestamp
 }
 
 // NewRunner constructs a backtest runner.
@@ -164,6 +177,7 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 		promptOptimizer:   promptOptimizer,
 		factorOptimizer:   factorOptimizer,
 		complianceTracker: complianceTracker,
+		excursions:        make(map[string]*positionExcursion),
 	}
 
 	if err := r.initLock(); err != nil {
@@ -202,6 +216,154 @@ func (r *Runner) lockHeartbeatLoop() {
 	}
 }
 
+// captureMicrostructure extracts execution microstructure data for Trade Failure V2 analysis
+// Uses real market data to calculate spread, depth, and slippage budget
+// Returns: spread, depth, signalTime, fillTime, slippageBudget
+func (r *Runner) captureMicrostructure(symbol string, basePrice, execPrice float64, signalTs int64, marketData *market.Data) (float64, float64, int64, int64, float64) {
+	// Calculate spread from actual market microstructure
+	spread := calculateActualSpread(marketData, basePrice)
+	
+	// Calculate depth from actual volume data
+	depth := calculateMarketDepth(marketData, basePrice)
+	
+	// Signal time = when decision was made
+	signalTime := signalTs
+	
+	// Fill time = simulated execution time (immediate in backtest)
+	fillTime := signalTs
+	
+	// Calculate slippage budget based on actual spread and volatility
+	slippageBudget := calculateSlippageBudget(spread, marketData)
+	
+	return spread, depth, signalTime, fillTime, slippageBudget
+}
+
+// calculateActualSpread computes bid-ask spread from recent price action
+// Uses intraday high-low ranges as proxy for spread in backtest environment
+func calculateActualSpread(data *market.Data, currentPrice float64) float64 {
+	if data == nil || currentPrice <= 0 {
+		return 0
+	}
+	
+	// Try to get spread from recent 1m candles (most granular)
+	if data.TimeframeData != nil {
+		if tfData, ok := data.TimeframeData["1m"]; ok && len(tfData.Klines) > 0 {
+			// Use average high-low spread of last 5 candles
+			spreadSum := 0.0
+			count := 0
+			start := len(tfData.Klines) - 5
+			if start < 0 {
+				start = 0
+			}
+			for i := start; i < len(tfData.Klines); i++ {
+				k := tfData.Klines[i]
+				if k.Close > 0 {
+					spreadSum += (k.High - k.Low) / k.Close
+					count++
+				}
+			}
+			if count > 0 {
+				return spreadSum / float64(count)
+			}
+		}
+		// Fallback to 5m candles
+		if tfData, ok := data.TimeframeData["5m"]; ok && len(tfData.Klines) > 0 {
+			k := tfData.Klines[len(tfData.Klines)-1]
+			if k.Close > 0 {
+				return (k.High - k.Low) / k.Close
+			}
+		}
+	}
+	
+	// Fallback: use ATR as spread proxy
+	atr := calculateATRFromSeries(data)
+	if atr > 0 && currentPrice > 0 {
+		return atr / currentPrice
+	}
+	
+	return 0
+}
+
+// calculateMarketDepth estimates liquidity depth from volume statistics
+// Returns estimated depth in USD that can be absorbed without significant slippage
+func calculateMarketDepth(data *market.Data, currentPrice float64) float64 {
+	if data == nil || currentPrice <= 0 {
+		return 0
+	}
+	
+	// Use recent volume as proxy for depth
+	// Assumption: Market depth ≈ 10-20x average 1-minute volume for liquid markets
+	if data.IntradaySeries != nil && len(data.IntradaySeries.Volume) > 0 {
+		// Calculate average volume over recent period
+		volumeSum := 0.0
+		count := 0
+		// Use last 15 minutes of volume data
+		start := len(data.IntradaySeries.Volume) - 15
+		if start < 0 {
+			start = 0
+		}
+		for i := start; i < len(data.IntradaySeries.Volume); i++ {
+			volumeSum += data.IntradaySeries.Volume[i]
+			count++
+		}
+		if count > 0 {
+			avgVolume := volumeSum / float64(count)
+			// Depth = 15x average minute volume (conservative estimate)
+			return avgVolume * currentPrice * 15.0
+		}
+	}
+	
+	// Fallback: try timeframe volume data
+	if data.TimeframeData != nil {
+		if tfData, ok := data.TimeframeData["1m"]; ok && len(tfData.Klines) > 0 {
+			volumeSum := 0.0
+			count := 0
+			start := len(tfData.Klines) - 10
+			if start < 0 {
+				start = 0
+			}
+			for i := start; i < len(tfData.Klines); i++ {
+				volumeSum += tfData.Klines[i].Volume
+				count++
+			}
+			if count > 0 {
+				avgVolume := volumeSum / float64(count)
+				return avgVolume * currentPrice * 15.0
+			}
+		}
+	}
+	
+	return 0
+}
+
+// calculateSlippageBudget determines acceptable slippage based on spread and volatility
+// Higher volatility = larger acceptable slippage
+func calculateSlippageBudget(spread float64, data *market.Data) float64 {
+	if spread <= 0 {
+		return 0
+	}
+	
+	// Base budget: 2x spread
+	budget := spread * 2.0
+	
+	// Adjust for volatility regime
+	if data != nil {
+		atr := calculateATRFromSeries(data)
+		if atr > 0 && data.CurrentPrice > 0 {
+			atrPct := atr / data.CurrentPrice
+			// High volatility (>5% ATR): increase budget by 50%
+			if atrPct > 0.05 {
+				budget *= 1.5
+			// Very low volatility (<1% ATR): decrease budget by 30%
+			} else if atrPct < 0.01 {
+				budget *= 0.7
+			}
+		}
+	}
+	
+	return budget
+}
+
 func (r *Runner) releaseLock() {
 	if r.lockStop != nil {
 		close(r.lockStop)
@@ -211,6 +373,89 @@ func (r *Runner) releaseLock() {
 		logger.Infof("failed to release lock for %s: %v", r.cfg.RunID, err)
 	}
 	r.lockInfo = nil
+}
+
+// initExcursion initializes excursion tracking for a new position
+func (r *Runner) initExcursion(symbol, side string, entryPrice float64, entryTime int64) {
+	r.excursionsMu.Lock()
+	defer r.excursionsMu.Unlock()
+	
+	key := positionKey(symbol, side)
+	r.excursions[key] = &positionExcursion{
+		entryPrice:   entryPrice,
+		entryTime:    entryTime,
+		maxFavorable: 0,
+		maxAdverse:   0,
+		lastUpdate:   entryTime,
+	}
+}
+
+// trackExcursions updates MFE/MAE for all open positions based on current prices
+// Call this every cycle to capture intra-position excursions
+func (r *Runner) trackExcursions(priceMap map[string]float64, ts int64) {
+	r.excursionsMu.Lock()
+	defer r.excursionsMu.Unlock()
+	
+	positions := r.account.Positions()
+	for _, pos := range positions {
+		key := positionKey(pos.Symbol, pos.Side)
+		exc, exists := r.excursions[key]
+		if !exists {
+			// Position opened before excursion tracking - initialize now
+			exc = &positionExcursion{
+				entryPrice:   pos.EntryPrice,
+				entryTime:    pos.OpenTime,
+				maxFavorable: 0,
+				maxAdverse:   0,
+				lastUpdate:   pos.OpenTime,
+			}
+			r.excursions[key] = exc
+		}
+		
+		currentPrice := priceMap[pos.Symbol]
+		if currentPrice <= 0 {
+			continue
+		}
+		
+		// Calculate unrealized PnL in USD
+		var unrealizedPnL float64
+		if pos.Side == "long" {
+			unrealizedPnL = (currentPrice - pos.EntryPrice) * pos.Quantity
+		} else {
+			unrealizedPnL = (pos.EntryPrice - currentPrice) * pos.Quantity
+		}
+		
+		// Update MFE/MAE
+		if unrealizedPnL > exc.maxFavorable {
+			exc.maxFavorable = unrealizedPnL
+		}
+		if unrealizedPnL < exc.maxAdverse {
+			exc.maxAdverse = unrealizedPnL
+		}
+		
+		exc.lastUpdate = ts
+	}
+}
+
+// getExcursion retrieves and removes excursion data for a closing position
+// Returns MFE, MAE in USD (0,0 if not tracked)
+func (r *Runner) getExcursion(symbol, side string) (mfe, mae float64) {
+	r.excursionsMu.Lock()
+	defer r.excursionsMu.Unlock()
+	
+	key := positionKey(symbol, side)
+	exc, exists := r.excursions[key]
+	if !exists {
+		return 0, 0
+	}
+	
+	mfe = exc.maxFavorable
+	mae = exc.maxAdverse
+	
+	// Clean up - position is closing
+	delete(r.excursions, key)
+	
+	return mfe, mae
 }
 
 // Start launches the backtest loop.
@@ -308,6 +553,9 @@ func (r *Runner) stepOnce() error {
 	for symbol, data := range marketData {
 		priceMap[symbol] = data.CurrentPrice
 	}
+
+	// Track MFE/MAE for all open positions at current prices
+	r.trackExcursions(priceMap, ts)
 
 	callCount := state.DecisionCycle + 1
 	shouldDecide := r.shouldTriggerDecision(state.BarIndex)
@@ -708,23 +956,41 @@ func (r *Runner) executeDecision(dec decision.Decision, priceMap map[string]floa
 		if err != nil {
 			return actionRecord, nil, "", err
 		}
+		
+		// Initialize excursion tracking for this position
+		r.initExcursion(symbol, "long", execPrice, ts)
+		
 		actionRecord.Quantity = qty
 		actionRecord.Price = execPrice
 		actionRecord.Leverage = pos.Leverage
+		
+		// Get market data for this symbol
+		marketData, _, _ := r.feed.BuildMarketData(ts)
+		symbolMarketData := marketData[symbol]
+		
+		// Capture microstructure data for Trade Failure V2 analysis
+		spread, depth, signalTime, fillTime, slippageBudget := r.captureMicrostructure(symbol, basePrice, execPrice, ts, symbolMarketData)
+		
 		trade := TradeEvent{
-			Timestamp:     ts,
-			Symbol:        symbol,
-			Action:        dec.Action,
-			Side:          "long",
-			Quantity:      qty,
-			Price:         execPrice,
-			Fee:           fee,
-			Slippage:      execPrice - basePrice,
-			OrderValue:    execPrice * qty,
-			RealizedPnL:   0,
-			Leverage:      pos.Leverage,
-			Cycle:         cycle,
-			PositionAfter: pos.Quantity,
+			Timestamp:       ts,
+			Symbol:          symbol,
+			Action:          dec.Action,
+			Side:            "long",
+			Quantity:        qty,
+			Price:           execPrice,
+			Fee:             fee,
+			Slippage:        execPrice - basePrice,
+			OrderValue:      execPrice * qty,
+			RealizedPnL:     0,
+			Leverage:        pos.Leverage,
+			Cycle:           cycle,
+			PositionAfter:   pos.Quantity,
+			// Microstructure fields
+			Spread:          spread,
+			Depth:           depth,
+			SignalTime:      signalTime,
+			FillTime:        fillTime,
+			SlippageBudget:  slippageBudget,
 		}
 		return actionRecord, []TradeEvent{trade}, "", nil
 
@@ -737,23 +1003,41 @@ func (r *Runner) executeDecision(dec decision.Decision, priceMap map[string]floa
 		if err != nil {
 			return actionRecord, nil, "", err
 		}
+		
+		// Initialize excursion tracking for this position
+		r.initExcursion(symbol, "short", execPrice, ts)
+		
 		actionRecord.Quantity = qty
 		actionRecord.Price = execPrice
 		actionRecord.Leverage = pos.Leverage
+		
+		// Get market data for this symbol
+		marketData, _, _ := r.feed.BuildMarketData(ts)
+		symbolMarketData := marketData[symbol]
+		
+		// Capture microstructure data for Trade Failure V2 analysis
+		spread, depth, signalTime, fillTime, slippageBudget := r.captureMicrostructure(symbol, basePrice, execPrice, ts, symbolMarketData)
+		
 		trade := TradeEvent{
-			Timestamp:     ts,
-			Symbol:        symbol,
-			Action:        dec.Action,
-			Side:          "short",
-			Quantity:      qty,
-			Price:         execPrice,
-			Fee:           fee,
-			Slippage:      basePrice - execPrice,
-			OrderValue:    execPrice * qty,
-			RealizedPnL:   0,
-			Leverage:      pos.Leverage,
-			Cycle:         cycle,
-			PositionAfter: pos.Quantity,
+			Timestamp:       ts,
+			Symbol:          symbol,
+			Action:          dec.Action,
+			Side:            "short",
+			Quantity:        qty,
+			Price:           execPrice,
+			Fee:             fee,
+			Slippage:        basePrice - execPrice,
+			OrderValue:      execPrice * qty,
+			RealizedPnL:     0,
+			Leverage:        pos.Leverage,
+			Cycle:           cycle,
+			PositionAfter:   pos.Quantity,
+			// Microstructure fields
+			Spread:          spread,
+			Depth:           depth,
+			SignalTime:      signalTime,
+			FillTime:        fillTime,
+			SlippageBudget:  slippageBudget,
 		}
 		return actionRecord, []TradeEvent{trade}, "", nil
 
@@ -767,23 +1051,44 @@ func (r *Runner) executeDecision(dec decision.Decision, priceMap map[string]floa
 		if err != nil {
 			return actionRecord, nil, "", err
 		}
+		
+		// Capture MFE/MAE before removing excursion tracking
+		mfe, mae := r.getExcursion(symbol, "long")
+		
 		actionRecord.Quantity = qty
 		actionRecord.Price = execPrice
 		actionRecord.Leverage = posLev
+		
+		// Get market data for this symbol
+		marketData, _, _ := r.feed.BuildMarketData(ts)
+		symbolMarketData := marketData[symbol]
+		
+		// Capture microstructure data for Trade Failure V2 analysis
+		spread, depth, signalTime, fillTime, slippageBudget := r.captureMicrostructure(symbol, basePrice, execPrice, ts, symbolMarketData)
+		
 		trade := TradeEvent{
-			Timestamp:     ts,
-			Symbol:        symbol,
-			Action:        dec.Action,
-			Side:          "long",
-			Quantity:      qty,
-			Price:         execPrice,
-			Fee:           fee,
-			Slippage:      basePrice - execPrice,
-			OrderValue:    execPrice * qty,
-			RealizedPnL:   realized - fee,
-			Leverage:      posLev,
-			Cycle:         cycle,
-			PositionAfter: r.remainingPosition(symbol, "long"),
+			Timestamp:       ts,
+			Symbol:          symbol,
+			Action:          dec.Action,
+			Side:            "long",
+			Quantity:        qty,
+			Price:           execPrice,
+			Fee:             fee,
+			Slippage:        basePrice - execPrice,
+			OrderValue:      execPrice * qty,
+			RealizedPnL:     realized - fee,
+			Leverage:        posLev,
+			Cycle:           cycle,
+			PositionAfter:   r.remainingPosition(symbol, "long"),
+			// Microstructure fields
+			Spread:          spread,
+			Depth:           depth,
+			SignalTime:      signalTime,
+			FillTime:        fillTime,
+			SlippageBudget:  slippageBudget,
+			// Excursion tracking
+			MaxFavorableExcursion: mfe,
+			MaxAdverseExcursion:   mae,
 		}
 		return actionRecord, []TradeEvent{trade}, "", nil
 
@@ -797,23 +1102,44 @@ func (r *Runner) executeDecision(dec decision.Decision, priceMap map[string]floa
 		if err != nil {
 			return actionRecord, nil, "", err
 		}
+		
+		// Capture MFE/MAE before removing excursion tracking
+		mfe, mae := r.getExcursion(symbol, "short")
+		
 		actionRecord.Quantity = qty
 		actionRecord.Price = execPrice
 		actionRecord.Leverage = posLev
+		
+		// Get market data for this symbol
+		marketData, _, _ := r.feed.BuildMarketData(ts)
+		symbolMarketData := marketData[symbol]
+		
+		// Capture microstructure data for Trade Failure V2 analysis
+		spread, depth, signalTime, fillTime, slippageBudget := r.captureMicrostructure(symbol, basePrice, execPrice, ts, symbolMarketData)
+		
 		trade := TradeEvent{
-			Timestamp:     ts,
-			Symbol:        symbol,
-			Action:        dec.Action,
-			Side:          "short",
-			Quantity:      qty,
-			Price:         execPrice,
-			Fee:           fee,
-			Slippage:      execPrice - basePrice,
-			OrderValue:    execPrice * qty,
-			RealizedPnL:   realized - fee,
-			Leverage:      posLev,
-			Cycle:         cycle,
-			PositionAfter: r.remainingPosition(symbol, "short"),
+			Timestamp:       ts,
+			Symbol:          symbol,
+			Action:          dec.Action,
+			Side:            "short",
+			Quantity:        qty,
+			Price:           execPrice,
+			Fee:             fee,
+			Slippage:        execPrice - basePrice,
+			OrderValue:      execPrice * qty,
+			RealizedPnL:     realized - fee,
+			Leverage:        posLev,
+			Cycle:           cycle,
+			PositionAfter:   r.remainingPosition(symbol, "short"),
+			// Microstructure fields
+			Spread:          spread,
+			Depth:           depth,
+			SignalTime:      signalTime,
+			FillTime:        fillTime,
+			SlippageBudget:  slippageBudget,
+			// Excursion tracking
+			MaxFavorableExcursion: mfe,
+			MaxAdverseExcursion:   mae,
 		}
 		return actionRecord, []TradeEvent{trade}, "", nil
 

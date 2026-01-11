@@ -114,6 +114,8 @@ type RecentOrder struct {
 	EntryFillPrice      float64 `json:"entry_fill_price,omitempty"`      // Actual execution price
 	EntrySlippage       float64 `json:"entry_slippage,omitempty"`        // Arrival → fill slippage %
 	EntrySlippageBudget float64 `json:"entry_slippage_budget,omitempty"` // Expected slippage tolerance %
+	EntryFillTime       int64   `json:"entry_fill_time,omitempty"`       // Fill time (ms)
+	SignalTime          int64   `json:"signal_time,omitempty"`           // Signal generation (ms)
 
 	// Market Microstructure (Exit)
 	ExitSpread   float64 `json:"exit_spread,omitempty"`   // Spread at exit

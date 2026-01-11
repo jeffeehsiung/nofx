@@ -14,8 +14,6 @@ import (
 	"nofx/manager"
 	"nofx/market"
 	"nofx/provider/alpaca"
-	"nofx/provider/coinank/coinank_api"
-	"nofx/provider/coinank/coinank_enum"
 	"nofx/provider/hyperliquid"
 	"nofx/provider/twelvedata"
 	"nofx/store"
@@ -629,10 +627,10 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 			logger.Infof("⚠️ Unsupported exchange type: %s, using user input for initial balance", exchangeCfg.ExchangeType)
 		}
 
+		// Query actual balance if trader created successfully
 		if createErr != nil {
-			logger.Infof("⚠️ Failed to create temporary trader, using user input for initial balance: %v", createErr)
+			logger.Infof("⚠️ Failed to create temp trader: %v, using user input for initial balance", createErr)
 		} else if tempTrader != nil {
-			// Query actual balance
 			balanceInfo, balanceErr := tempTrader.GetBalance()
 			if balanceErr != nil {
 				logger.Infof("⚠️ Failed to query exchange balance, using user input for initial balance: %v", balanceErr)
@@ -647,9 +645,6 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 						logger.Infof("✓ Queried exchange total equity (%s): %.2f USDT (user input: %.2f USDT)", key, actualBalance, req.InitialBalance)
 						break
 					}
-				}
-				if actualBalance <= 0 {
-					logger.Infof("⚠️ Unable to extract total equity from balance info, balanceInfo=%v, using user input for initial balance", balanceInfo)
 				}
 			}
 		}
@@ -1492,9 +1487,9 @@ func (s *Server) pollAndUpdateOrderStatus(orderRecordID int64, traderID, exchang
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		if err == nil {
-			statusStr, _ := status["status"].(string)
-			if statusStr == "FILLED" {
+		// err is nil here; proceed to inspect status
+		statusStr, _ := status["status"].(string)
+		if statusStr == "FILLED" {
 				// Get actual fill price
 				if avgPrice, ok := status["avgPrice"].(float64); ok && avgPrice > 0 {
 					actualPrice = avgPrice
@@ -1544,11 +1539,10 @@ func (s *Server) pollAndUpdateOrderStatus(orderRecordID int64, traderID, exchang
 				}
 
 				return
-			} else if statusStr == "CANCELED" || statusStr == "EXPIRED" || statusStr == "REJECTED" {
-				logger.Infof("  ⚠️ Order %s, updating status", statusStr)
-				s.store.Order().UpdateOrderStatus(orderRecordID, statusStr, 0, 0, 0)
-				return
-			}
+		} else if statusStr == "CANCELED" || statusStr == "EXPIRED" || statusStr == "REJECTED" {
+			logger.Infof("  ⚠️ Order %s, updating status", statusStr)
+			s.store.Order().UpdateOrderStatus(orderRecordID, statusStr, 0, 0, 0)
+			return
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
@@ -2395,7 +2389,7 @@ func (s *Server) handleKlines(c *gin.Context) {
 		}
 	case "hyperliquid", "hyperliquid-xyz", "xyz":
 		// Hyperliquid native API - supports both crypto perps and stock perps (xyz dex)
-		klines, err = s.getKlinesFromHyperliquid(symbol, interval, limit)
+		klines, err = market.GetKlinesHyperliquid(symbol, interval, limit)
 		if err != nil {
 			logger.Errorf("❌ Hyperliquid API failed for %s: %v", symbol, err)
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -2406,7 +2400,7 @@ func (s *Server) handleKlines(c *gin.Context) {
 	default:
 		// Crypto exchanges via CoinAnk
 		symbol = market.Normalize(symbol)
-		klines, err = s.getKlinesFromCoinank(symbol, interval, exchange, limit)
+		klines, err = market.GetKlinesCoinank(symbol, interval, exchange, limit)
 		if err != nil {
 			logger.Errorf("❌ CoinAnk API failed for %s on %s: %v", symbol, exchange, err)
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -2419,125 +2413,6 @@ func (s *Server) handleKlines(c *gin.Context) {
 	c.JSON(http.StatusOK, klines)
 }
 
-// getKlinesFromCoinank fetches kline data from coinank free/open API for multiple exchanges
-func (s *Server) getKlinesFromCoinank(symbol, interval, exchange string, limit int) ([]market.Kline, error) {
-	// Map exchange string to coinank enum
-	var coinankExchange coinank_enum.Exchange
-	switch strings.ToLower(exchange) {
-	case "binance":
-		coinankExchange = coinank_enum.Binance
-	case "bybit":
-		coinankExchange = coinank_enum.Bybit
-	case "okx":
-		coinankExchange = coinank_enum.Okex
-	case "bitget":
-		coinankExchange = coinank_enum.Bitget
-	case "aster":
-		coinankExchange = coinank_enum.Aster
-	case "lighter":
-		// Lighter doesn't have direct CoinAnk support, use Binance data as fallback
-		coinankExchange = coinank_enum.Binance
-	default:
-		// For any unknown exchange, default to Binance
-		logger.Warnf("⚠️ Unknown exchange '%s', defaulting to Binance for CoinAnk", exchange)
-		coinankExchange = coinank_enum.Binance
-	}
-
-	// Map interval string to coinank enum
-	var coinankInterval coinank_enum.Interval
-	switch interval {
-	case "1s":
-		coinankInterval = coinank_enum.Second1
-	case "5s":
-		coinankInterval = coinank_enum.Second5
-	case "10s":
-		coinankInterval = coinank_enum.Second10
-	case "30s":
-		coinankInterval = coinank_enum.Second30
-	case "1m":
-		coinankInterval = coinank_enum.Minute1
-	case "3m":
-		coinankInterval = coinank_enum.Minute3
-	case "5m":
-		coinankInterval = coinank_enum.Minute5
-	case "10m":
-		coinankInterval = coinank_enum.Minute10
-	case "15m":
-		coinankInterval = coinank_enum.Minute15
-	case "30m":
-		coinankInterval = coinank_enum.Minute30
-	case "1h":
-		coinankInterval = coinank_enum.Hour1
-	case "2h":
-		coinankInterval = coinank_enum.Hour2
-	case "4h":
-		coinankInterval = coinank_enum.Hour4
-	case "6h":
-		coinankInterval = coinank_enum.Hour6
-	case "8h":
-		coinankInterval = coinank_enum.Hour8
-	case "12h":
-		coinankInterval = coinank_enum.Hour12
-	case "1d":
-		coinankInterval = coinank_enum.Day1
-	case "3d":
-		coinankInterval = coinank_enum.Day3
-	case "1w":
-		coinankInterval = coinank_enum.Week1
-	case "1M":
-		coinankInterval = coinank_enum.Month1
-	default:
-		return nil, fmt.Errorf("unsupported interval for coinank: %s", interval)
-	}
-
-	// Convert symbol format for different exchanges
-	// OKX uses "BTC-USDT-SWAP" format instead of "BTCUSDT"
-	apiSymbol := symbol
-	if coinankExchange == coinank_enum.Okex {
-		// Convert BTCUSDT -> BTC-USDT-SWAP
-		if strings.HasSuffix(symbol, "USDT") {
-			base := strings.TrimSuffix(symbol, "USDT")
-			apiSymbol = fmt.Sprintf("%s-USDT-SWAP", base)
-		}
-	}
-
-	// Call coinank free/open API (no authentication required)
-	ctx := context.Background()
-	ts := time.Now().UnixMilli()
-	// Use "To" side to search backward from current time (get historical klines)
-	coinankKlines, err := coinank_api.Kline(ctx, apiSymbol, coinankExchange, ts, coinank_enum.To, limit, coinankInterval)
-	if err != nil {
-		// Free API doesn't support all exchanges (e.g., OKX, Bitget)
-		// Fallback to Binance data as reference
-		if coinankExchange != coinank_enum.Binance {
-			logger.Warnf("⚠️ CoinAnk free API doesn't support %s, falling back to Binance data", coinankExchange)
-			coinankKlines, err = coinank_api.Kline(ctx, symbol, coinank_enum.Binance, ts, coinank_enum.To, limit, coinankInterval)
-			if err != nil {
-				return nil, fmt.Errorf("coinank API error (fallback): %w", err)
-			}
-		} else {
-			return nil, fmt.Errorf("coinank API error: %w", err)
-		}
-	}
-
-	// Convert coinank kline format to market.Kline format
-	// Coinank: Volume = BTC 数量, Quantity = USDT 成交额
-	klines := make([]market.Kline, len(coinankKlines))
-	for i, ck := range coinankKlines {
-		klines[i] = market.Kline{
-			OpenTime:    ck.StartTime,
-			Open:        ck.Open,
-			High:        ck.High,
-			Low:         ck.Low,
-			Close:       ck.Close,
-			Volume:      ck.Volume,   // BTC 数量
-			QuoteVolume: ck.Quantity, // USDT 成交额
-			CloseTime:   ck.EndTime,
-		}
-	}
-
-	return klines, nil
-}
 
 // getKlinesFromAlpaca fetches kline data from Alpaca API for US stocks
 func (s *Server) getKlinesFromAlpaca(symbol, interval string, limit int) ([]market.Kline, error) {
@@ -2613,66 +2488,6 @@ func (s *Server) getKlinesFromTwelveData(symbol, interval string, limit int) ([]
 	return klines, nil
 }
 
-// getKlinesFromHyperliquid fetches kline data from Hyperliquid API
-// Supports both crypto perps (default dex) and stock perps/forex/commodities (xyz dex)
-func (s *Server) getKlinesFromHyperliquid(symbol, interval string, limit int) ([]market.Kline, error) {
-	// Create Hyperliquid client
-	client := hyperliquid.NewClient()
-
-	// Map interval to Hyperliquid format
-	timeframe := hyperliquid.MapTimeframe(interval)
-
-	// Fetch candles from Hyperliquid
-	// FormatCoinForAPI will automatically add xyz: prefix for stock perps
-	ctx := context.Background()
-	candles, err := client.GetCandles(ctx, symbol, timeframe, limit)
-	if err != nil {
-		return nil, fmt.Errorf("hyperliquid API error: %w", err)
-	}
-
-	// Convert Hyperliquid candles to market.Kline format
-	klines := make([]market.Kline, len(candles))
-	for i, candle := range candles {
-		open, err := strconv.ParseFloat(candle.Open, 64)
-		if err != nil {
-			logger.Warnf("Failed to parse open price '%s': %v", candle.Open, err)
-			open = 0
-		}
-		high, err := strconv.ParseFloat(candle.High, 64)
-		if err != nil {
-			logger.Warnf("Failed to parse high price '%s': %v", candle.High, err)
-			high = 0
-		}
-		low, err := strconv.ParseFloat(candle.Low, 64)
-		if err != nil {
-			logger.Warnf("Failed to parse low price '%s': %v", candle.Low, err)
-			low = 0
-		}
-		close, err := strconv.ParseFloat(candle.Close, 64)
-		if err != nil {
-			logger.Warnf("Failed to parse close price '%s': %v", candle.Close, err)
-			close = 0
-		}
-		volume, err := strconv.ParseFloat(candle.Volume, 64)
-		if err != nil {
-			logger.Warnf("Failed to parse volume '%s': %v", candle.Volume, err)
-			volume = 0
-		}
-
-		klines[i] = market.Kline{
-			OpenTime:    candle.OpenTime,
-			Open:        open,
-			High:        high,
-			Low:         low,
-			Close:       close,
-			Volume:      volume,         // 合约数量
-			QuoteVolume: volume * close, // 成交额 (USD)
-			CloseTime:   candle.CloseTime,
-		}
-	}
-
-	return klines, nil
-}
 
 // handleSymbols returns available symbols for a given exchange
 func (s *Server) handleSymbols(c *gin.Context) {

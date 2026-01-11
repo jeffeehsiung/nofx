@@ -167,6 +167,125 @@ func getKlinesFromHyperliquid(symbol, interval string, limit int) ([]Kline, erro
 	return klines, nil
 }
 
+// GetKlinesCoinank fetches kline data for crypto exchanges via CoinAnk (Binance default with multi-exchange support)
+// exchange: "binance", "bybit", "okx", "bitget", "aster", "lighter" (lighter falls back to binance)
+// interval: supports second/minute/hour/day/week/month intervals as provided by CoinAnk
+func GetKlinesCoinank(symbol, interval, exchange string, limit int) ([]Kline, error) {
+	// Map exchange string to coinank enum
+	var coinankExchange coinank_enum.Exchange
+	switch strings.ToLower(exchange) {
+	case "binance":
+		coinankExchange = coinank_enum.Binance
+	case "bybit":
+		coinankExchange = coinank_enum.Bybit
+	case "okx":
+		coinankExchange = coinank_enum.Okex
+	case "bitget":
+		coinankExchange = coinank_enum.Bitget
+	case "aster":
+		coinankExchange = coinank_enum.Aster
+	case "lighter":
+		// Lighter doesn't have direct CoinAnk support, use Binance data as fallback
+		coinankExchange = coinank_enum.Binance
+	default:
+		logger.Warnf("⚠️ Unknown exchange '%s', defaulting to Binance for CoinAnk", exchange)
+		coinankExchange = coinank_enum.Binance
+	}
+
+	// Map interval string to coinank enum (extended set)
+	var coinankInterval coinank_enum.Interval
+	switch interval {
+	case "1s":
+		coinankInterval = coinank_enum.Second1
+	case "5s":
+		coinankInterval = coinank_enum.Second5
+	case "10s":
+		coinankInterval = coinank_enum.Second10
+	case "30s":
+		coinankInterval = coinank_enum.Second30
+	case "1m":
+		coinankInterval = coinank_enum.Minute1
+	case "3m":
+		coinankInterval = coinank_enum.Minute3
+	case "5m":
+		coinankInterval = coinank_enum.Minute5
+	case "10m":
+		coinankInterval = coinank_enum.Minute10
+	case "15m":
+		coinankInterval = coinank_enum.Minute15
+	case "30m":
+		coinankInterval = coinank_enum.Minute30
+	case "1h":
+		coinankInterval = coinank_enum.Hour1
+	case "2h":
+		coinankInterval = coinank_enum.Hour2
+	case "4h":
+		coinankInterval = coinank_enum.Hour4
+	case "6h":
+		coinankInterval = coinank_enum.Hour6
+	case "8h":
+		coinankInterval = coinank_enum.Hour8
+	case "12h":
+		coinankInterval = coinank_enum.Hour12
+	case "1d":
+		coinankInterval = coinank_enum.Day1
+	case "3d":
+		coinankInterval = coinank_enum.Day3
+	case "1w":
+		coinankInterval = coinank_enum.Week1
+	case "1M":
+		coinankInterval = coinank_enum.Month1
+	default:
+		return nil, fmt.Errorf("unsupported interval for coinank: %s", interval)
+	}
+
+	// Convert symbol format for different exchanges (e.g., OKX uses BTC-USDT-SWAP)
+	apiSymbol := symbol
+	if coinankExchange == coinank_enum.Okex {
+		if strings.HasSuffix(symbol, "USDT") {
+			base := strings.TrimSuffix(symbol, "USDT")
+			apiSymbol = fmt.Sprintf("%s-USDT-SWAP", base)
+		}
+	}
+
+	// Call CoinAnk free/open API
+	ctx := context.Background()
+	ts := time.Now().UnixMilli()
+	coinankKlines, err := coinank_api.Kline(ctx, apiSymbol, coinankExchange, ts, coinank_enum.To, limit, coinankInterval)
+	if err != nil {
+		// Fallback to Binance if unsupported
+		if coinankExchange != coinank_enum.Binance {
+			logger.Warnf("⚠️ CoinAnk free API doesn't support %s, falling back to Binance", coinankExchange)
+			coinankKlines, err = coinank_api.Kline(ctx, symbol, coinank_enum.Binance, ts, coinank_enum.To, limit, coinankInterval)
+			if err != nil {
+				return nil, fmt.Errorf("coinank API error (fallback): %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("coinank API error: %w", err)
+		}
+	}
+
+	// Convert to market.Kline format
+	klines := make([]Kline, len(coinankKlines))
+	for i, ck := range coinankKlines {
+		klines[i] = Kline{
+			OpenTime:  ck.StartTime,
+			Open:      ck.Open,
+			High:      ck.High,
+			Low:       ck.Low,
+			Close:     ck.Close,
+			Volume:    ck.Volume,
+			CloseTime: ck.EndTime,
+		}
+	}
+	return klines, nil
+}
+
+// GetKlinesHyperliquid fetches kline data from Hyperliquid (crypto perps and xyz dex assets)
+func GetKlinesHyperliquid(symbol, interval string, limit int) ([]Kline, error) {
+	return getKlinesFromHyperliquid(symbol, interval, limit)
+}
+
 // Get retrieves market data for the specified token
 func Get(symbol string) (*Data, error) {
 	var klines3m, klines4h []Kline
