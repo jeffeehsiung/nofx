@@ -2,7 +2,7 @@ package store
 
 import (
 	"database/sql"
-	"fmt"
+	"nofx/logger"
 	"strings"
 	"time"
 )
@@ -265,7 +265,7 @@ func (s *TraderStore) UpdateShowInCompetition(userID, id string, showInCompetiti
 
 // Update updates trader configuration
 func (s *TraderStore) Update(trader *Trader) error {
-	fmt.Printf("📝 TraderStore.Update: ID=%s, Name=%s, AIModelID=%s, StrategyID=%s\n",
+	logger.Infof("📝 TraderStore.Update: ID=%s, Name=%s, AIModelID=%s, StrategyID=%s",
 		trader.ID, trader.Name, trader.AIModelID, trader.StrategyID)
 	_, err := s.db.Exec(`
 		UPDATE traders SET

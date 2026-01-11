@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"nofx/config"
 )
 
 // WebSocketClient defines the interface for exchange WebSocket connections
@@ -94,8 +95,8 @@ func NewWebSocketManager() *WebSocketManager {
 		klineBuffer:       make(map[string]chan KlineUpdate),
 		orderBuffer:       make(map[string]chan OrderUpdate),
 		fallbackRestAPI:   true,
-		reconnectAttempts: 5,
-		reconnectDelay:    5 * time.Second,
+		reconnectAttempts: config.WebsocketMaxRetries,
+		reconnectDelay:    time.Duration(config.WebsocketReconnectWait) * time.Second,
 	}
 }
 

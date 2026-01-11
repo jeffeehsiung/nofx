@@ -224,8 +224,8 @@ func (s *Server) handleGetSystemConfig(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"registration_enabled": cfg.RegistrationEnabled,
-		"btc_eth_leverage":     10, // Default value
-		"altcoin_leverage":     5,  // Default value
+		"btc_eth_leverage":     int(config.DefaultMaxLeverage), // Default value
+		"altcoin_leverage":     int(config.OptimalLeverage),    // Default value
 	})
 }
 
@@ -489,12 +489,12 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 	}
 
 	// Validate leverage values
-	if req.BTCETHLeverage < 0 || req.BTCETHLeverage > 50 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "BTC/ETH leverage must be between 1-50x"})
+	if req.BTCETHLeverage < 0 || req.BTCETHLeverage > int(config.MaxAllowedLeverage) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("BTC/ETH leverage must be between 1-%dx", int(config.MaxAllowedLeverage))})
 		return
 	}
-	if req.AltcoinLeverage < 0 || req.AltcoinLeverage > 20 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Altcoin leverage must be between 1-20x"})
+	if req.AltcoinLeverage < 0 || req.AltcoinLeverage > int(config.DefaultMaxLeverage*2) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Altcoin leverage must be between 1-%dx", int(config.DefaultMaxLeverage*2))})
 		return
 	}
 
@@ -534,8 +534,8 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 	}
 
 	// Set leverage default values
-	btcEthLeverage := 10 // Default value
-	altcoinLeverage := 5 // Default value
+	btcEthLeverage := int(config.DefaultMaxLeverage) // Default value
+	altcoinLeverage := int(config.OptimalLeverage)   // Default value
 	if req.BTCETHLeverage > 0 {
 		btcEthLeverage = req.BTCETHLeverage
 	}

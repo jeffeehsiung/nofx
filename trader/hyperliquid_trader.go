@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"nofx/config"
 	"nofx/logger"
 	"strconv"
 	"strings"
@@ -617,7 +618,7 @@ func (t *HyperliquidTrader) GetPositions() ([]map[string]interface{}, error) {
 			// Get leverage (default to 1 if not available)
 			leverage := float64(pos.Position.Leverage.Value)
 			if leverage == 0 {
-				leverage = 1.0
+				leverage = config.MinLeverage
 			}
 
 			posMap["entryPrice"] = entryPrice

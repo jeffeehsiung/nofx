@@ -555,7 +555,7 @@ func (e *StrategyEngine) FetchMicrostructureData(symbol string) *market.MarketMi
 	analyzer := market.NewMarketMicrostructureAnalyzer()
 
 	// Fetch order book depth
-	depth, err := analyzer.FetchOrderBookDepth(symbol, 20)
+	depth, err := analyzer.FetchOrderBookDepth(symbol, config.OrderBookDepth)
 	if err != nil {
 		logger.Infof("⚠️  Failed to fetch order book depth for %s: %v", symbol, err)
 		return nil

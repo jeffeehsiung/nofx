@@ -445,10 +445,7 @@ func (r *Runner) stepOnce() error {
 	r.updateState(ts, equity, unrealized, marginUsed, priceMap, decisionAttempted)
 
 	snapshot := r.snapshotState()
-	drawdownPct := 0.0
-	if snapshot.MaxEquity > 0 {
-		drawdownPct = ((snapshot.MaxEquity - snapshot.Equity) / snapshot.MaxEquity) * 100
-	}
+	drawdownPct := CalculateDrawdown(snapshot.Equity, snapshot.MaxEquity)
 
 	equityPoint := EquityPoint{
 		Timestamp:   ts,
@@ -981,7 +978,7 @@ func (r *Runner) updateState(ts int64, equity, unrealized, marginUsed float64, p
 		r.state.MinEquity = equity
 	}
 	if r.state.MaxEquity > 0 {
-		drawdown := ((r.state.MaxEquity - equity) / r.state.MaxEquity) * 100
+		drawdown := CalculateDrawdown(equity, r.state.MaxEquity)
 		if drawdown > r.state.MaxDrawdownPct {
 			r.state.MaxDrawdownPct = drawdown
 		}

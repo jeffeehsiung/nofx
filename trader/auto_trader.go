@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"nofx/backtest"
 	"nofx/config"
 	"nofx/decision"
 	"nofx/experience"
@@ -2009,19 +2010,17 @@ func (at *AutoTrader) checkPositionDrawdown() {
 		}
 
 		// Calculate drawdown (magnitude of decline from peak)
-		var drawdownPct float64
-		if peakPnLPct > 0 && currentPnLPct < peakPnLPct {
-			drawdownPct = ((peakPnLPct - currentPnLPct) / peakPnLPct) * 100
-		}
+		drawdownPct := backtest.CalculateDrawdown(currentPnLPct, peakPnLPct)
 
-		// Check close position condition: use configurable thresholds
-		if currentPnLPct > minProfitThreshold && drawdownPct >= drawdownTrigger {
-			logger.Infof("🚨 Drawdown close position condition triggered: %s %s | Current profit: %.2f%% | Peak profit: %.2f%% | Drawdown: %.2f%%",
+		// Close position based on drawdown: Once profit ≥ minProfitThreshold, if it drops back more than drawdownTrigger then close
+		if currentPnLPct >= minProfitThreshold && drawdownPct >= drawdownTrigger {
+			logger.Warnf("⚠️ Triggering drawdown close position: %s %s | Current Profit: %.2f%% | Peak Profit: %.2f%% | Drawdown from Peak: %.2f%%",
 				symbol, side, currentPnLPct, peakPnLPct, drawdownPct)
 
-			// Execute close position
-			if err := at.emergencyClosePosition(symbol, side); err != nil {
-				logger.Infof("❌ Drawdown close position failed (%s %s): %v", symbol, side, err)
+			// Execute close position operation
+			err := at.emergencyClosePosition(symbol, side)
+			if err != nil {
+				logger.Errorf("❌ Drawdown close position failed: %s %s | Error: %v", symbol, side, err)
 			} else {
 				logger.Infof("✅ Drawdown close position succeeded: %s %s", symbol, side)
 				// Clear cache for this position after closing

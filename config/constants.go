@@ -84,6 +84,7 @@ const (
 	WebsocketMaxRetries      = 10       // Max reconnection attempts
 	OrderBookDepth           = 20       // Order book depth to maintain
 	OrderBookUpdateInterval  = 100      // ms - update frequency
+	MaxPriceDeviationThreshold = 0.02   // 2% - max deviation between ticker and kline
 )
 
 // Default Position Ratios

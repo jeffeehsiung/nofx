@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"nofx/config"
 	"nofx/logger"
 	"nofx/provider/coinank/coinank_api"
 	"nofx/provider/coinank/coinank_enum"
@@ -36,8 +37,7 @@ func getCurrentPriceWithFallback(symbol string, klines []Kline) (float64, string
 	priceDeviation := math.Abs(realtimePrice-klinePrice) / klinePrice
 
 	// If the deviation is too large (>2%), the ticker might be stale
-	const maxDeviationThreshold = 0.02 // 2%
-	if priceDeviation > maxDeviationThreshold {
+	if priceDeviation > config.MaxPriceDeviationThreshold {
 		logger.Infof("⚠️  %s ticker price deviation %.2f%% from K-line (ticker: %.4f, kline: %.4f), using K-line data",
 			symbol, priceDeviation*100, realtimePrice, klinePrice)
 		return klinePrice, "ticker_stale"
