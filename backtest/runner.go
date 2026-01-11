@@ -62,6 +62,17 @@ type Runner struct {
 
 	lockInfo *RunLockInfo
 	lockStop chan struct{}
+
+	// Feedback loop components
+	feedbackGenerator *FeedbackGenerator
+	feedbackConfig    FeedbackConfig
+	lastFeedback      *FeedbackAnalysis
+	feedbackCycle     int // Track when feedback was last generated
+
+	// Advanced optimization systems
+	promptOptimizer   *PromptOptimizer
+	factorOptimizer   *FactorOptimizer
+	complianceTracker *ComplianceTracker
 }
 
 // NewRunner constructs a backtest runner.
@@ -86,6 +97,17 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 
 	dLogDir := decisionLogDir(cfg.RunID)
 	account := NewBacktestAccount(cfg.InitialBalance, cfg.FeeBps, cfg.SlippageBps)
+
+	// Initialize feedback loop
+	feedbackConfig := DefaultFeedbackConfig()
+	feedbackGenerator := NewFeedbackGenerator(cfg.RunID, feedbackConfig)
+
+	// Initialize advanced optimization systems
+	// Use a default system prompt (will be overridden by StrategyEngine)
+	defaultPrompt := "You are a professional crypto trader making short-term trading decisions."
+	promptOptimizer := NewPromptOptimizer(defaultPrompt, DefaultPromptOptimizerConfig())
+	factorOptimizer := NewFactorOptimizer(DefaultFactorOptimizerConfig())
+	complianceTracker := NewComplianceTracker(DefaultComplianceConfig())
 
 	createdAt := time.Now().UTC()
 	state := &BacktestState{
@@ -121,21 +143,27 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	strategyEngine := decision.NewStrategyEngine(strategyConfig)
 
 	r := &Runner{
-		cfg:            cfg,
-		feed:           feed,
-		account:        account,
-		strategyEngine: strategyEngine,
-		decisionLogDir: dLogDir,
-		mcpClient:      client,
-		status:         RunStateCreated,
-		state:          state,
-		pauseCh:        make(chan struct{}, 1),
-		resumeCh:       make(chan struct{}, 1),
-		stopCh:         make(chan struct{}, 1),
-		doneCh:         make(chan struct{}),
-		createdAt:      createdAt,
-		aiCache:        aiCache,
-		cachePath:      cachePath,
+		cfg:               cfg,
+		feed:              feed,
+		account:           account,
+		strategyEngine:    strategyEngine,
+		decisionLogDir:    dLogDir,
+		mcpClient:         client,
+		status:            RunStateCreated,
+		state:             state,
+		pauseCh:           make(chan struct{}, 1),
+		resumeCh:          make(chan struct{}, 1),
+		stopCh:            make(chan struct{}, 1),
+		doneCh:            make(chan struct{}),
+		createdAt:         createdAt,
+		aiCache:           aiCache,
+		cachePath:         cachePath,
+		feedbackGenerator: feedbackGenerator,
+		feedbackConfig:    feedbackConfig,
+		feedbackCycle:     0,
+		promptOptimizer:   promptOptimizer,
+		factorOptimizer:   factorOptimizer,
+		complianceTracker: complianceTracker,
 	}
 
 	if err := r.initLock(); err != nil {
@@ -562,6 +590,66 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 		record.CandidateCoins = append(record.CandidateCoins, coin.Symbol)
 	}
 	record.Timestamp = time.UnixMilli(ts).UTC()
+
+	// Generate feedback if enabled and enough decisions have been made
+	if r.feedbackConfig.EnableFeedback && callCount >= r.feedbackConfig.MinDecisionsForFeedback {
+		// Regenerate feedback every 5 cycles
+		if r.lastFeedback == nil || (callCount-r.feedbackCycle) >= 5 {
+			feedback, err := r.feedbackGenerator.GenerateFeedback()
+			if err != nil {
+				logger.Infof("Failed to generate feedback: %v", err)
+			} else if feedback != nil {
+				r.lastFeedback = feedback
+				r.feedbackCycle = callCount
+				// Save feedback analysis
+				if err := r.feedbackGenerator.SaveFeedbackAnalysis(feedback); err != nil {
+					logger.Infof("Failed to save feedback analysis: %v", err)
+				}
+				logger.Infof("✅ Generated feedback analysis at cycle %d: Total Return %.2f%%, Win Rate %.1f%%",
+					callCount, feedback.TotalReturnPct, feedback.WinRate)
+
+				// Optimize factor weights based on feedback
+				if r.factorOptimizer.ShouldOptimize(callCount, len(r.account.Positions())) {
+					if err := r.factorOptimizer.OptimizeWeights(feedback, callCount); err != nil {
+						logger.Infof("Failed to optimize factor weights: %v", err)
+					} else {
+						// Save optimizer state
+						r.factorOptimizer.SaveState(r.cfg.RunID)
+					}
+				}
+
+				// Evolve prompts based on performance
+				if r.promptOptimizer.ShouldEvolve(callCount) {
+					metrics := &Metrics{
+						TotalReturnPct: feedback.TotalReturnPct,
+						WinRate:        feedback.WinRate,
+						ProfitFactor:   feedback.ProfitFactor,
+						SharpeRatio:    feedback.SharpeRatio,
+						MaxDrawdownPct: feedback.MaxDrawdown,
+					}
+					r.promptOptimizer.RecordDecisionOutcome("current", metrics)
+
+					if err := r.promptOptimizer.EvolvePrompts(); err != nil {
+						logger.Infof("Failed to evolve prompts: %v", err)
+					} else {
+						// Save optimizer state
+						r.promptOptimizer.SaveState(r.cfg.RunID)
+					}
+				}
+
+				// Update compliance tracker with active recommendations
+				r.complianceTracker.SetRecommendations(feedback.RecommendedActions)
+			}
+		}
+
+		// Attach feedback to context
+		if r.lastFeedback != nil {
+			ctx.PerformanceFeedback = r.lastFeedback
+
+			// Attach optimized factor weights
+			ctx.OptimizedWeights = r.factorOptimizer.GetCurrentWeights()
+		}
+	}
 
 	return ctx, record, nil
 }

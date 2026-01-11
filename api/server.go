@@ -2633,11 +2633,31 @@ func (s *Server) getKlinesFromHyperliquid(symbol, interval string, limit int) ([
 	// Convert Hyperliquid candles to market.Kline format
 	klines := make([]market.Kline, len(candles))
 	for i, candle := range candles {
-		open, _ := strconv.ParseFloat(candle.Open, 64)
-		high, _ := strconv.ParseFloat(candle.High, 64)
-		low, _ := strconv.ParseFloat(candle.Low, 64)
-		close, _ := strconv.ParseFloat(candle.Close, 64)
-		volume, _ := strconv.ParseFloat(candle.Volume, 64)
+		open, err := strconv.ParseFloat(candle.Open, 64)
+		if err != nil {
+			logger.Warnf("Failed to parse open price '%s': %v", candle.Open, err)
+			open = 0
+		}
+		high, err := strconv.ParseFloat(candle.High, 64)
+		if err != nil {
+			logger.Warnf("Failed to parse high price '%s': %v", candle.High, err)
+			high = 0
+		}
+		low, err := strconv.ParseFloat(candle.Low, 64)
+		if err != nil {
+			logger.Warnf("Failed to parse low price '%s': %v", candle.Low, err)
+			low = 0
+		}
+		close, err := strconv.ParseFloat(candle.Close, 64)
+		if err != nil {
+			logger.Warnf("Failed to parse close price '%s': %v", candle.Close, err)
+			close = 0
+		}
+		volume, err := strconv.ParseFloat(candle.Volume, 64)
+		if err != nil {
+			logger.Warnf("Failed to parse volume '%s': %v", candle.Volume, err)
+			volume = 0
+		}
 
 		klines[i] = market.Kline{
 			OpenTime:    candle.OpenTime,

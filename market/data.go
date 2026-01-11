@@ -998,7 +998,11 @@ func getOpenInterestData(symbol string) (*OIData, error) {
 		return nil, err
 	}
 
-	oi, _ := strconv.ParseFloat(result.OpenInterest, 64)
+	oi, err := strconv.ParseFloat(result.OpenInterest, 64)
+	if err != nil {
+		logger.Warnf("Failed to parse open interest '%s': %v", result.OpenInterest, err)
+		oi = 0
+	}
 
 	return &OIData{
 		Latest:  oi,
@@ -1047,7 +1051,11 @@ func getFundingRate(symbol string) (float64, error) {
 		return 0, err
 	}
 
-	rate, _ := strconv.ParseFloat(result.LastFundingRate, 64)
+	rate, err := strconv.ParseFloat(result.LastFundingRate, 64)
+	if err != nil {
+		logger.Warnf("Failed to parse funding rate '%s': %v", result.LastFundingRate, err)
+		rate = 0
+	}
 
 	// Update cache
 	fundingRateMap.Store(symbol, &FundingRateCache{

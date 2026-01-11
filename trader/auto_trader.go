@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"nofx/config"
 	"nofx/decision"
 	"nofx/experience"
 	"nofx/logger"
@@ -934,7 +935,7 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 		liquidationPrice := pos["liquidationPrice"].(float64)
 
 		// Calculate margin used (estimated)
-		leverage := 10 // Default value, should actually be fetched from position info
+		leverage := int(config.DefaultMaxLeverage) // Default value, should actually be fetched from position info
 		if lev, ok := pos["leverage"].(float64); ok {
 			leverage = int(lev)
 		}
@@ -1724,7 +1725,7 @@ func (at *AutoTrader) GetAccountInfo() (map[string]interface{}, error) {
 		unrealizedPnl := pos["unRealizedProfit"].(float64)
 		totalUnrealizedPnLCalculated += unrealizedPnl
 
-		leverage := 10
+		leverage := int(config.DefaultMaxLeverage)
 		if lev, ok := pos["leverage"].(float64); ok {
 			leverage = int(lev)
 		}
@@ -1735,7 +1736,7 @@ func (at *AutoTrader) GetAccountInfo() (map[string]interface{}, error) {
 	// Verify unrealized P&L consistency (API value vs calculated from positions)
 	// Note: Lighter API may return 0 for unrealized PnL, this is a known limitation
 	diff := math.Abs(totalUnrealizedProfit - totalUnrealizedPnLCalculated)
-	if diff > 5.0 { // Only warn if difference is significant (> 5 USDT)
+	if diff > config.MinPositionSize { // Only warn if difference is significant
 		logger.Infof("⚠️ Unrealized P&L inconsistency (Lighter API limitation): API=%.4f, Calculated=%.4f, Diff=%.4f",
 			totalUnrealizedProfit, totalUnrealizedPnLCalculated, diff)
 	}
@@ -1797,7 +1798,7 @@ func (at *AutoTrader) GetPositions() ([]map[string]interface{}, error) {
 		unrealizedPnl := pos["unRealizedProfit"].(float64)
 		liquidationPrice := pos["liquidationPrice"].(float64)
 
-		leverage := 10
+		leverage := int(config.DefaultMaxLeverage)
 		if lev, ok := pos["leverage"].(float64); ok {
 			leverage = int(lev)
 		}
@@ -1950,8 +1951,8 @@ func (at *AutoTrader) startDrawdownMonitor() {
 // checkPositionDrawdown checks position drawdown situation
 func (at *AutoTrader) checkPositionDrawdown() {
 	// Get configuration from strategy
-	config := at.strategyEngine.GetConfig()
-	if config == nil {
+	strategyConfig := at.strategyEngine.GetConfig()
+	if strategyConfig == nil {
 		logger.Infof("❌ Drawdown monitoring: failed to get strategy config")
 		return
 	}
@@ -1964,8 +1965,8 @@ func (at *AutoTrader) checkPositionDrawdown() {
 	}
 
 	// Get thresholds from configuration
-	minProfitThreshold := config.RiskControl.MinProfitThreshold
-	drawdownTrigger := config.RiskControl.DrawdownCloseThreshold
+	minProfitThreshold := strategyConfig.RiskControl.MinProfitThreshold
+	drawdownTrigger := strategyConfig.RiskControl.DrawdownCloseThreshold
 
 	for _, pos := range positions {
 		symbol := pos["symbol"].(string)
@@ -1978,7 +1979,7 @@ func (at *AutoTrader) checkPositionDrawdown() {
 		}
 
 		// Calculate current P&L percentage
-		leverage := 10 // Default value
+		leverage := int(config.DefaultMaxLeverage) // Default value
 		if lev, ok := pos["leverage"].(float64); ok {
 			leverage = int(lev)
 		}
@@ -2403,12 +2404,12 @@ func (at *AutoTrader) enforcePositionValueRatio(positionSizeUSD float64, equity 
 	if isBTCETH(symbol) {
 		maxPositionValueRatio = riskControl.BTCETHMaxPositionValueRatio
 		if maxPositionValueRatio <= 0 {
-			maxPositionValueRatio = 5.0 // Default: 5x for BTC/ETH
+			maxPositionValueRatio = config.DefaultBTCETHPosRatio // Default: 5x for BTC/ETH
 		}
 	} else {
 		maxPositionValueRatio = riskControl.AltcoinMaxPositionValueRatio
 		if maxPositionValueRatio <= 0 {
-			maxPositionValueRatio = 1.0 // Default: 1x for altcoins
+			maxPositionValueRatio = config.DefaultAltcoinPosRatio // Default: 1x for altcoins
 		}
 	}
 

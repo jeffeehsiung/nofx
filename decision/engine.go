@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"nofx/config"
 	"nofx/logger"
 	"nofx/market"
 	"nofx/mcp"
@@ -116,6 +117,8 @@ type Context struct {
 	PromptVariant         string                                  `json:"prompt_variant,omitempty"`
 	TradingStats          *TradingStats                           `json:"trading_stats,omitempty"`
 	RecentOrders          []RecentOrder                           `json:"recent_orders,omitempty"`
+	PerformanceFeedback   interface{}                             `json:"-"` // *backtest.FeedbackAnalysis - avoiding circular dependency
+	OptimizedWeights      interface{}                             `json:"-"` // *store.RiskControlConfig - optimized parameters
 	MarketDataMap         map[string]*market.Data                 `json:"-"`
 	MultiTFMarket         map[string]map[string]*market.Data      `json:"-"`
 	OITopDataMap          map[string]*OITopData                   `json:"-"`
@@ -793,14 +796,14 @@ func (e *StrategyEngine) BuildSystemPrompt(accountEquity float64, variant string
 		sb.WriteString(promptSections.RoleDefinition)
 		sb.WriteString("\n\n")
 	} else {
-		sb.WriteString("# You are a professional cryptocurrency trading AI\n\n")
-		sb.WriteString("Your task is to make trading decisions based on provided market data.\n\n")
+		sb.WriteString("# You are a professional cryptocurrency trading AI with a strong mathematical and digital signal processing background\n\n")
+		sb.WriteString("Your task is to analyze and make trading decisions based on provided market data.\n\n")
 	}
 
 	// 2. Trading mode variant
 	switch strings.ToLower(strings.TrimSpace(variant)) {
 	case "aggressive":
-		sb.WriteString("## Mode: Aggressive\n- Prioritize capturing trend breakouts, can build positions in batches when confidence ≥ 70\n- Allow higher positions, but must strictly set stop-loss and explain risk-reward ratio\n\n")
+		sb.WriteString(fmt.Sprintf("## Mode: Aggressive\n- Prioritize capturing trend breakouts, can build positions in batches when confidence ≥ %d\n- Allow higher positions, but must strictly set stop-loss and explain risk-reward ratio\n\n", config.ConfidenceMediumMin))
 	case "conservative":
 		sb.WriteString("## Mode: Conservative\n- Only open positions when multiple signals resonate\n- Prioritize cash preservation, must pause for multiple periods after consecutive losses\n\n")
 	case "scalping":
@@ -810,11 +813,11 @@ func (e *StrategyEngine) BuildSystemPrompt(accountEquity float64, variant string
 	// 3. Hard constraints (risk control)
 	btcEthPosValueRatio := riskControl.BTCETHMaxPositionValueRatio
 	if btcEthPosValueRatio <= 0 {
-		btcEthPosValueRatio = 5.0
+		btcEthPosValueRatio = config.DefaultBTCETHPosRatio
 	}
 	altcoinPosValueRatio := riskControl.AltcoinMaxPositionValueRatio
 	if altcoinPosValueRatio <= 0 {
-		altcoinPosValueRatio = 1.0
+		altcoinPosValueRatio = config.DefaultAltcoinPosRatio
 	}
 
 	sb.WriteString("# Hard Constraints (Risk Control)\n\n")
@@ -836,9 +839,9 @@ func (e *StrategyEngine) BuildSystemPrompt(accountEquity float64, variant string
 	// Position sizing guidance
 	sb.WriteString("## Position Sizing Guidance\n")
 	sb.WriteString("Calculate `position_size_usd` based on your confidence and the Position Value Limits above:\n")
-	sb.WriteString("- High confidence (≥85): Use 80-100%% of max position value limit\n")
-	sb.WriteString("- Medium confidence (70-84): Use 50-80%% of max position value limit\n")
-	sb.WriteString("- Low confidence (60-69): Use 30-50%% of max position value limit\n")
+	sb.WriteString(fmt.Sprintf("- High confidence (≥%d): Use %d-%d%%%% of max position value limit\n", config.ConfidenceHigh, config.ConfidenceHighMin, config.ConfidenceHighMax))
+	sb.WriteString(fmt.Sprintf("- Medium confidence (%d-%d): Use %d-%d%%%% of max position value limit\n", config.ConfidenceMediumMin, config.ConfidenceMediumMax, config.ConfidenceMediumPosMin, config.ConfidenceMediumPosMax))
+	sb.WriteString(fmt.Sprintf("- Low confidence (%d-%d): Use %d-%d%%%% of max position value limit\n", config.ConfidenceLow, config.ConfidenceLowMax, config.ConfidenceLowPosMin, config.ConfidenceLowPosMax))
 	sb.WriteString(fmt.Sprintf("- Example: With equity %.0f and BTC/ETH ratio %.1fx, max is %.0f USDT\n",
 		accountEquity, btcEthPosValueRatio, accountEquity*btcEthPosValueRatio))
 	sb.WriteString("- **DO NOT** just use available_balance as position_size_usd. Use the Position Value Limits!\n\n")

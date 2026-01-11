@@ -515,10 +515,20 @@ func (t *LighterTraderV2) GetTrades(startTime time.Time, limit int) ([]TradeReco
 		var signChanged bool
 
 		if isTaker {
-			posBefore, _ = parseFloat(lt.TakerPositionSizeBefore)
+			var err error
+			posBefore, err = parseFloat(lt.TakerPositionSizeBefore)
+			if err != nil {
+				logger.Warnf("failed to parse TakerPositionSizeBefore: %v", err)
+				posBefore = 0
+			}
 			signChanged = lt.TakerPositionSignChanged
 		} else {
-			posBefore, _ = parseFloat(lt.MakerPositionSizeBefore)
+			var err error
+			posBefore, err = parseFloat(lt.MakerPositionSizeBefore)
+			if err != nil {
+				logger.Warnf("failed to parse MakerPositionSizeBefore: %v", err)
+				posBefore = 0
+			}
 			signChanged = lt.MakerPositionSignChanged
 		}
 

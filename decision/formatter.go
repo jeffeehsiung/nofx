@@ -51,6 +51,24 @@ func formatContextData(ctx *Context, lang Language) string {
 		sb.WriteString(formatAccountEN(ctx))
 	}
 
+	// 3.5 Performance Feedback (if available)
+	if ctx.PerformanceFeedback != nil {
+		if lang == LangChinese {
+			sb.WriteString(formatPerformanceFeedbackZH(ctx.PerformanceFeedback))
+		} else {
+			sb.WriteString(formatPerformanceFeedbackEN(ctx.PerformanceFeedback))
+		}
+	}
+
+	// 3.6 Optimized Trading Parameters (if available)
+	if ctx.OptimizedWeights != nil {
+		if lang == LangChinese {
+			sb.WriteString(formatOptimizedWeightsZH(ctx.OptimizedWeights))
+		} else {
+			sb.WriteString(formatOptimizedWeightsEN(ctx.OptimizedWeights))
+		}
+	}
+
 	// 4. 历史交易统计
 	if ctx.TradingStats != nil && ctx.TradingStats.TotalTrades > 0 {
 		if lang == LangChinese {
@@ -637,7 +655,63 @@ func getOIInterpretationEN(oiChange, priceChange string) string {
 		return OIInterpretation.OIUp_PriceDown.EN
 	} else if oiChange == "decrease" && priceChange == "up" {
 		return OIInterpretation.OIDown_PriceUp.EN
-	} else {
+	} else if oiChange == "decrease" && priceChange == "down" {
 		return OIInterpretation.OIDown_PriceDown.EN
 	}
+	return ""
+}
+
+// formatPerformanceFeedbackZH formats performance feedback for Chinese prompts
+func formatPerformanceFeedbackZH(feedback interface{}) string {
+	if feedback == nil {
+		return ""
+	}
+
+	// Call the formatting function via type assertion
+	// The feedback is actually *backtest.FeedbackAnalysis
+	if formatter, ok := feedback.(interface{ FormatForPrompt(lang string) string }); ok {
+		return formatter.FormatForPrompt("zh")
+	}
+
+	return ""
+}
+
+// formatPerformanceFeedbackEN formats performance feedback for English prompts
+func formatPerformanceFeedbackEN(feedback interface{}) string {
+	if feedback == nil {
+		return ""
+	}
+
+	// Call the formatting function via type assertion
+	if formatter, ok := feedback.(interface{ FormatForPrompt(lang string) string }); ok {
+		return formatter.FormatForPrompt("en")
+	}
+
+	return ""
+}
+
+// formatOptimizedWeightsZH formats optimized trading parameters (Chinese)
+func formatOptimizedWeightsZH(weights interface{}) string {
+	if weights == nil {
+		return ""
+	}
+
+	if formatter, ok := weights.(interface{ FormatWeightsForPrompt(lang string) string }); ok {
+		return formatter.FormatWeightsForPrompt("zh")
+	}
+
+	return ""
+}
+
+// formatOptimizedWeightsEN formats optimized trading parameters (English)
+func formatOptimizedWeightsEN(weights interface{}) string {
+	if weights == nil {
+		return ""
+	}
+
+	if formatter, ok := weights.(interface{ FormatWeightsForPrompt(lang string) string }); ok {
+		return formatter.FormatWeightsForPrompt("en")
+	}
+
+	return ""
 }

@@ -71,11 +71,31 @@ func (t *BitgetTrader) GetTrades(startTime time.Time, limit int) ([]BitgetTrade,
 	trades := make([]BitgetTrade, 0, len(resp.FillList))
 
 	for _, fill := range resp.FillList {
-		fillPrice, _ := strconv.ParseFloat(fill.Price, 64)
-		fillQty, _ := strconv.ParseFloat(fill.BaseVolume, 64)
-		fee, _ := strconv.ParseFloat(fill.Fee, 64)
-		profit, _ := strconv.ParseFloat(fill.Profit, 64)
-		cTime, _ := strconv.ParseInt(fill.CTime, 10, 64)
+		fillPrice, err := strconv.ParseFloat(fill.Price, 64)
+		if err != nil {
+			logger.Warnf("Failed to parse fill price '%s': %v", fill.Price, err)
+			fillPrice = 0
+		}
+		fillQty, err := strconv.ParseFloat(fill.BaseVolume, 64)
+		if err != nil {
+			logger.Warnf("Failed to parse fill quantity '%s': %v", fill.BaseVolume, err)
+			fillQty = 0
+		}
+		fee, err := strconv.ParseFloat(fill.Fee, 64)
+		if err != nil {
+			logger.Warnf("Failed to parse fee '%s': %v", fill.Fee, err)
+			fee = 0
+		}
+		profit, err := strconv.ParseFloat(fill.Profit, 64)
+		if err != nil {
+			logger.Warnf("Failed to parse profit '%s': %v", fill.Profit, err)
+			profit = 0
+		}
+		cTime, err := strconv.ParseInt(fill.CTime, 10, 64)
+		if err != nil {
+			logger.Warnf("Failed to parse timestamp '%s': %v", fill.CTime, err)
+			cTime = 0
+		}
 
 		// Determine order action based on side and tradeSide
 		// Bitget one-way mode:
