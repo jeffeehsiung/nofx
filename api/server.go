@@ -208,7 +208,6 @@ func (s *Server) setupRoutes() {
 			protected.GET("/decisions", s.handleDecisions)
 			protected.GET("/decisions/latest", s.handleLatestDecisions)
 			protected.GET("/statistics", s.handleStatistics)
-			protected.GET("/competition", s.handleCompetition) // Competition/leaderboard data
 
 			// Backtest routes
 			backtest := protected.Group("/backtest")
