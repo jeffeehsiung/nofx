@@ -928,7 +928,9 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 						logger.Infof("Failed to optimize factor weights: %v", err)
 					} else {
 						// Save optimizer state
-						r.factorOptimizer.SaveState(r.cfg.RunID)
+						if err := r.factorOptimizer.SaveState(r.cfg.RunID); err != nil {
+							logger.Infof("Failed to save factor optimizer state: %v", err)
+						}
 					}
 				}
 
@@ -947,7 +949,9 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 						logger.Infof("Failed to evolve prompts: %v", err)
 					} else {
 						// Save optimizer state
-						r.promptOptimizer.SaveState(r.cfg.RunID)
+						if err := r.promptOptimizer.SaveState(r.cfg.RunID); err != nil {
+							logger.Infof("Failed to save prompt optimizer state: %v", err)
+						}
 
 						// CRITICAL: Update strategy engine with the evolved prompt
 						evolvedPrompt := r.promptOptimizer.GetCurrentPrompt()
@@ -1882,13 +1886,6 @@ func (r *Runner) getSymbolStats(symbol string) *SymbolStats {
 	}
 	// Return empty stats with 50% default win rate if symbol not yet tracked
 	return &SymbolStats{WinRate: 0.5, SampleSize: 0}
-}
-
-// recordPredictionOutcome records model prediction accuracy for drift detection (SMART 2.2)
-func (r *Runner) recordPredictionOutcome(symbol string, correct bool) {
-	if r.modelPerformance != nil {
-		r.modelPerformance.RecordPrediction(symbol, correct)
-	}
 }
 
 func (r *Runner) persistMetadata() {

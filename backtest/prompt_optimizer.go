@@ -42,19 +42,19 @@ type PromptVariant struct {
 
 // PromptOptimizer manages prompt evolution and A/B testing
 type PromptOptimizer struct {
-	basePrompt     string
-	variants       []*PromptVariant
-	currentVariant *PromptVariant
-	generation     int
-	populationSize int
-	mutationRate   float64
+	BasePrompt     string
+	Variants       []*PromptVariant
+	CurrentVariant *PromptVariant
+	Generation     int
+	PopulationSize int
+	MutationRate   float64
 
 	// Configuration
-	config *PromptOptimizerConfig
+	Config *PromptOptimizerConfig
 
 	// Performance tracking
-	decisionCounts  map[string]int      // variant ID -> decision count
-	performanceData map[string]*Metrics // variant ID -> metrics
+	DecisionCounts  map[string]int      // variant ID -> decision count
+	PerformanceData map[string]*Metrics // variant ID -> metrics
 }
 
 // PromptOptimizerConfig controls prompt optimization behavior
@@ -86,14 +86,14 @@ func NewPromptOptimizer(basePrompt string, config *PromptOptimizerConfig) *Promp
 	}
 
 	po := &PromptOptimizer{
-		basePrompt:      basePrompt,
-		variants:        make([]*PromptVariant, 0),
-		generation:      1,
-		populationSize:  config.PopulationSize,
-		mutationRate:    config.MutationRate,
-		config:          config,
-		decisionCounts:  make(map[string]int),
-		performanceData: make(map[string]*Metrics),
+		BasePrompt:      basePrompt,
+		Variants:        make([]*PromptVariant, 0),
+		Generation:      1,
+		PopulationSize:  config.PopulationSize,
+		MutationRate:    config.MutationRate,
+		Config:          config,
+		DecisionCounts:  make(map[string]int),
+		PerformanceData: make(map[string]*Metrics),
 	}
 
 	// Create initial variant (base prompt)
@@ -107,8 +107,8 @@ func NewPromptOptimizer(basePrompt string, config *PromptOptimizerConfig) *Promp
 		FitnessScore: 0.0,
 	}
 
-	po.variants = append(po.variants, baseVariant)
-	po.currentVariant = baseVariant
+	po.Variants = append(po.Variants, baseVariant)
+	po.CurrentVariant = baseVariant
 
 	logger.Infof("[PromptOptimizer] Initialized with base prompt (generation: 1)")
 
@@ -117,37 +117,37 @@ func NewPromptOptimizer(basePrompt string, config *PromptOptimizerConfig) *Promp
 
 // GetCurrentPrompt returns the currently active prompt variant
 func (po *PromptOptimizer) GetCurrentPrompt() string {
-	if po.currentVariant != nil {
-		return po.currentVariant.PromptText
+	if po.CurrentVariant != nil {
+		return po.CurrentVariant.PromptText
 	}
-	return po.basePrompt
+	return po.BasePrompt
 }
 
 // GetAllVariants returns a copy of all prompt variants for inspection
 func (po *PromptOptimizer) GetAllVariants() []*PromptVariant {
-	result := make([]*PromptVariant, len(po.variants))
-	copy(result, po.variants)
+	result := make([]*PromptVariant, len(po.Variants))
+	copy(result, po.Variants)
 	return result
 }
 
 // GetCurrentVariant returns the currently active variant
 func (po *PromptOptimizer) GetCurrentVariant() *PromptVariant {
-	return po.currentVariant
+	return po.CurrentVariant
 }
 
 // GetGeneration returns the current generation number
 func (po *PromptOptimizer) GetGeneration() int {
-	return po.generation
+	return po.Generation
 }
 
 // ActivateVariant switches to a specific variant by ID
 func (po *PromptOptimizer) ActivateVariant(variantID string) error {
-	for _, v := range po.variants {
+	for _, v := range po.Variants {
 		if v.ID == variantID {
-			po.currentVariant = v
+			po.CurrentVariant = v
 			v.IsActive = true
 			// Mark others as inactive
-			for _, other := range po.variants {
+			for _, other := range po.Variants {
 				if other.ID != variantID {
 					other.IsActive = false
 				}
@@ -160,17 +160,17 @@ func (po *PromptOptimizer) ActivateVariant(variantID string) error {
 
 // RecordDecisionOutcome records the outcome of a decision made with a specific prompt
 func (po *PromptOptimizer) RecordDecisionOutcome(variantID string, metrics *Metrics) {
-	if !po.config.EnableOptimization {
+	if !po.Config.EnableOptimization {
 		return
 	}
 
-	po.decisionCounts[variantID]++
-	po.performanceData[variantID] = metrics
+	po.DecisionCounts[variantID]++
+	po.PerformanceData[variantID] = metrics
 
 	// Update variant metrics
-	for _, variant := range po.variants {
+	for _, variant := range po.Variants {
 		if variant.ID == variantID {
-			variant.TotalDecisions = po.decisionCounts[variantID]
+			variant.TotalDecisions = po.DecisionCounts[variantID]
 			variant.TotalReturn = metrics.TotalReturnPct
 			variant.WinRate = metrics.WinRate
 			variant.ProfitFactor = metrics.ProfitFactor
@@ -184,39 +184,39 @@ func (po *PromptOptimizer) RecordDecisionOutcome(variantID string, metrics *Metr
 
 // ShouldEvolve determines if it's time to evolve prompts
 func (po *PromptOptimizer) ShouldEvolve(currentCycle int) bool {
-	if !po.config.EnableOptimization {
+	if !po.Config.EnableOptimization {
 		return false
 	}
 
 	// Evolve every EvaluationCycles
-	if currentCycle%po.config.EvaluationCycles != 0 {
+	if currentCycle%po.Config.EvaluationCycles != 0 {
 		return false
 	}
 
 	// Check if we have enough data
 	totalDecisions := 0
-	for _, count := range po.decisionCounts {
+	for _, count := range po.DecisionCounts {
 		totalDecisions += count
 	}
 
-	return totalDecisions >= po.config.MinDecisionsPerTest
+	return totalDecisions >= po.Config.MinDecisionsPerTest
 }
 
 // EvolvePrompts creates new generation of prompts based on performance
 func (po *PromptOptimizer) EvolvePrompts() error {
-	if !po.config.EnableOptimization {
+	if !po.Config.EnableOptimization {
 		return nil
 	}
 
-	logger.Infof("[PromptOptimizer] 🧬 Evolving prompts (generation %d → %d)", po.generation, po.generation+1)
+	logger.Infof("[PromptOptimizer] 🧬 Evolving prompts (generation %d → %d)", po.Generation, po.Generation+1)
 
 	// Sort variants by fitness
-	sort.Slice(po.variants, func(i, j int) bool {
-		return po.variants[i].FitnessScore > po.variants[j].FitnessScore
+	sort.Slice(po.Variants, func(i, j int) bool {
+		return po.Variants[i].FitnessScore > po.Variants[j].FitnessScore
 	})
 
 	// Log current performance
-	for i, variant := range po.variants {
+	for i, variant := range po.Variants {
 		if variant.TotalDecisions > 0 {
 			logger.Infof("  Variant %s (gen %d): Fitness=%.3f, Return=%.2f%%, WinRate=%.1f%%, Decisions=%d",
 				variant.ID, variant.Generation, variant.FitnessScore,
@@ -228,14 +228,14 @@ func (po *PromptOptimizer) EvolvePrompts() error {
 	}
 
 	// Keep top performers
-	topVariants := po.variants[:po.config.TopVariantsToKeep]
+	topVariants := po.Variants[:po.Config.TopVariantsToKeep]
 
 	// Generate new variants
 	newVariants := make([]*PromptVariant, 0)
 	newVariants = append(newVariants, topVariants...) // Keep elite
 
 	// Create children through crossover and mutation
-	for len(newVariants) < po.populationSize {
+	for len(newVariants) < po.PopulationSize {
 		// Select two parents (tournament selection)
 		parent1 := po.tournamentSelect()
 		parent2 := po.tournamentSelect()
@@ -250,18 +250,18 @@ func (po *PromptOptimizer) EvolvePrompts() error {
 	}
 
 	// Update generation
-	po.generation++
-	po.variants = newVariants
+	po.Generation++
+	po.Variants = newVariants
 
 	// Set new current variant (best from new generation)
-	po.currentVariant = po.variants[0]
+	po.CurrentVariant = po.Variants[0]
 
 	// Reset tracking
-	po.decisionCounts = make(map[string]int)
-	po.performanceData = make(map[string]*Metrics)
+	po.DecisionCounts = make(map[string]int)
+	po.PerformanceData = make(map[string]*Metrics)
 
-	logger.Infof("[PromptOptimizer] ✅ Evolution complete: %d variants in generation %d", len(po.variants), po.generation)
-	logger.Infof("[PromptOptimizer] New champion: %s (fitness: %.3f)", po.currentVariant.ID, po.currentVariant.FitnessScore)
+	logger.Infof("[PromptOptimizer] ✅ Evolution complete: %d variants in generation %d", len(po.Variants), po.Generation)
+	logger.Infof("[PromptOptimizer] New champion: %s (fitness: %.3f)", po.CurrentVariant.ID, po.CurrentVariant.FitnessScore)
 
 	return nil
 }
@@ -305,21 +305,21 @@ func (po *PromptOptimizer) calculateFitness(metrics *Metrics) float64 {
 // tournamentSelect selects a variant using tournament selection
 func (po *PromptOptimizer) tournamentSelect() *PromptVariant {
 	// Simple tournament: pick 2 random, return best
-	if len(po.variants) < 2 {
-		return po.variants[0]
+	if len(po.Variants) < 2 {
+		return po.Variants[0]
 	}
 
 	idx1 := 0
 	idx2 := 1
-	if len(po.variants) > 2 {
+	if len(po.Variants) > 2 {
 		// In production, use proper random selection
-		idx2 = len(po.variants) / 2
+		idx2 = len(po.Variants) / 2
 	}
 
-	if po.variants[idx1].FitnessScore > po.variants[idx2].FitnessScore {
-		return po.variants[idx1]
+	if po.Variants[idx1].FitnessScore > po.Variants[idx2].FitnessScore {
+		return po.Variants[idx1]
 	}
-	return po.variants[idx2]
+	return po.Variants[idx2]
 }
 
 // crossover creates a child prompt by combining two parent prompts
@@ -347,11 +347,11 @@ func (po *PromptOptimizer) crossover(parent1, parent2 *PromptVariant) *PromptVar
 	childPrompt := strings.Join(childLines, "\n")
 
 	return &PromptVariant{
-		ID:         fmt.Sprintf("gen%d-v%d", po.generation+1, len(po.variants)+1),
+		ID:         fmt.Sprintf("gen%d-v%d", po.Generation+1, len(po.Variants)+1),
 		PromptText: childPrompt,
-		Version:    po.generation + 1,
+		Version:    po.Generation + 1,
 		CreatedAt:  time.Now(),
-		Generation: po.generation + 1,
+		Generation: po.Generation + 1,
 		IsActive:   true,
 	}
 }
@@ -359,7 +359,7 @@ func (po *PromptOptimizer) crossover(parent1, parent2 *PromptVariant) *PromptVar
 // mutate applies random mutations to a prompt variant
 func (po *PromptOptimizer) mutate(variant *PromptVariant) *PromptVariant {
 	// Apply mutation with probability
-	if po.mutationRate == 0 {
+	if po.MutationRate == 0 {
 		return variant
 	}
 
@@ -385,7 +385,9 @@ func (po *PromptOptimizer) mutate(variant *PromptVariant) *PromptVariant {
 // SaveState saves the optimizer state to disk
 func (po *PromptOptimizer) SaveState(runID string) error {
 	dir := filepath.Join("backtests", runID)
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
 
 	filename := filepath.Join(dir, "prompt_optimizer_state.json")
 
@@ -415,6 +417,6 @@ func (po *PromptOptimizer) LoadState(runID string) error {
 		return fmt.Errorf("failed to unmarshal optimizer state: %w", err)
 	}
 
-	logger.Infof("[PromptOptimizer] 📂 Loaded state from %s (generation %d)", filename, po.generation)
+	logger.Infof("[PromptOptimizer] 📂 Loaded state from %s (generation %d)", filename, po.Generation)
 	return nil
 }

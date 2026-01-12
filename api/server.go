@@ -1385,11 +1385,12 @@ func (s *Server) handleClosePosition(c *gin.Context) {
 	var result map[string]interface{}
 	var closeErr error
 
-	if req.Side == "LONG" {
+	switch req.Side {
+	case "LONG":
 		result, closeErr = tempTrader.CloseLong(req.Symbol, 0) // 0 means close all
-	} else if req.Side == "SHORT" {
+	case "SHORT":
 		result, closeErr = tempTrader.CloseShort(req.Symbol, 0) // 0 means close all
-	} else {
+	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "side must be LONG or SHORT"})
 		return
 	}

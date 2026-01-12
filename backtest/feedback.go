@@ -662,7 +662,7 @@ func (fg *FeedbackGenerator) identifySuccessPatterns(outcomes []DecisionOutcome,
 	currentStreak := 0
 	winStreakPnL := 0.0
 
-	for i, outcome := range outcomes {
+	for _, outcome := range outcomes {
 		if outcome.Success {
 			currentStreak++
 			if currentStreak > maxWinStreak {
@@ -1123,9 +1123,9 @@ func parseDurationMinutes(duration string) int {
 	// Parse duration like "2h30m" or "45m"
 	var hours, minutes int
 	if strings.Contains(duration, "h") {
-		fmt.Sscanf(duration, "%dh%dm", &hours, &minutes)
+		_, _ = fmt.Sscanf(duration, "%dh%dm", &hours, &minutes)
 	} else {
-		fmt.Sscanf(duration, "%dm", &minutes)
+		_, _ = fmt.Sscanf(duration, "%dm", &minutes)
 	}
 	return hours*60 + minutes
 }

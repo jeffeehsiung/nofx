@@ -72,7 +72,7 @@ func acquireRunLock(runID string) (*RunLockInfo, error) {
 		if !lockIsStale(existing) {
 			return nil, fmt.Errorf("run %s is locked by pid %d", runID, existing.PID)
 		}
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 

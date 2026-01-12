@@ -106,7 +106,9 @@ Backtest Integration Example
 
    // Calibrate thresholds
    calibrator := decision.NewThresholdCalibrator()
-   calibrator.CalibrateFromHistory(convertToTradeOutcomes(trades))
+   if err := calibrator.CalibrateFromHistory(convertToTradeOutcomes(trades)); err != nil {
+       log.Printf("Warning: calibration failed: %v", err)
+   }
 
    // Store in backtest context
    bt.FailureThresholds = calibrator.ApplyToAnalyzer()

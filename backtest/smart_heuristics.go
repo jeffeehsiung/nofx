@@ -719,8 +719,7 @@ func (mp *ModelPerformance) GetLastNAccuracy(n int) float64 {
 // Helper function to estimate slippage for a position
 func estimateExpectedSlippage(symbol string, positionSize float64) float64 {
 	// Base slippage percentages by symbol
-	baseSlip := 0.0005 // 0.05% for majors
-
+	var baseSlip float64
 	if strings.Contains(symbol, "BTCUSDT") || strings.Contains(symbol, "ETHUSDT") {
 		baseSlip = 0.0003
 	} else {
