@@ -80,7 +80,10 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
     console.log('[PromptLabPage] Loading...')
   }
 
-  const variants = Array.isArray(data?.variants) ? data.variants : []
+  // Defensive filtering: backend may return null/partial items while prompt optimizer initializes
+  const variants = Array.isArray(data?.variants)
+    ? data.variants.filter((v) => v && typeof v.VariantID === 'string')
+    : []
   const activeVariant = variants.length > 0 ? variants.find((v) => v.IsActive) : undefined
 
   // Auto-select active variant on load
@@ -259,7 +262,7 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
 
             {variants.map((variant) => (
               <motion.div
-                key={variant.VariantID}
+                key={variant.VariantID || variant.ID || Math.random().toString(36).slice(2)}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className={`
@@ -291,7 +294,7 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-sm text-slate-400">
-                            {variant.VariantID.substring(0, 8)}
+                            {(variant.VariantID || variant.ID || '').substring(0, 8) || '—'}
                           </span>
                           <span
                             className={`text-xs font-bold ${getGenerationColor(variant.Generation)}`}
@@ -309,7 +312,7 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleActivate(variant.VariantID)
+                          handleActivate(variant.VariantID || variant.ID)
                         }}
                         disabled={!!activating}
                         className={`

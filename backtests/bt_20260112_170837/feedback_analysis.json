@@ -1,0 +1,28 @@
+{
+  "analysis_period": "Last 23 trades",
+  "start_time": "2025-12-14T01:14:59.999+08:00",
+  "end_time": "2025-12-16T23:14:59.999+08:00",
+  "decisions_covered": 23,
+  "total_return": 0,
+  "total_return_pct": -10.07764156615022,
+  "win_rate": 45.45454545454545,
+  "profit_factor": 2.2907554937922825,
+  "sharpe_ratio": 0.043952883792752674,
+  "max_drawdown": 6.4556561401354005,
+  "success_patterns": null,
+  "failure_patterns": null,
+  "key_insights": [
+    "🔴 CRITICAL: Portfolio down -10.08%. Immediate strategy revision needed",
+    "✅ Good profit factor (2.29). Average wins sufficiently larger than losses",
+    "✅ Drawdown well-controlled at 6.5%"
+  ],
+  "recommended_actions": [
+    "1. REDUCE POSITION SIZES: Start with 50% of current position sizes until profitability improves",
+    "2. TIGHTER STOP-LOSSES: Set stop-losses at 2-3% maximum loss per trade",
+    "3. SELECTIVE TRADING: Only take trades with 70%+ confidence and clear technical setup"
+  ],
+  "top_winning_trades": [],
+  "top_losing_trades": [],
+  "market_conditions": "INSUFFICIENT DATA: Need more trades to determine market conditions",
+  "regime_analysis": {}
+}
