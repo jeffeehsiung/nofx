@@ -72,7 +72,7 @@ func CalibrateFromLiveDB(posStore *store.PositionStore, traderID string, maxTrad
 	sampleCount := len(outcomes)
 	fullSummary := fmt.Sprintf("Live DB calibration (trader=%s, samples=%d): %s", traderID, sampleCount, summary)
 
-	logger.Infof(fullSummary)
+	logger.Info(fullSummary)
 
 	return thresholds, sampleCount, fullSummary, nil
 }

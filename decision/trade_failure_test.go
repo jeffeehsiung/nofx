@@ -323,7 +323,7 @@ func TestAnalyzeFailedTrade(t *testing.T) {
 				t.Errorf("confidence %.2f < minimum %.2f", result.ConfidenceScore, tt.minConfidence)
 			}
 
-			if result.Evidence == nil || len(result.Evidence) == 0 {
+			if len(result.Evidence) == 0 {
 				t.Errorf("no evidence provided")
 			}
 

@@ -675,10 +675,6 @@ func (fg *FeedbackGenerator) identifySuccessPatterns(outcomes []DecisionOutcome,
 		} else {
 			currentStreak = 0
 		}
-		// Check if win followed by immediate loss (profit giveaway)
-		if i > 0 && outcomes[i-1].Success && !outcome.Success {
-			// This is handled in failure patterns
-		}
 	}
 
 	if consecutiveWins >= fg.config.MinPatternFrequency {

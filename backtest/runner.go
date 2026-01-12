@@ -563,6 +563,14 @@ func (r *Runner) GetFeedbackAnalysis() *FeedbackAnalysis {
 	return r.lastFeedback
 }
 
+// GetPromptOptimizer returns the prompt optimizer for inspecting variants
+func (r *Runner) GetPromptOptimizer() *PromptOptimizer {
+	if r == nil {
+		return nil
+	}
+	return r.promptOptimizer
+}
+
 func (r *Runner) loop(ctx context.Context) {
 	defer close(r.doneCh)
 
@@ -940,6 +948,11 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 					} else {
 						// Save optimizer state
 						r.promptOptimizer.SaveState(r.cfg.RunID)
+
+						// CRITICAL: Update strategy engine with the evolved prompt
+						evolvedPrompt := r.promptOptimizer.GetCurrentPrompt()
+						r.strategyEngine.SetCustomPrompt(evolvedPrompt)
+						logger.Infof("✅ Applied evolved prompt variant to strategy engine (gen %d)", r.promptOptimizer.GetGeneration())
 					}
 				}
 

@@ -44,6 +44,7 @@ import { t } from '../i18n/translations'
 import { confirmToast } from '../lib/notify'
 import { DecisionCard } from './DecisionCard'
 import { MetricTooltip } from './MetricTooltip'
+import { PromptLabPage } from '../pages/PromptLabPage'
 import type {
   BacktestStatusPayload,
   BacktestPositionStatus,
@@ -59,7 +60,7 @@ import type {
 
 // ============ Types ============
 type WizardStep = 1 | 2 | 3
-type ViewTab = 'overview' | 'chart' | 'trades' | 'decisions' | 'analysis' | 'compare'
+type ViewTab = 'overview' | 'chart' | 'trades' | 'decisions' | 'analysis' | 'prompt-lab' | 'compare'
 
 const TIMEFRAME_OPTIONS = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d']
 const POPULAR_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT']
@@ -1825,7 +1826,7 @@ export function BacktestPage() {
               {/* Tabs */}
               <div className="binance-card">
                 <div className="flex border-b" style={{ borderColor: '#2B3139' }}>
-                  {(['overview', 'chart', 'trades', 'decisions', 'analysis'] as ViewTab[]).map((tab) => (
+                  {(['overview', 'chart', 'trades', 'decisions', 'analysis', 'prompt-lab'] as ViewTab[]).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setViewTab(tab)}
@@ -1848,9 +1849,13 @@ export function BacktestPage() {
                               ? language === 'zh'
                                 ? 'AI决策'
                                 : 'Decisions'
-                              : language === 'zh'
-                                ? '失败分析'
-                                : 'Analysis'}
+                              : tab === 'analysis'
+                                ? language === 'zh'
+                                  ? '失败分析'
+                                  : 'Analysis'
+                                : language === 'zh'
+                                  ? '提示词实验室'
+                                  : 'Prompt Lab'}
                       {viewTab === tab && (
                         <motion.div
                           layoutId="tab-indicator"
@@ -2152,6 +2157,17 @@ export function BacktestPage() {
                             <div className="text-sm">{language === 'zh' ? '请等待回测运行更多周期后再查看' : 'Wait for backtest to run more cycles'}</div>
                           </div>
                         )}
+                      </motion.div>
+                    )}
+
+                    {viewTab === 'prompt-lab' && selectedRunId && (
+                      <motion.div
+                        key="prompt-lab"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                      >
+                        <PromptLabPage runID={selectedRunId} />
                       </motion.div>
                     )}
                   </AnimatePresence>

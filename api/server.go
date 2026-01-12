@@ -249,7 +249,7 @@ func (s *Server) handleGetFeatures(c *gin.Context) {
 func (s *Server) handleGetAdaptiveFeature(c *gin.Context) {
 	flags := config.Features()
 	c.JSON(http.StatusOK, gin.H{
-		"enabled": flags.EnableAdaptiveMicrostructure,
+		"enabled":     flags.EnableAdaptiveMicrostructure,
 		"description": "Uses percentile-based dynamic multipliers for market data instead of fixed thresholds",
 	})
 }

@@ -270,6 +270,12 @@ func (e *StrategyEngine) GetConfig() *store.StrategyConfig {
 	return e.config
 }
 
+// SetCustomPrompt updates the custom prompt in the strategy configuration
+// Used by prompt optimizer to apply evolved prompts to future decisions
+func (e *StrategyEngine) SetCustomPrompt(prompt string) {
+	e.config.CustomPrompt = prompt
+}
+
 // ============================================================================
 // Entry Functions - Main API
 // ============================================================================
@@ -1550,7 +1556,7 @@ func (e *StrategyEngine) formatQuantData(data *QuantData) string {
 		timeframes := []string{"5m", "15m", "1h", "4h", "12h", "24h"}
 
 		if data.Netflow.Institution != nil {
-			if data.Netflow.Institution.Future != nil && len(data.Netflow.Institution.Future) > 0 {
+			if len(data.Netflow.Institution.Future) > 0 {
 				sb.WriteString("  Institutional Futures:\n")
 				for _, tf := range timeframes {
 					if v, ok := data.Netflow.Institution.Future[tf]; ok {
@@ -1558,7 +1564,7 @@ func (e *StrategyEngine) formatQuantData(data *QuantData) string {
 					}
 				}
 			}
-			if data.Netflow.Institution.Spot != nil && len(data.Netflow.Institution.Spot) > 0 {
+			if len(data.Netflow.Institution.Spot) > 0 {
 				sb.WriteString("  Institutional Spot:\n")
 				for _, tf := range timeframes {
 					if v, ok := data.Netflow.Institution.Spot[tf]; ok {
@@ -1569,7 +1575,7 @@ func (e *StrategyEngine) formatQuantData(data *QuantData) string {
 		}
 
 		if data.Netflow.Personal != nil {
-			if data.Netflow.Personal.Future != nil && len(data.Netflow.Personal.Future) > 0 {
+			if len(data.Netflow.Personal.Future) > 0 {
 				sb.WriteString("  Retail Futures:\n")
 				for _, tf := range timeframes {
 					if v, ok := data.Netflow.Personal.Future[tf]; ok {
@@ -1577,7 +1583,7 @@ func (e *StrategyEngine) formatQuantData(data *QuantData) string {
 					}
 				}
 			}
-			if data.Netflow.Personal.Spot != nil && len(data.Netflow.Personal.Spot) > 0 {
+			if len(data.Netflow.Personal.Spot) > 0 {
 				sb.WriteString("  Retail Spot:\n")
 				for _, tf := range timeframes {
 					if v, ok := data.Netflow.Personal.Spot[tf]; ok {
@@ -1660,7 +1666,7 @@ func parseFullDecisionResponse(aiResponse string, accountEquity float64, btcEthL
 }
 
 func extractCoTTrace(response string) string {
-	if match := reReasoningTag.FindStringSubmatch(response); match != nil && len(match) > 1 {
+	if match := reReasoningTag.FindStringSubmatch(response); len(match) > 1 {
 		logger.Infof("✓ Extracted reasoning chain using <reasoning> tag")
 		return strings.TrimSpace(match[1])
 	}
@@ -1685,7 +1691,7 @@ func extractDecisions(response string) ([]Decision, error) {
 	s = fixMissingQuotes(s)
 
 	var jsonPart string
-	if match := reDecisionTag.FindStringSubmatch(s); match != nil && len(match) > 1 {
+	if match := reDecisionTag.FindStringSubmatch(s); len(match) > 1 {
 		jsonPart = strings.TrimSpace(match[1])
 		logger.Infof("✓ Extracted JSON using <decision> tag")
 	} else {
@@ -1695,7 +1701,7 @@ func extractDecisions(response string) ([]Decision, error) {
 
 	jsonPart = fixMissingQuotes(jsonPart)
 
-	if m := reJSONFence.FindStringSubmatch(jsonPart); m != nil && len(m) > 1 {
+	if m := reJSONFence.FindStringSubmatch(jsonPart); len(m) > 1 {
 		jsonContent := strings.TrimSpace(m[1])
 		jsonContent = compactArrayOpen(jsonContent)
 		jsonContent = fixMissingQuotes(jsonContent)

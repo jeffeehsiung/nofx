@@ -30,9 +30,9 @@ type FeatureFlags struct {
 // DefaultFeatureFlags returns sensible defaults
 func DefaultFeatureFlags() FeatureFlags {
 	return FeatureFlags{
-		EnableAdaptiveMicrostructure: true,  // ENABLED: adaptive multipliers by default (can be toggled via frontend)
-		CalibrateOnStartup:           true,  // Load calibrated thresholds if available
-		DriftAlertThresholdPct:       10.0,  // Alert on >10% drift
+		EnableAdaptiveMicrostructure: true, // ENABLED: adaptive multipliers by default (can be toggled via frontend)
+		CalibrateOnStartup:           true, // Load calibrated thresholds if available
+		DriftAlertThresholdPct:       10.0, // Alert on >10% drift
 		VerboseDriftLogging:          false,
 	}
 }

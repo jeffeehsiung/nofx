@@ -123,6 +123,41 @@ func (po *PromptOptimizer) GetCurrentPrompt() string {
 	return po.basePrompt
 }
 
+// GetAllVariants returns a copy of all prompt variants for inspection
+func (po *PromptOptimizer) GetAllVariants() []*PromptVariant {
+	result := make([]*PromptVariant, len(po.variants))
+	copy(result, po.variants)
+	return result
+}
+
+// GetCurrentVariant returns the currently active variant
+func (po *PromptOptimizer) GetCurrentVariant() *PromptVariant {
+	return po.currentVariant
+}
+
+// GetGeneration returns the current generation number
+func (po *PromptOptimizer) GetGeneration() int {
+	return po.generation
+}
+
+// ActivateVariant switches to a specific variant by ID
+func (po *PromptOptimizer) ActivateVariant(variantID string) error {
+	for _, v := range po.variants {
+		if v.ID == variantID {
+			po.currentVariant = v
+			v.IsActive = true
+			// Mark others as inactive
+			for _, other := range po.variants {
+				if other.ID != variantID {
+					other.IsActive = false
+				}
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("variant %s not found", variantID)
+}
+
 // RecordDecisionOutcome records the outcome of a decision made with a specific prompt
 func (po *PromptOptimizer) RecordDecisionOutcome(variantID string, metrics *Metrics) {
 	if !po.config.EnableOptimization {

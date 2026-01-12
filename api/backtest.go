@@ -38,7 +38,7 @@ func (s *Server) registerBacktestRoutes(router *gin.RouterGroup) {
 	router.GET("/decisions", s.handleBacktestDecisions)
 	router.GET("/export", s.handleBacktestExport)
 	router.GET("/klines", s.handleBacktestKlines)
-	
+
 	// Issue 4: Prompt optimization endpoints
 	router.GET("/prompt-variants", s.handleGetPromptVariants)
 	router.GET("/prompt-performance", s.handleGetPromptPerformance)
@@ -903,4 +903,140 @@ func (s *Server) hydrateBacktestAIConfig(cfg *backtest.BacktestConfig) error {
 	}
 
 	return nil
+}
+
+// Issue 4: Prompt Optimization Endpoints
+
+// handleGetPromptVariants returns all prompt variants from recent backtests
+func (s *Server) handleGetPromptVariants(c *gin.Context) {
+	runID := c.Query("run_id")
+	if runID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "run_id parameter required"})
+		return
+	}
+
+	// Get runner to access prompt optimizer
+	runner, ok := s.backtestManager.GetRunner(runID)
+	if !ok || runner.GetPromptOptimizer() == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"run_id":   runID,
+			"variants": []interface{}{},
+			"total":    0,
+			"message":  "Prompt optimization not enabled for this run",
+		})
+		return
+	}
+
+	// Get all variants from optimizer
+	variants := runner.GetPromptOptimizer().GetAllVariants()
+
+	c.JSON(http.StatusOK, gin.H{
+		"run_id":     runID,
+		"variants":   variants,
+		"total":      len(variants),
+		"generation": runner.GetPromptOptimizer().GetGeneration(),
+		"active":     runner.GetPromptOptimizer().GetCurrentVariant(),
+		"timestamp":  time.Now(),
+	})
+}
+
+// handleGetPromptPerformance returns performance comparison of prompt variants
+func (s *Server) handleGetPromptPerformance(c *gin.Context) {
+	runID := c.Query("run_id")
+	if runID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "run_id parameter required"})
+		return
+	}
+
+	runner, ok := s.backtestManager.GetRunner(runID)
+	if !ok || runner.GetPromptOptimizer() == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"run_id":      runID,
+			"performance": []interface{}{},
+			"message":     "Prompt optimization not enabled for this run",
+		})
+		return
+	}
+
+	// Get all variants with performance data
+	variants := runner.GetPromptOptimizer().GetAllVariants()
+
+	type VariantPerformance struct {
+		ID           string  `json:"id"`
+		Generation   int     `json:"generation"`
+		IsActive     bool    `json:"is_active"`
+		Decisions    int     `json:"decisions"`
+		TotalReturn  float64 `json:"total_return"`
+		WinRate      float64 `json:"win_rate"`
+		ProfitFactor float64 `json:"profit_factor"`
+		SharpeRatio  float64 `json:"sharpe_ratio"`
+		MaxDrawdown  float64 `json:"max_drawdown"`
+		FitnessScore float64 `json:"fitness_score"`
+		CreatedAt    string  `json:"created_at"`
+	}
+
+	var performance []VariantPerformance
+	for _, v := range variants {
+		performance = append(performance, VariantPerformance{
+			ID:           v.ID,
+			Generation:   v.Generation,
+			IsActive:     v.IsActive,
+			Decisions:    v.TotalDecisions,
+			TotalReturn:  v.TotalReturn,
+			WinRate:      v.WinRate,
+			ProfitFactor: v.ProfitFactor,
+			SharpeRatio:  v.SharpeRatio,
+			MaxDrawdown:  v.MaxDrawdown,
+			FitnessScore: v.FitnessScore,
+			CreatedAt:    v.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"run_id":      runID,
+		"performance": performance,
+		"total":       len(performance),
+		"timestamp":   time.Now(),
+	})
+}
+
+type activatePromptRequest struct {
+	RunID     string `json:"run_id"`
+	VariantID string `json:"variant_id"`
+}
+
+// handleActivatePrompt activates a specific prompt variant
+func (s *Server) handleActivatePrompt(c *gin.Context) {
+	var req activatePromptRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.RunID == "" || req.VariantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "run_id and variant_id required"})
+		return
+	}
+
+	runner, ok := s.backtestManager.GetRunner(req.RunID)
+	if !ok || runner.GetPromptOptimizer() == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "backtest run not found or prompt optimization not enabled"})
+		return
+	}
+
+	// Activate the variant
+	if err := runner.GetPromptOptimizer().ActivateVariant(req.VariantID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("failed to activate variant: %v", err)})
+		return
+	}
+
+	variant := runner.GetPromptOptimizer().GetCurrentVariant()
+	logger.Infof("✅ Activated prompt variant %s in backtest %s", req.VariantID, req.RunID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"run_id":  req.RunID,
+		"active":  variant,
+		"message": "Prompt variant activated successfully",
+	})
 }

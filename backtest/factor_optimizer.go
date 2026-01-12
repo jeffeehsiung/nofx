@@ -162,7 +162,7 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 		}
 		newConfig.BTCETHMaxPositionValueRatio = newConfig.BTCETHMaxPositionValueRatio * 0.6
 		newConfig.AltcoinMaxPositionValueRatio = newConfig.AltcoinMaxPositionValueRatio * 0.6
-		improvements = append(improvements, fmt.Sprintf("Reduced position sizes due to oversizing pattern"))
+		improvements = append(improvements, "Reduced position sizes due to oversizing pattern")
 	}
 
 	// 3. Optimize confidence thresholds based on win rate
@@ -200,7 +200,7 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 		newConfig.DrawdownMonitoringEnabled = true
 		newConfig.DrawdownCheckInterval = 30 // Check more frequently
 		newConfig.MinProfitThreshold = 3.0   // Lower threshold for monitoring
-		improvements = append(improvements, fmt.Sprintf("Enabled aggressive drawdown monitoring due to high drawdown"))
+		improvements = append(improvements, "Enabled aggressive drawdown monitoring due to high drawdown")
 	}
 
 	// ============================================================================
@@ -252,7 +252,7 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 			newConfig.AltcoinMaxPositionValueRatio = 0.3
 		}
 		improvements = append(improvements,
-			fmt.Sprintf("Reduced altcoin position size ratio to 0.7x due to liquidity issues"))
+			"Reduced altcoin position size ratio to 0.7x due to liquidity issues")
 	}
 
 	// False breakouts and premature entries
@@ -267,14 +267,14 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 	if hasV2Failure("momentum_decay") || hasV2Failure("late_exit_giveback") {
 		// Tighten profit targets - exit earlier to avoid give-back
 		improvements = append(improvements,
-			fmt.Sprintf("⚠️ Monitor momentum during holds - implement trailing stops to avoid give-back"))
+			"⚠️ Monitor momentum during holds - implement trailing stops to avoid give-back")
 	}
 
 	// Regime mismatch
 	if countV2Failures("regime_mismatch") > 1 {
 		// Already have regime checking - note for monitoring
 		improvements = append(improvements,
-			fmt.Sprintf("Regime mismatch detected - ensure pre-entry regime checks are active"))
+			"Regime mismatch detected - ensure pre-entry regime checks are active")
 	}
 
 	// Stacked risk - reduce position count
@@ -291,13 +291,13 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 	if hasV2Failure("funding_drag") || hasV2Failure("borrowing_cost_high") {
 		// Reduce hold time / position time exposure
 		improvements = append(improvements,
-			fmt.Sprintf("⚠️ Funding/borrowing costs detected - reduce hold time for cost-sensitive trades"))
+			"⚠️ Funding/borrowing costs detected - reduce hold time for cost-sensitive trades")
 	}
 
 	// Technical faults
 	if hasV2Failure("technical_fault") {
 		improvements = append(improvements,
-			fmt.Sprintf("⚠️ Technical faults detected - review system reliability before next trading cycle"))
+			"⚠️ Technical faults detected - review system reliability before next trading cycle")
 	}
 
 	// Calculate improvement score
@@ -403,12 +403,16 @@ func (fo *FactorOptimizer) LoadState(runID string) error {
 	// Restore config and history
 	if configData, ok := state["current_config"]; ok {
 		configJSON, _ := json.Marshal(configData)
-		json.Unmarshal(configJSON, fo.currentConfig)
+		if err := json.Unmarshal(configJSON, fo.currentConfig); err != nil {
+			return fmt.Errorf("failed to unmarshal current_config: %w", err)
+		}
 	}
 
 	if historyData, ok := state["optimization_history"]; ok {
 		historyJSON, _ := json.Marshal(historyData)
-		json.Unmarshal(historyJSON, &fo.optimizationHistory)
+		if err := json.Unmarshal(historyJSON, &fo.optimizationHistory); err != nil {
+			return fmt.Errorf("failed to unmarshal optimization_history: %w", err)
+		}
 	}
 
 	logger.Debugf("[FactorOptimizer] 📖 Loaded state from %s (%d optimizations)",

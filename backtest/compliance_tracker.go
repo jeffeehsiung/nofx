@@ -317,7 +317,9 @@ func (ct *ComplianceTracker) AdjustFeedbackWeight() float64 {
 // SaveState saves the tracker state to disk
 func (ct *ComplianceTracker) SaveState(runID string) error {
 	dir := filepath.Join("backtests", runID)
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
 
 	filename := filepath.Join(dir, "compliance_tracker_state.json")
 

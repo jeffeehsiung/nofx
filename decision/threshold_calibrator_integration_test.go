@@ -99,39 +99,39 @@ Backtest Integration Example
 
 1. At Backtest Startup:
    ----------------------
-   
+
    // Load recent trades from database
-   trades := db.Query("SELECT * FROM closed_trades WHERE close_time > ?", 
+   trades := db.Query("SELECT * FROM closed_trades WHERE close_time > ?",
                       time.Now().Add(-90*24*time.Hour))
-   
+
    // Calibrate thresholds
    calibrator := decision.NewThresholdCalibrator()
    calibrator.CalibrateFromHistory(convertToTradeOutcomes(trades))
-   
+
    // Store in backtest context
    bt.FailureThresholds = calibrator.ApplyToAnalyzer()
-   
+
    log.Printf("Calibrated from %d historical trades", len(trades))
    log.Print(calibrator.GetCalibrationSummary())
 
 
 2. During Backtest:
    -----------------
-   
+
    // When a trade closes
    func OnTradeClose(order *decision.RecentOrder) {
        // Analyze with calibrated thresholds
        analysis := decision.AnalyzeFailedTradeWithThresholds(
-           order, 
+           order,
            &bt.FailureThresholds,
        )
-       
+
        if analysis != nil && !order.Profitable {
            // Log failure reason
-           log.Printf("Trade failed: %s (%.0f%% confidence)", 
-                      analysis.PrimaryReason, 
+           log.Printf("Trade failed: %s (%.0f%% confidence)",
+                      analysis.PrimaryReason,
                       analysis.ConfidenceScore*100)
-           
+
            // Update statistics
            bt.Stats.FailureReasons[analysis.PrimaryReason]++
        }
@@ -140,17 +140,17 @@ Backtest Integration Example
 
 3. After Backtest:
    ----------------
-   
+
    // Generate failure analysis report
    func GenerateReport(bt *Backtest) {
        fmt.Println("\nTrade Failure Analysis")
        fmt.Println("======================")
-       
+
        for reason, count := range bt.Stats.FailureReasons {
            pct := float64(count) / float64(bt.Stats.TotalLosses) * 100
            fmt.Printf("  %s: %d (%.1f%%)\n", reason, count, pct)
        }
-       
+
        // Actionable insights
        if bt.Stats.FailureReasons["false_breakout_v2"] > bt.Stats.TotalLosses/3 {
            fmt.Println("\n⚠️  Recommendation: Improve entry confirmation criteria")
@@ -162,17 +162,17 @@ Backtest Integration Example
 
 4. Periodic Recalibration:
    ------------------------
-   
+
    // Run monthly (cron job or scheduler)
    func MonthlyRecalibration() {
        // Get last 60 days or 500 trades
        trades := db.GetRecentTrades(max(500, last60Days))
-       
+
        if len(trades) < 100 {
            log.Warn("Insufficient data for recalibration")
            return
        }
-       
+
        // Calibrate
        calibrator := decision.NewThresholdCalibrator()
        err := calibrator.CalibrateFromHistory(trades)
@@ -180,19 +180,19 @@ Backtest Integration Example
            log.Error("Recalibration failed: %v", err)
            return
        }
-       
+
        // Compare to current thresholds
        newThresholds := calibrator.ApplyToAnalyzer()
        oldThresholds := config.Current().FailureThresholds
-       
+
        drift := calculateDrift(oldThresholds, newThresholds)
        log.Printf("Threshold drift: %.1f%%", drift)
-       
+
        // Update config
        config.Update(newThresholds)
-       
+
        // Notify team
-       sendNotification("Thresholds recalibrated", 
+       sendNotification("Thresholds recalibrated",
                        calibrator.GetCalibrationSummary())
    }
 `)

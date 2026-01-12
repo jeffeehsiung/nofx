@@ -16,13 +16,13 @@ import (
 )
 
 type Manager struct {
-	mu                     sync.RWMutex
-	runners                map[string]*Runner
-	metadata               map[string]*RunMetadata
-	cancels                map[string]context.CancelFunc
-	mcpClient              mcp.AIClient
-	aiResolver             AIConfigResolver
-	calibrationScheduler   *CalibrationScheduler
+	mu                   sync.RWMutex
+	runners              map[string]*Runner
+	metadata             map[string]*RunMetadata
+	cancels              map[string]context.CancelFunc
+	mcpClient            mcp.AIClient
+	aiResolver           AIConfigResolver
+	calibrationScheduler *CalibrationScheduler
 }
 
 type AIConfigResolver func(*BacktestConfig) error
@@ -373,7 +373,7 @@ func (m *Manager) GetAnalysis(runID string) (*FeedbackAnalysis, error) {
 			return analysis, nil
 		}
 	}
-	
+
 	// Fall back to loading from disk
 	return LoadFeedbackAnalysis(runID)
 }
