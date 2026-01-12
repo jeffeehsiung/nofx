@@ -202,12 +202,20 @@ func (m *MarketMicrostructureAnalyzer) AnalyzeMarketMicrostructure(symbol string
 	ms.LargeOrderCount, ms.LargeOrderVolume = m.detectLargeOrders(depth, currentPrice)
 
 	// Calculate cumulative volumes
-	ms.CumulativeBidVolume = m.calculateCumulativeVolume(depth.Bids, midPrice, false)
-	ms.CumulativeAskVolume = m.calculateCumulativeVolume(depth.Asks, midPrice, true)
+	ms.CumulativeBidVolume = m.calculateCumulativeVolume(depth.Bids, midPrice)
+	ms.CumulativeAskVolume = m.calculateCumulativeVolume(depth.Asks, midPrice)
+
+	// Calculate volatility-based threshold for support/resistance (adaptive to market conditions)
+	volatilityPct := 1.0 // Default 1% if no klines
+	if len(klines) > 0 {
+		volatilityPct = m.calculateRecentVolatility(klines)
+	}
+	// Use 2x volatility as max distance (similar to 2-sigma Bollinger Bands)
+	maxDistancePct := volatilityPct * 2.0
 
 	// Identify support and resistance levels
-	ms.SupportLevels = m.identifySupportLevels(depth.Bids, midPrice)
-	ms.ResistanceLevels = m.identifyResistanceLevels(depth.Asks, midPrice)
+	ms.SupportLevels = m.identifySupportLevels(depth.Bids, midPrice, maxDistancePct)
+	ms.ResistanceLevels = m.identifyResistanceLevels(depth.Asks, midPrice, maxDistancePct)
 
 	// Add detailed metrics
 	ms.Details["best_bid"] = bestBid
@@ -258,6 +266,37 @@ func (m *MarketMicrostructureAnalyzer) calculateVWAP(symbol string, klines []Kli
 	m.mu.Unlock()
 
 	return vwap
+}
+
+// calculateRecentVolatility calculates price volatility (std dev) from recent klines
+// Returns volatility as a percentage of current price
+func (m *MarketMicrostructureAnalyzer) calculateRecentVolatility(klines []Kline) float64 {
+	if len(klines) < 2 {
+		return 1.0 // Default 1% if insufficient data
+	}
+
+	// Use close prices for volatility calculation
+	prices := make([]float64, len(klines))
+	for i, k := range klines {
+		prices[i] = k.Close
+	}
+
+	// Calculate mean
+	mean := 0.0
+	for _, p := range prices {
+		mean += p
+	}
+	mean /= float64(len(prices))
+
+	// Calculate standard deviation
+	variance := 0.0
+	for _, p := range prices {
+		variance += (p - mean) * (p - mean)
+	}
+	stdDev := math.Sqrt(variance / float64(len(prices)-1))
+
+	// Return as percentage
+	return (stdDev / mean) * 100
 }
 
 // calculateTotalVolume calculates total volume for top N levels
@@ -320,7 +359,7 @@ func (m *MarketMicrostructureAnalyzer) calculateAverageOrderSize(levels []PriceL
 }
 
 // calculateCumulativeVolume calculates cumulative volume at each price level
-func (m *MarketMicrostructureAnalyzer) calculateCumulativeVolume(levels []PriceLevel, midPrice float64, isAsk bool) []CumulativeLevel {
+func (m *MarketMicrostructureAnalyzer) calculateCumulativeVolume(levels []PriceLevel, midPrice float64) []CumulativeLevel {
 	result := make([]CumulativeLevel, 0, len(levels))
 	cumulative := 0.0
 
@@ -338,7 +377,8 @@ func (m *MarketMicrostructureAnalyzer) calculateCumulativeVolume(levels []PriceL
 }
 
 // identifySupportLevels identifies significant support levels from bid side
-func (m *MarketMicrostructureAnalyzer) identifySupportLevels(bids []PriceLevel, midPrice float64) []float64 {
+// maxDistancePct is derived from recent price volatility (adaptive to market conditions)
+func (m *MarketMicrostructureAnalyzer) identifySupportLevels(bids []PriceLevel, midPrice float64, maxDistancePct float64) []float64 {
 	if len(bids) == 0 {
 		return []float64{}
 	}
@@ -347,8 +387,16 @@ func (m *MarketMicrostructureAnalyzer) identifySupportLevels(bids []PriceLevel, 
 	avgVolume := m.calculateAverageOrderSize(bids)
 	threshold := avgVolume * 1.6 // 1.6x average = significant level
 
+	// Only consider levels within volatility-based distance (actionable range)
+	minPrice := midPrice * (1 - maxDistancePct/100)
+
 	supports := []float64{}
 	for i, bid := range bids {
+		// Skip levels too far below current price
+		if bid.Price < minPrice {
+			continue
+		}
+
 		if bid.Quantity >= threshold {
 			// Check if it's a local maximum
 			isLocalMax := true
@@ -373,7 +421,8 @@ func (m *MarketMicrostructureAnalyzer) identifySupportLevels(bids []PriceLevel, 
 }
 
 // identifyResistanceLevels identifies significant resistance levels from ask side
-func (m *MarketMicrostructureAnalyzer) identifyResistanceLevels(asks []PriceLevel, midPrice float64) []float64 {
+// maxDistancePct is derived from recent price volatility (adaptive to market conditions)
+func (m *MarketMicrostructureAnalyzer) identifyResistanceLevels(asks []PriceLevel, midPrice float64, maxDistancePct float64) []float64 {
 	if len(asks) == 0 {
 		return []float64{}
 	}
@@ -382,8 +431,16 @@ func (m *MarketMicrostructureAnalyzer) identifyResistanceLevels(asks []PriceLeve
 	avgVolume := m.calculateAverageOrderSize(asks)
 	threshold := avgVolume * 1.6 // 1.6x average = significant level
 
+	// Only consider levels within volatility-based distance (actionable range)
+	maxPrice := midPrice * (1 + maxDistancePct/100)
+
 	resistances := []float64{}
 	for i, ask := range asks {
+		// Skip levels too far above current price
+		if ask.Price > maxPrice {
+			continue
+		}
+
 		if ask.Quantity >= threshold {
 			// Check if it's a local maximum
 			isLocalMax := true

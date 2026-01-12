@@ -306,7 +306,8 @@ func TestIdentifySupportLevels(t *testing.T) {
 
 	midPrice := 50005.0
 
-	supports := analyzer.identifySupportLevels(bids, midPrice)
+	// Use 2% max distance for test (typical volatility)
+	supports := analyzer.identifySupportLevels(bids, midPrice, 2.0)
 
 	if len(supports) == 0 {
 		t.Error("Expected to find support levels")
@@ -349,7 +350,8 @@ func TestIdentifyResistanceLevels(t *testing.T) {
 
 	midPrice := 50005.0
 
-	resistances := analyzer.identifyResistanceLevels(asks, midPrice)
+	// Use 2% max distance for test (typical volatility)
+	resistances := analyzer.identifyResistanceLevels(asks, midPrice, 2.0)
 
 	if len(resistances) == 0 {
 		t.Error("Expected to find resistance levels")
@@ -413,7 +415,7 @@ func TestCumulativeVolume(t *testing.T) {
 
 	midPrice := 50005.0
 
-	cumulative := analyzer.calculateCumulativeVolume(levels, midPrice, false)
+	cumulative := analyzer.calculateCumulativeVolume(levels, midPrice)
 
 	if len(cumulative) != 3 {
 		t.Errorf("Expected 3 cumulative levels, got %d", len(cumulative))

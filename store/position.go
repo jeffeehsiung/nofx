@@ -603,9 +603,10 @@ func (s *PositionStore) GetRecentTrades(traderID string, limit int) ([]RecentTra
 		}
 
 		// Convert side format
-		if t.Side == "LONG" {
+		switch t.Side {
+		case "LONG":
 			t.Side = "long"
-		} else if t.Side == "SHORT" {
+		case "SHORT":
 			t.Side = "short"
 		}
 
@@ -977,10 +978,11 @@ func (s *PositionStore) GetHistorySummary(traderID string) (*HistorySummary, err
 	// Get direction stats
 	dirStats, _ := s.GetDirectionStats(traderID)
 	for _, d := range dirStats {
-		if d.Side == "LONG" {
+		switch d.Side {
+		case "LONG":
 			summary.LongWinRate = d.WinRate
 			summary.LongPnL = d.TotalPnL
-		} else if d.Side == "SHORT" {
+		case "SHORT":
 			summary.ShortWinRate = d.WinRate
 			summary.ShortPnL = d.TotalPnL
 		}
@@ -1168,11 +1170,12 @@ func (s *PositionStore) CreateFromClosedPnL(traderID, exchangeID, exchangeType s
 
 	// Normalize and validate side
 	side := strings.ToUpper(record.Side)
-	if side == "LONG" || side == "BUY" {
+	switch side {
+	case "LONG", "BUY":
 		side = "LONG"
-	} else if side == "SHORT" || side == "SELL" {
+	case "SHORT", "SELL":
 		side = "SHORT"
-	} else {
+	default:
 		return false, nil // Skip: invalid side
 	}
 

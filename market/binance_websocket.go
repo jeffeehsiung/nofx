@@ -88,7 +88,14 @@ func (c *BinanceWebSocketClient) Disconnect() error {
 	}
 
 	c.isConnected = false
-	close(c.stopCh)
+	
+	// Safely close stopCh channel (only if not already closed)
+	select {
+	case <-c.stopCh:
+		// Already closed
+	default:
+		close(c.stopCh)
+	}
 
 	if c.conn != nil {
 		c.conn.Close()
@@ -253,7 +260,7 @@ func (c *BinanceWebSocketClient) readMessages() {
 				// Check if it's a kline message
 				if data, ok := message["data"].(map[string]interface{}); ok {
 					if kline, ok := data["k"].(map[string]interface{}); ok {
-						c.processKlineData(kline, stream)
+						c.processKlineData(kline)
 					}
 				}
 			}
@@ -262,7 +269,7 @@ func (c *BinanceWebSocketClient) readMessages() {
 }
 
 // processKlineData processes a kline data message
-func (c *BinanceWebSocketClient) processKlineData(kline map[string]interface{}, stream string) {
+func (c *BinanceWebSocketClient) processKlineData(kline map[string]interface{}) {
 	// Parse Binance kline format
 	update := KlineUpdate{
 		Timestamp: time.Now(),

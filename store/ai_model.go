@@ -288,11 +288,12 @@ func (s *AIModelStore) Update(userID, id string, enabled bool, apiKey, customAPI
 	var name string
 	err = s.db.QueryRow(`SELECT name FROM ai_models WHERE provider = ? LIMIT 1`, provider).Scan(&name)
 	if err != nil {
-		if provider == "deepseek" {
+		switch provider {
+		case "deepseek":
 			name = "DeepSeek AI"
-		} else if provider == "qwen" {
+		case "qwen":
 			name = "Qwen AI"
-		} else {
+		default:
 			name = provider + " AI"
 		}
 	}

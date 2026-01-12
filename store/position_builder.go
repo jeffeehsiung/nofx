@@ -34,7 +34,7 @@ func (pb *PositionBuilder) ProcessTrade(
 	if strings.HasPrefix(action, "open_") {
 		return pb.handleOpen(traderID, exchangeID, exchangeType, symbol, side, quantity, price, fee, tradeTime, orderID)
 	} else if strings.HasPrefix(action, "close_") {
-		return pb.handleClose(traderID, exchangeID, exchangeType, symbol, side, quantity, price, fee, realizedPnL, tradeTime, orderID)
+		return pb.handleClose(traderID, symbol, side, quantity, price, fee, realizedPnL, tradeTime, orderID)
 	}
 	return nil
 }
@@ -91,7 +91,7 @@ func (pb *PositionBuilder) handleOpen(
 
 // handleClose handles closing positions (partial or full)
 func (pb *PositionBuilder) handleClose(
-	traderID, exchangeID, exchangeType, symbol, side string,
+	traderID, symbol, side string,
 	quantity, price, fee, realizedPnL float64,
 	tradeTime time.Time,
 	orderID string,
