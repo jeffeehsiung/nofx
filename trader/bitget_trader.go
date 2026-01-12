@@ -490,7 +490,9 @@ func (t *BitgetTrader) OpenLong(symbol string, quantity float64, leverage int) (
 	symbol = t.convertSymbol(symbol)
 
 	// Cancel old orders first
-	t.CancelAllOrders(symbol)
+	if err := t.CancelAllOrders(symbol); err != nil {
+		logger.Infof("  ⚠️ Failed to cancel orders: %v", err)
+	}
 
 	// Set leverage
 	if err := t.SetLeverage(symbol, leverage); err != nil {
@@ -544,7 +546,9 @@ func (t *BitgetTrader) OpenShort(symbol string, quantity float64, leverage int) 
 	symbol = t.convertSymbol(symbol)
 
 	// Cancel old orders first
-	t.CancelAllOrders(symbol)
+	if err := t.CancelAllOrders(symbol); err != nil {
+		logger.Infof("  ⚠️ Failed to cancel orders: %v", err)
+	}
 
 	// Set leverage
 	if err := t.SetLeverage(symbol, leverage); err != nil {
@@ -880,7 +884,9 @@ func (t *BitgetTrader) cancelPlanOrders(symbol string, planType string) error {
 			"marginCoin":  "USDT",
 			"orderId":     order.OrderId,
 		}
-		t.doRequest("POST", "/api/v2/mix/order/cancel-plan-order", body)
+		if _, err := t.doRequest("POST", "/api/v2/mix/order/cancel-plan-order", body); err != nil {
+			logger.Infof("  ⚠️ Failed to cancel plan order %s: %v", order.OrderId, err)
+		}
 	}
 
 	return nil
@@ -919,20 +925,30 @@ func (t *BitgetTrader) CancelAllOrders(symbol string) error {
 			"marginCoin":  "USDT",
 			"orderId":     order.OrderId,
 		}
-		t.doRequest("POST", bitgetCancelOrderPath, body)
+		if _, err := t.doRequest("POST", bitgetCancelOrderPath, body); err != nil {
+			logger.Infof("  ⚠️ Failed to cancel order %s: %v", order.OrderId, err)
+		}
 	}
 
 	// Also cancel plan orders
-	t.cancelPlanOrders(symbol, "loss_plan")
-	t.cancelPlanOrders(symbol, "profit_plan")
+	if err := t.cancelPlanOrders(symbol, "loss_plan"); err != nil {
+		logger.Infof("  ⚠️ Failed to cancel loss plan orders: %v", err)
+	}
+	if err := t.cancelPlanOrders(symbol, "profit_plan"); err != nil {
+		logger.Infof("  ⚠️ Failed to cancel profit plan orders: %v", err)
+	}
 
 	return nil
 }
 
 // CancelStopOrders cancels stop loss and take profit orders
 func (t *BitgetTrader) CancelStopOrders(symbol string) error {
-	t.CancelStopLossOrders(symbol)
-	t.CancelTakeProfitOrders(symbol)
+	if err := t.CancelStopLossOrders(symbol); err != nil {
+		logger.Infof("  ⚠️ Failed to cancel stop loss orders: %v", err)
+	}
+	if err := t.CancelTakeProfitOrders(symbol); err != nil {
+		logger.Infof("  ⚠️ Failed to cancel take profit orders: %v", err)
+	}
 	return nil
 }
 

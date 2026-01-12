@@ -133,6 +133,7 @@ func (s *Server) setupRoutes() {
 		api.POST("/login", s.handleLogin)
 		api.POST("/verify-otp", s.handleVerifyOTP)
 		api.POST("/complete-registration", s.handleCompleteRegistration)
+		api.POST("/reset-password", s.handleResetPassword) // Password reset flow
 
 		// Routes requiring authentication
 		protected := api.Group("/", s.authMiddleware())
@@ -207,6 +208,7 @@ func (s *Server) setupRoutes() {
 			protected.GET("/decisions", s.handleDecisions)
 			protected.GET("/decisions/latest", s.handleLatestDecisions)
 			protected.GET("/statistics", s.handleStatistics)
+			protected.GET("/competition", s.handleCompetition) // Competition/leaderboard data
 
 			// Backtest routes
 			backtest := protected.Group("/backtest")
@@ -1521,100 +1523,6 @@ func (s *Server) recordClosePositionOrder(traderID, exchangeID, exchangeType, sy
 	}
 }
 
-// pollAndUpdateOrderStatus Poll order status and update with fill data
-func (s *Server) pollAndUpdateOrderStatus(orderRecordID int64, traderID, exchangeID, exchangeType, orderID, symbol, orderAction string, tempTrader trader.Trader) {
-	var actualPrice float64
-	var actualQty float64
-	var fee float64
-
-	// Wait a bit for order to be filled
-	time.Sleep(500 * time.Millisecond)
-
-	// For Lighter, use GetTrades instead of GetOrderStatus (market orders are filled immediately)
-	if exchangeType == "lighter" {
-		s.pollLighterTradeHistory(orderRecordID, traderID, exchangeID, exchangeType, orderID, symbol, orderAction, tempTrader)
-		return
-	}
-
-	// For other exchanges, poll GetOrderStatus
-	for i := 0; i < 5; i++ {
-		status, err := tempTrader.GetOrderStatus(symbol, orderID)
-		if err != nil {
-			logger.Infof("  ⚠️ GetOrderStatus failed (attempt %d/5): %v", i+1, err)
-			time.Sleep(500 * time.Millisecond)
-			continue
-		}
-		// err is nil here; proceed to inspect status
-		statusStr, _ := status["status"].(string)
-		if statusStr == "FILLED" {
-			// Get actual fill price
-			if avgPrice, ok := status["avgPrice"].(float64); ok && avgPrice > 0 {
-				actualPrice = avgPrice
-			}
-			// Get actual executed quantity
-			if execQty, ok := status["executedQty"].(float64); ok && execQty > 0 {
-				actualQty = execQty
-			}
-			// Get commission/fee
-			if commission, ok := status["commission"].(float64); ok {
-				fee = commission
-			}
-
-			logger.Infof("  ✅ Order filled: avgPrice=%.6f, qty=%.6f, fee=%.6f", actualPrice, actualQty, fee)
-
-			// Update order status to FILLED
-			if err := s.store.Order().UpdateOrderStatus(orderRecordID, "FILLED", actualQty, actualPrice, fee); err != nil {
-				logger.Infof("  ⚠️ Failed to update order status: %v", err)
-				return
-			}
-
-			// Record fill details
-			tradeID := fmt.Sprintf("%s-%d", orderID, time.Now().UnixNano())
-			fillRecord := &store.TraderFill{
-				TraderID:        traderID,
-				ExchangeID:      exchangeID,
-				ExchangeType:    exchangeType,
-				OrderID:         orderRecordID,
-				ExchangeOrderID: orderID,
-				ExchangeTradeID: tradeID,
-				Symbol:          symbol,
-				Side:            getSideFromAction(orderAction),
-				Price:           actualPrice,
-				Quantity:        actualQty,
-				QuoteQuantity:   actualPrice * actualQty,
-				Commission:      fee,
-				CommissionAsset: "USDT",
-				RealizedPnL:     0,
-				IsMaker:         false,
-				CreatedAt:       time.Now(),
-			}
-
-			if err := s.store.Order().CreateFill(fillRecord); err != nil {
-				logger.Infof("  ⚠️ Failed to record fill: %v", err)
-			} else {
-				logger.Infof("  📝 Fill recorded: price=%.6f, qty=%.6f", actualPrice, actualQty)
-			}
-
-			return
-		} else if statusStr == "CANCELED" || statusStr == "EXPIRED" || statusStr == "REJECTED" {
-			logger.Infof("  ⚠️ Order %s, updating status", statusStr)
-			s.store.Order().UpdateOrderStatus(orderRecordID, statusStr, 0, 0, 0)
-			return
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	logger.Infof("  ⚠️ Failed to confirm order fill after polling, order may still be pending")
-}
-
-// pollLighterTradeHistory No longer used - Lighter orders are marked as FILLED immediately
-// Keeping this function stub for compatibility with other exchanges
-func (s *Server) pollLighterTradeHistory(orderRecordID int64, traderID, exchangeID, exchangeType, orderID, symbol, orderAction string, tempTrader trader.Trader) {
-	// For Lighter, orders are now recorded as FILLED immediately in recordClosePositionOrder
-	// This function is no longer called for Lighter exchange
-	logger.Infof("  ℹ️ pollLighterTradeHistory called but not needed (order already marked FILLED)")
-}
-
 // getSideFromAction Get order side (BUY/SELL) from order action
 func getSideFromAction(action string) string {
 	switch action {
@@ -2587,13 +2495,16 @@ func (s *Server) handleSymbols(c *gin.Context) {
 			for symbol := range xyzMids {
 				// Remove xyz: prefix for display
 				displaySymbol := strings.TrimPrefix(symbol, "xyz:")
-				category := "stock"
-				if displaySymbol == "GOLD" || displaySymbol == "SILVER" {
+				var category string
+				switch displaySymbol {
+				case "GOLD", "SILVER":
 					category = "commodity"
-				} else if displaySymbol == "EUR" || displaySymbol == "JPY" {
+				case "EUR", "JPY":
 					category = "forex"
-				} else if displaySymbol == "XYZ100" {
+				case "XYZ100":
 					category = "index"
+				default:
+					category = "stock"
 				}
 				symbols = append(symbols, SymbolInfo{
 					Symbol:   displaySymbol,
@@ -3324,7 +3235,10 @@ func (s *Server) handleEquityHistoryBatch(c *gin.Context) {
 			hoursParam := c.Query("hours")
 			hours := 0
 			if hoursParam != "" {
-				fmt.Sscanf(hoursParam, "%d", &hours)
+				if _, err := fmt.Sscanf(hoursParam, "%d", &hours); err != nil {
+					logger.Warnf("Invalid hours parameter: %v", err)
+					hours = 0
+				}
 			}
 
 			result := s.getEquityHistoryForTraders(traderIDs, hours)
@@ -3341,7 +3255,10 @@ func (s *Server) handleEquityHistoryBatch(c *gin.Context) {
 		// Parse hours parameter from query
 		hoursParam := c.Query("hours")
 		if hoursParam != "" {
-			fmt.Sscanf(hoursParam, "%d", &requestBody.Hours)
+			if _, err := fmt.Sscanf(hoursParam, "%d", &requestBody.Hours); err != nil {
+				logger.Warnf("Invalid hours parameter: %v", err)
+				requestBody.Hours = 0
+			}
 		}
 	}
 

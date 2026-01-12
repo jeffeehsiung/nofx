@@ -152,17 +152,18 @@ func deriveAsterOrderAction(side, positionSide string, realizedPnL float64) stri
 	// Check if this is a closing trade (has realized PnL)
 	isClose := realizedPnL != 0
 
-	if positionSide == "LONG" {
+	switch positionSide {
+	case "LONG":
 		if isClose {
 			return "close_long"
 		}
 		return "open_long"
-	} else if positionSide == "SHORT" {
+	case "SHORT":
 		if isClose {
 			return "close_short"
 		}
 		return "open_short"
-	} else {
+	default:
 		// BOTH mode - infer from side and PnL
 		if side == "BUY" {
 			if isClose {

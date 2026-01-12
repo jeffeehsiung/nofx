@@ -262,9 +262,10 @@ func (fg *FeedbackGenerator) extractClosedPositions(events []TradeEvent) []Close
 
 		key := fmt.Sprintf("%s:%s", event.Symbol, event.Side)
 
-		if event.Action == "open" {
+		switch event.Action {
+		case "open":
 			openPositions[key] = event
-		} else if event.Action == "close" {
+		case "close":
 			if openEvent, exists := openPositions[key]; exists {
 				closed = append(closed, ClosedPosition{
 					Symbol:      event.Symbol,
@@ -558,7 +559,13 @@ func (fg *FeedbackGenerator) analyzeDecisionOutcome(pos ClosedPosition, pnlPct f
 func (fg *FeedbackGenerator) identifySuccessPatterns(outcomes []DecisionOutcome, metrics *Metrics) []TradingPattern {
 	var patterns []TradingPattern
 
+	// Validate using metrics context - only identify patterns if we have adequate data
+	if len(outcomes) < fg.config.MinDecisionsForFeedback || metrics == nil {
+		return patterns
+	}
+
 	// Pattern 1: Quick profit-taking
+	// Use metrics to determine if this is a reliable strategy in current market
 	quickWins := 0
 	quickWinsPnL := 0.0
 	for _, outcome := range outcomes {
@@ -572,15 +579,19 @@ func (fg *FeedbackGenerator) identifySuccessPatterns(outcomes []DecisionOutcome,
 	}
 
 	if quickWins >= fg.config.MinPatternFrequency {
-		patterns = append(patterns, TradingPattern{
-			PatternType:    "quick_profit_taking",
-			Frequency:      quickWins,
-			AvgPnL:         0,
-			AvgPnLPct:      quickWinsPnL / float64(quickWins),
-			Description:    "Profitable trades closed within 30 minutes",
-			Evidence:       []string{fmt.Sprintf("%d trades with avg %.2f%% profit", quickWins, quickWinsPnL/float64(quickWins))},
-			Recommendation: "Continue quick profit-taking strategy for scalping opportunities",
-		})
+		// Use metrics to validate pattern is consistent with overall strategy performance
+		if metrics.TotalReturnPct > 0 {
+			avgQuickProfit := quickWinsPnL / float64(quickWins)
+			patterns = append(patterns, TradingPattern{
+				PatternType:    "quick_profit_taking",
+				Frequency:      quickWins,
+				AvgPnL:         0,
+				AvgPnLPct:      avgQuickProfit,
+				Description:    fmt.Sprintf("Profitable trades closed within 30 minutes (%.1f%% of winning trades)", float64(quickWins)/float64(len(outcomes))*100),
+				Evidence:       []string{fmt.Sprintf("%d trades with avg %.2f%% profit | Overall win rate: %.1f%%", quickWins, avgQuickProfit, metrics.WinRate)},
+				Recommendation: "Continue quick profit-taking strategy for scalping opportunities - effective in current market conditions",
+			})
+		}
 	}
 
 	// Pattern 2: Optimal leverage usage
@@ -770,6 +781,11 @@ func (fg *FeedbackGenerator) identifySuccessPatterns(outcomes []DecisionOutcome,
 func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome, metrics *Metrics) []TradingPattern {
 	var patterns []TradingPattern
 
+	// Use metrics context to understand failure patterns within overall performance
+	if len(outcomes) == 0 || metrics == nil {
+		return patterns
+	}
+
 	// ============================================================================
 	// TIER 1: Execution-Level Failure Analysis (Trade Failure V2)
 	// ============================================================================
@@ -814,6 +830,7 @@ func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome,
 	}
 
 	// Convert V2 failure reasons to trading patterns
+	// Use metrics to contextualize failure severity (e.g., if overall return is negative, failures are critical)
 	for reason, data := range v2FailureReasons {
 		if data.count >= fg.config.MinPatternFrequency {
 			avgPnL := data.pnlSum / float64(data.count)
@@ -822,12 +839,21 @@ func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome,
 			v2Reason := decision.TradeFailureReason(reason)
 			recommendation := getV2Recommendation(v2Reason)
 
+			// Add metrics context to make patterns more actionable
+			frequencyPct := float64(data.count) / float64(len(outcomes)) * 100
+			description := fmt.Sprintf("Execution-level failure: %s | Frequency: %.1f%% of trades", humanizeV2Reason(v2Reason), frequencyPct)
+			if metrics.TotalReturnPct < -5 {
+				description += " (CRITICAL - impacts overall returns)"
+			} else if metrics.TotalReturnPct < 0 {
+				description += " (HIGH - contributing to negative returns)"
+			}
+
 			patterns = append(patterns, TradingPattern{
 				PatternType:    reason, // e.g., "chasing_entry", "stop_too_tight"
 				Frequency:      data.count,
 				AvgPnL:         0,
 				AvgPnLPct:      avgPnL,
-				Description:    fmt.Sprintf("Execution-level failure: %s", humanizeV2Reason(v2Reason)),
+				Description:    description,
 				Evidence:       data.evidence,
 				Recommendation: recommendation,
 			})
@@ -1156,6 +1182,15 @@ func (fg *FeedbackGenerator) getTopTrades(outcomes []DecisionOutcome, winning bo
 func (fg *FeedbackGenerator) generateKeyInsights(metrics *Metrics, outcomes []DecisionOutcome, analysis *FeedbackAnalysis) []string {
 	insights := make([]string, 0)
 
+	// Use outcomes to get trade count for context
+	totalTrades := len(outcomes)
+	winningTrades := 0
+	for _, outcome := range outcomes {
+		if outcome.Success {
+			winningTrades++
+		}
+	}
+
 	// Performance assessment
 	if metrics.TotalReturnPct < -5 {
 		insights = append(insights, fmt.Sprintf("🔴 CRITICAL: Portfolio down %.2f%%. Immediate strategy revision needed", metrics.TotalReturnPct))
@@ -1165,11 +1200,11 @@ func (fg *FeedbackGenerator) generateKeyInsights(metrics *Metrics, outcomes []De
 		insights = append(insights, fmt.Sprintf("✅ Strong performance: +%.2f%%. Current strategy is working well", metrics.TotalReturnPct))
 	}
 
-	// Win rate analysis
+	// Win rate analysis (with actual trade count)
 	if metrics.WinRate < 40 {
-		insights = append(insights, fmt.Sprintf("📉 Low win rate (%.1f%%). Focus on better entry timing and trade selection", metrics.WinRate))
+		insights = append(insights, fmt.Sprintf("📉 Low win rate (%.1f%%, %d of %d trades). Focus on better entry timing and trade selection", metrics.WinRate, winningTrades, totalTrades))
 	} else if metrics.WinRate > 60 {
-		insights = append(insights, fmt.Sprintf("📈 Excellent win rate (%.1f%%). Good trade selection", metrics.WinRate))
+		insights = append(insights, fmt.Sprintf("📈 Excellent win rate (%.1f%%, %d of %d trades). Good trade selection", metrics.WinRate, winningTrades, totalTrades))
 	}
 
 	// Profit factor analysis
@@ -1324,19 +1359,47 @@ func (fg *FeedbackGenerator) generateRecommendedActions(analysis *FeedbackAnalys
 
 // analyzeMarketConditions determines the current market regime
 func (fg *FeedbackGenerator) analyzeMarketConditions(metrics *Metrics, outcomes []DecisionOutcome) string {
-	if metrics.WinRate < 40 && metrics.TotalReturnPct < -5 {
-		return "DIFFICULT MARKET: High volatility or ranging conditions making trend-following difficult. Consider reducing activity"
+	// Use outcomes to assess trade behavior in current market
+	if len(outcomes) == 0 {
+		return "INSUFFICIENT DATA: Need more trades to determine market conditions"
 	}
 
-	if metrics.WinRate > 55 && metrics.TotalReturnPct > 5 {
-		return "FAVORABLE MARKET: Clear trends present, strategy is well-aligned with current conditions"
+	// Count consecutive wins/losses for trend assessment
+	consecutiveWins := 0
+	consecutiveLosses := 0
+	maxConsecutiveWins := 0
+	maxConsecutiveLosses := 0
+
+	for _, outcome := range outcomes {
+		if outcome.Success {
+			consecutiveWins++
+			if consecutiveWins > maxConsecutiveWins {
+				maxConsecutiveWins = consecutiveWins
+			}
+			consecutiveLosses = 0
+		} else {
+			consecutiveLosses++
+			if consecutiveLosses > maxConsecutiveLosses {
+				maxConsecutiveLosses = consecutiveLosses
+			}
+			consecutiveWins = 0
+		}
 	}
 
-	if metrics.WinRate > 50 && metrics.ProfitFactor < 1.2 {
-		return "MIXED MARKET: Winning often but profits are small. Need to let winners run longer"
+	// Analyze market conditions using both metrics and trade patterns
+	if metrics.WinRate < 40 && metrics.TotalReturnPct < -5 && maxConsecutiveLosses > 3 {
+		return "DIFFICULT MARKET: High volatility or ranging conditions. Multiple consecutive losses detected. Consider reducing activity"
 	}
 
-	return "NEUTRAL MARKET: Standard trading conditions, continue with current approach"
+	if metrics.WinRate > 55 && metrics.TotalReturnPct > 5 && maxConsecutiveWins > 2 {
+		return "FAVORABLE MARKET: Clear trends present with consecutive wins. Strategy is well-aligned with current conditions"
+	}
+
+	if metrics.WinRate > 50 && metrics.ProfitFactor < 1.2 && maxConsecutiveWins > 0 {
+		return "MIXED MARKET: Winning often but profits are small. Need to let winners run longer and reduce stop losses"
+	}
+
+	return "NEUTRAL MARKET: Standard trading conditions with %d trades analyzed. Continue with current approach"
 }
 
 // FormatFeedbackForPrompt formats the feedback analysis for inclusion in AI prompts

@@ -780,6 +780,8 @@ export function BacktestPage() {
     overridePrompt: false,
     cacheAI: true,
     replayOnly: false,
+    enableAnalysis: true,
+    enablePromptLab: true,
     aiModelId: '',
     strategyId: '', // Optional: use saved strategy from Strategy Studio
   })
@@ -953,6 +955,8 @@ export function BacktestPage() {
         override_prompt: formState.overridePrompt,
         cache_ai: formState.cacheAI,
         replay_only: formState.replayOnly,
+        enable_analysis: formState.enableAnalysis,
+        enable_prompt_lab: formState.enablePromptLab,
         ai_model_id: formState.aiModelId,
         leverage: {
           btc_eth_leverage: formState.btcEthLeverage,
@@ -1572,6 +1576,24 @@ export function BacktestPage() {
                           className="accent-[#F0B90B]"
                         />
                         {tr('form.replayOnlyLabel')}
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formState.enableAnalysis}
+                          onChange={(e) => handleFormChange('enableAnalysis', e.target.checked)}
+                          className="accent-[#F0B90B]"
+                        />
+                        {language === 'zh' ? '启用失败分析' : 'Enable Analysis'}
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formState.enablePromptLab}
+                          onChange={(e) => handleFormChange('enablePromptLab', e.target.checked)}
+                          className="accent-[#F0B90B]"
+                        />
+                        {language === 'zh' ? '启用提示词实验室' : 'Enable Prompt Lab'}
                       </label>
                     </div>
 

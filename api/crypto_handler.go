@@ -91,3 +91,8 @@ func isValidPrivateKey(key string) bool {
 	// TODO: Add validation for other chains
 	return false
 }
+
+// ValidateAPIKey Wrapper for isValidPrivateKey to provide public access
+func (h *CryptoHandler) ValidateAPIKey(key string) bool {
+	return isValidPrivateKey(key)
+}

@@ -418,40 +418,99 @@ func populateEvidence(analysis *FailedTradeAnalysis, order *RecentOrder) {
 func generateRecommendation(reason TradeFailureReason, order *RecentOrder, evidence map[string]interface{}) string {
 	switch reason {
 	case ReasonChasingEntry:
+		if slippageRatio, ok := evidence["slippage_ratio"].(float64); ok {
+			return fmt.Sprintf("Use limit orders and wait for confirmed signal. Slippage was %.2fx budget (%.1f%%). Reduce position size or wait for better liquidity.",
+				slippageRatio, order.EntrySlippage*100)
+		}
 		return "Use limit orders with tighter parameters. Wait for confirmed signal before entering. Reduce position size when spreads/depth deteriorate."
 
 	case ReasonFalseBreakoutV2:
-		return "Require BOTH volume >110% baseline AND OI >50% increase. Use breakout filters: check 5m/15m candles for true breakout patterns. Add pullback entry after confirmation."
+		if volStr, ok := evidence["volume_strength"].(string); ok {
+			if oiStr, ok := evidence["oi_strength"].(string); ok {
+				return fmt.Sprintf("Require BOTH volume >110%% AND OI >50%% increase. Current: volume %s, OI %s. Add pullback entry after full confirmation.", volStr, oiStr)
+			}
+		}
+		return "Require BOTH volume >110% baseline AND OI >50% increase. Use breakout filters: check 5m/15m candles for true breakout patterns."
 
 	case ReasonPrematureEntry:
-		return "Enforce confirmation criteria: wait for volume >90% AND OI increase >50%. Add time filter: only enter after X candles of confirmation. Use order book depth as confirmation."
+		if volCheck, ok := evidence["volume_check"].(string); ok {
+			if oiCheck, ok := evidence["oi_check"].(string); ok {
+				return fmt.Sprintf("Enforce confirmation: volume %s, OI %s. Wait until both criteria met before entering.", volCheck, oiCheck)
+			}
+		}
+		return "Enforce confirmation criteria: wait for volume >90%% AND OI increase >50%%. Add time filter: only enter after X candles of confirmation."
 
 	case ReasonStopTooTight:
-		return fmt.Sprintf("Increase stop to at least %.2fx ATR (currently %.2fx). For this trade, stop should be ≥%.2f away from entry.", 1.5, order.StopDistanceVsATR, order.ATRAtEntry*1.5)
+		if recommended, ok := evidence["recommended_minimum"].(float64); ok {
+			if stopDist, ok := evidence["stop_distance"].(float64); ok {
+				return fmt.Sprintf("Stop is too tight (%.2f away). Increase to minimum %.2f (%.2fx ATR). This prevents normal volatility stops.",
+					stopDist, recommended, recommended/order.ATRAtEntry)
+			}
+		}
+		return fmt.Sprintf("Increase stop to at least %.2fx ATR (currently %.2fx). For this trade, stop should be ≥%.2f away from entry.",
+			1.5, order.StopDistanceVsATR, order.ATRAtEntry*1.5)
 
 	case ReasonMomentumDecay:
-		return "Monitor volume/OI during trade. Exit with trailing stop when volume falls >20% and OI declines >15%. Consider tighter profit targets in momentum-dependent strategies."
+		if volDelta, ok := evidence["volume_delta"].(string); ok {
+			if oiDelta, ok := evidence["oi_delta"].(string); ok {
+				return fmt.Sprintf("Monitor momentum: volume %s, OI %s. Exit with trailing stop when both decline >15%%. Consider tighter profit targets.", volDelta, oiDelta)
+			}
+		}
+		return "Monitor volume/OI during trade. Exit with trailing stop when volume falls >20% and OI declines >15%%. Consider tighter profit targets."
 
 	case ReasonLiquidityDried:
-		return "Check order book depth before entry. Avoid positions when spreads >0.15% or depth <$1M. Use limit orders. Consider smaller position size in illiquid markets."
+		if spreadRatio, ok := evidence["spread_ratio"].(float64); ok {
+			if depthRatio, ok := evidence["depth_ratio"].(float64); ok {
+				return fmt.Sprintf("Liquidity deteriorated: spread widened %.1fx, depth fell to %.0f%%. Check depth before entry. Use smaller sizes in illiquid markets.",
+					spreadRatio, depthRatio*100)
+			}
+		}
+		return "Check order book depth before entry. Avoid positions when spreads >0.15% or depth <$1M. Use limit orders. Consider smaller position size."
 
 	case ReasonStopHitRegimeChange:
-		return "Add regime filters: reduce position size or skip trades when chop score high. Use multi-timeframe confirmation: ensure 4h trend aligns with 1h entry. Tighten stops pre-economic events."
+		if regime, ok := evidence["market_regime"].(string); ok {
+			if chopScore, ok := evidence["chop_score"].(float64); ok {
+				return fmt.Sprintf("Regime risk in '%s' market (chop: %.2f). Add filters: skip trades when chop high. Use multi-timeframe confirmation.",
+					regime, chopScore)
+			}
+		}
+		return "Add regime filters: reduce position size or skip trades when chop score high. Use multi-timeframe confirmation: ensure 4h trend aligns with 1h entry."
 
 	case ReasonLateExitGiveBack:
-		return "Use trailing stops (e.g., 2% trail). Set profit targets at 60% of MFE. Exit when momentum indicators diverge. Consider partial exits to lock in profits early."
+		if percentGiven, ok := evidence["percent_of_profit_given_back"].(string); ok {
+			return fmt.Sprintf("Gave back %s of peak profit. Use trailing stops (2%% trail) and take profits at 60%% of MFE to avoid late exits.",
+				percentGiven)
+		}
+		return "Use trailing stops (e.g., 2% trail). Set profit targets at 60% of MFE. Exit when momentum indicators diverge. Consider partial exits to lock in profits."
 
 	case ReasonSlippageExceeded:
-		return "Use limit orders with reasonable spread tolerance. Size down when spreads widen. Schedule entries for peak liquidity hours. Use VWAP-based execution for larger orders."
+		if slipStr, ok := evidence["entry_slippage"].(string); ok {
+			if spread, ok := evidence["spread_at_entry"].(float64); ok {
+				return fmt.Sprintf("Slippage was excessive (%s) with spread %.4f. Use limit orders, size down when spreads widen, or schedule entries during peak liquidity.",
+					slipStr, spread)
+			}
+		}
+		return "Use limit orders with reasonable spread tolerance. Size down when spreads widen. Schedule entries for peak liquidity hours."
 
 	case ReasonFundingDrag:
-		return "Check funding rates before entry. Avoid long positions in positive funding environments. Use spot-hedged positions. Monitor accumulated cost: exit if >20% of position value."
+		if totalCost, ok := evidence["total_cost"].(float64); ok {
+			if pnl, ok := evidence["realized_pnl"].(float64); ok {
+				costPct := (totalCost / math.Abs(pnl)) * 100
+				return fmt.Sprintf("Funding cost $%.2f was %.0f%% of loss. Check rates before entry, avoid positive funding longs, use spot hedges, exit if cost >20%% position.",
+					totalCost, costPct)
+			}
+		}
+		return "Check funding rates before entry. Avoid long positions in positive funding. Use spot-hedged positions. Monitor cost: exit if >20% of position value."
 
 	case ReasonBorrowingCostHigh:
-		return "Check borrow availability and rates. Only short when rates <0.01% daily. Prefer spot lending to direct borrowing. Size accordingly to manage carry costs."
+		return "Check borrow availability and rates. Only short when rates <0.01% daily. Prefer spot lending. Size accordingly to manage carry costs."
 
 	case ReasonRegimeMismatch:
-		return "Restrict trading to compatible market regimes. Strategy works in trending → skip sideways/choppy periods. Wait for market to return to favorable regime before re-entering."
+		if regime, ok := evidence["market_regime"].(string); ok {
+			return fmt.Sprintf("Strategy doesn't work in '%s' regime. Avoid trading in choppy conditions. Wait for favorable trending environment.",
+				regime)
+		}
+		return "Restrict trading to compatible market regimes. Strategy works in trending → skip sideways/choppy periods. Wait for market to return to favorable regime."
 
 	default:
 		return "Analyze trade context and market conditions. Verify signal quality and execution. Review recent win rate and adjust position sizing if needed."

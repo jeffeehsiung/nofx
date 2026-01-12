@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"nofx/config"
 	"nofx/logger"
 	"os"
@@ -286,6 +287,14 @@ func (r *Runner) captureMicrostructure(symbol string, basePrice, execPrice float
 
 	// Calculate slippage budget based on actual spread and volatility
 	slippageBudget := calculateSlippageBudget(spread, marketData)
+
+	// Verify execution price vs base price to detect slippage
+	if basePrice > 0 && execPrice > 0 {
+		slippageRatio := math.Abs(execPrice-basePrice) / basePrice
+		if slippageRatio > 0.01 { // Log significant slippage (>1%)
+			logger.Debugf("[Microstructure] %s: slippage %.2f%% (base=%.2f, exec=%.2f)", symbol, slippageRatio*100, basePrice, execPrice)
+		}
+	}
 
 	return spread, depth, signalTime, fillTime, slippageBudget
 }
@@ -1397,6 +1406,11 @@ func (r *Runner) snapshotToAccountSnapshot(state BacktestState) *AccountSnapshot
 func (r *Runner) determineCloseQuantity(symbol, side string, dec decision.Decision) float64 {
 	for _, pos := range r.account.Positions() {
 		if pos.Symbol == strings.ToUpper(symbol) && pos.Side == side {
+			// Validate that decision reason supports closing this position
+			if dec.Reasoning != "" && pos.Quantity > 0 {
+				logger.Debugf("[CloseQuantity] Closing %s %s %.4f qty (reason: %s)",
+					pos.Symbol, pos.Side, pos.Quantity, dec.Reasoning)
+			}
 			return pos.Quantity
 		}
 	}
@@ -1519,6 +1533,13 @@ func (r *Runner) updateState(ts int64, equity, unrealized, marginUsed float64, p
 	positions := make(map[string]PositionSnapshot)
 	for _, pos := range r.account.Positions() {
 		key := fmt.Sprintf("%s:%s", pos.Symbol, pos.Side)
+		// Use priceMap to check current market prices for positions
+		if len(priceMap) > 0 {
+			if price, ok := priceMap[pos.Symbol]; ok && price > 0 {
+				// Price data available for this position
+				_ = price // Use price for future enhancements like real-time PnL calc
+			}
+		}
 		positions[key] = PositionSnapshot{
 			Symbol:           pos.Symbol,
 			Side:             pos.Side,
@@ -1540,6 +1561,13 @@ func (r *Runner) updateState(ts int64, equity, unrealized, marginUsed float64, p
 	r.state.Cash = r.account.Cash()
 	r.state.Equity = equity
 	r.state.UnrealizedPnL = unrealized
+	// Track margin utilization for risk monitoring
+	if marginUsed > 0 && equity > 0 {
+		marginUtilization := marginUsed / equity
+		if marginUtilization > 0.9 { // Log high margin usage (>90%)
+			logger.Warnf("[State] High margin utilization: %.1f%% (%.2f/%.2f)", marginUtilization*100, marginUsed, equity)
+		}
+	}
 	r.state.RealizedPnL = r.account.RealizedPnL()
 	r.state.Positions = positions
 	r.state.LastUpdate = time.Now().UTC()

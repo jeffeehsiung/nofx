@@ -238,17 +238,23 @@ func (m *OrderWebSocketManager) StopAllStreams() {
 	defer m.mu.Unlock()
 
 	if m.binanceOrderWS != nil {
-		m.binanceOrderWS.Disconnect()
+		if err := m.binanceOrderWS.Disconnect(); err != nil {
+			logger.Warnf("⚠️ Failed to disconnect Binance order stream: %v", err)
+		}
 		m.activeConnections["binance"] = false
 	}
 
 	if m.bybitOrderWS != nil {
-		m.bybitOrderWS.Disconnect()
+		if err := m.bybitOrderWS.Disconnect(); err != nil {
+			logger.Warnf("⚠️ Failed to disconnect Bybit order stream: %v", err)
+		}
 		m.activeConnections["bybit"] = false
 	}
 
 	if m.okxOrderWS != nil {
-		m.okxOrderWS.Disconnect()
+		if err := m.okxOrderWS.Disconnect(); err != nil {
+			logger.Warnf("⚠️ Failed to disconnect OKX order stream: %v", err)
+		}
 		m.activeConnections["okx"] = false
 	}
 

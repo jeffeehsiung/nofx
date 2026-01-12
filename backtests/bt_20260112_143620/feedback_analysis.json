@@ -1,0 +1,30 @@
+{
+  "analysis_period": "Last 10 trades",
+  "start_time": "2025-12-13T22:59:59.999+08:00",
+  "end_time": "2026-01-03T18:59:59.999+08:00",
+  "decisions_covered": 10,
+  "total_return": 0,
+  "total_return_pct": 20.720181868859385,
+  "win_rate": 25,
+  "profit_factor": 0.45405013203052574,
+  "sharpe_ratio": 0.01312192786648158,
+  "max_drawdown": 31.446296143502835,
+  "success_patterns": null,
+  "failure_patterns": null,
+  "key_insights": [
+    "✅ Strong performance: +20.72%. Current strategy is working well",
+    "📉 Low win rate (25.0%). Focus on better entry timing and trade selection",
+    "⚠️ Profit factor 0.45 \u003c 1.0: Losses exceed profits. Let winners run longer",
+    "🔴 CRITICAL: 31.4% max drawdown is excessive. Reduce position sizes and leverage"
+  ],
+  "recommended_actions": [
+    "4. IMPROVE ENTRY TIMING: Wait for stronger confirmations (multiple timeframe alignment + volume)",
+    "5. SKIP LOW-CONFIDENCE TRADES: Avoid trades with confidence \u003c 70%",
+    "11. LET WINNERS RUN: Move stop-loss to breakeven and let profitable trades reach larger targets",
+    "12. IMPROVE RISK/REWARD: Target at least 2:1 reward-to-risk ratio on all trades"
+  ],
+  "top_winning_trades": [],
+  "top_losing_trades": [],
+  "market_conditions": "NEUTRAL MARKET: Standard trading conditions, continue with current approach",
+  "regime_analysis": {}
+}

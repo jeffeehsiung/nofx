@@ -34,7 +34,7 @@ func NewTradeOutcomeStore(db *sql.DB) *TradeOutcomeStore {
 
 // InitTables initializes trade outcome tables
 func (t *TradeOutcomeStore) InitTables() error {
-	_, err := t.db.Exec(`
+	if _, err := t.db.Exec(`
 		CREATE TABLE IF NOT EXISTS trade_outcomes (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			symbol TEXT NOT NULL,
@@ -49,12 +49,21 @@ func (t *TradeOutcomeStore) InitTables() error {
 			exit_depth REAL,
 			holding_minutes INTEGER,
 			pnl_pct REAL,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			INDEX idx_symbol (symbol),
-			INDEX idx_created_at (created_at)
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)
-	`)
-	return err
+	`); err != nil {
+		return err
+	}
+
+	// Add indexes separately for SQLite compatibility.
+	if _, err := t.db.Exec(`CREATE INDEX IF NOT EXISTS idx_trade_outcomes_symbol ON trade_outcomes(symbol)`); err != nil {
+		return err
+	}
+	if _, err := t.db.Exec(`CREATE INDEX IF NOT EXISTS idx_trade_outcomes_created_at ON trade_outcomes(created_at)`); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Save persists a trade outcome to the database

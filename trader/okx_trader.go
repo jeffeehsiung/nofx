@@ -93,8 +93,13 @@ type OKXResponse struct {
 func genOkxClOrdID() string {
 	timestamp := time.Now().UnixNano() % 10000000000000
 	randomBytes := make([]byte, 4)
-	rand.Read(randomBytes)
-	randomHex := hex.EncodeToString(randomBytes)
+	var randomHex string
+	if _, err := rand.Read(randomBytes); err != nil {
+		// Fallback to timestamp-only if random fails
+		randomHex = fmt.Sprintf("%08d", timestamp%100000000)
+	} else {
+		randomHex = hex.EncodeToString(randomBytes)
+	}
 	// OKX clOrdId max 32 characters
 	orderID := fmt.Sprintf("%s%d%s", okxTag, timestamp, randomHex)
 	if len(orderID) > 32 {
@@ -576,7 +581,9 @@ func (t *OKXTrader) SetLeverage(symbol string, leverage int) error {
 // OpenLong opens long position
 func (t *OKXTrader) OpenLong(symbol string, quantity float64, leverage int) (map[string]interface{}, error) {
 	// Cancel old orders
-	t.CancelAllOrders(symbol)
+	if err := t.CancelAllOrders(symbol); err != nil {
+		logger.Infof("  ⚠️ Failed to cancel orders: %v", err)
+	}
 
 	// Set leverage
 	if err := t.SetLeverage(symbol, leverage); err != nil {
@@ -653,7 +660,9 @@ func (t *OKXTrader) OpenLong(symbol string, quantity float64, leverage int) (map
 // OpenShort opens short position
 func (t *OKXTrader) OpenShort(symbol string, quantity float64, leverage int) (map[string]interface{}, error) {
 	// Cancel old orders
-	t.CancelAllOrders(symbol)
+	if err := t.CancelAllOrders(symbol); err != nil {
+		logger.Infof("  ⚠️ Failed to cancel orders: %v", err)
+	}
 
 	// Set leverage
 	if err := t.SetLeverage(symbol, leverage); err != nil {
@@ -829,7 +838,9 @@ func (t *OKXTrader) CloseLong(symbol string, quantity float64) (map[string]inter
 	logger.Infof("✓ OKX closed long position successfully: %s", symbol)
 
 	// Cancel pending orders after closing position
-	t.CancelAllOrders(symbol)
+	if err := t.CancelAllOrders(symbol); err != nil {
+		logger.Infof("  ⚠️ Failed to cancel orders: %v", err)
+	}
 
 	return map[string]interface{}{
 		"orderId": orders[0].OrdId,
@@ -943,7 +954,9 @@ func (t *OKXTrader) CloseShort(symbol string, quantity float64) (map[string]inte
 	logger.Infof("✓ OKX closed short position successfully: %s, ordId=%s", symbol, orders[0].OrdId)
 
 	// Cancel pending orders after closing position
-	t.CancelAllOrders(symbol)
+	if err := t.CancelAllOrders(symbol); err != nil {
+		logger.Infof("  ⚠️ Failed to cancel orders: %v", err)
+	}
 
 	return map[string]interface{}{
 		"orderId": orders[0].OrdId,
@@ -1148,11 +1161,15 @@ func (t *OKXTrader) CancelAllOrders(symbol string) error {
 			"instId": order.InstId,
 			"ordId":  order.OrdId,
 		}
-		t.doRequest("POST", okxCancelOrderPath, body)
+		if _, err := t.doRequest("POST", okxCancelOrderPath, body); err != nil {
+			logger.Infof("  ⚠️ Failed to cancel order %s: %v", order.OrdId, err)
+		}
 	}
 
 	// Also cancel algo orders
-	t.cancelAlgoOrders(symbol, "")
+	if err := t.cancelAlgoOrders(symbol, ""); err != nil {
+		logger.Infof("  ⚠️ Failed to cancel algo orders: %v", err)
+	}
 
 	if len(orders) > 0 {
 		logger.Infof("  ✓ Canceled all pending orders for %s", symbol)

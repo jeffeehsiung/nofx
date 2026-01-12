@@ -1804,21 +1804,51 @@ func (t *HyperliquidTrader) FormatQuantity(symbol string, quantity float64) (str
 func (t *HyperliquidTrader) getSzDecimals(coin string) int {
 	// ✅ Concurrency safe: Use read lock to protect meta field access
 	t.metaMutex.RLock()
-	defer t.metaMutex.RUnlock()
+	meta := t.meta
+	t.metaMutex.RUnlock()
 
-	if t.meta == nil {
-		logger.Infof("⚠️  meta information is empty, using default precision 4")
-		return 4 // Default precision
+	if meta == nil {
+		logger.Infof("⚠️  meta information is empty, attempting to refresh...")
+		if err := t.refreshMetaIfNeeded(coin); err != nil {
+			logger.Warnf("Failed to refresh meta: %v, using default precision 4", err)
+			return 4 // Default precision
+		}
+
+		// Try again after refresh
+		t.metaMutex.RLock()
+		meta = t.meta
+		t.metaMutex.RUnlock()
+
+		if meta == nil {
+			logger.Infof("⚠️  meta information is still empty after refresh, using default precision 4")
+			return 4 // Default precision
+		}
 	}
 
 	// Find corresponding coin in meta.Universe
+	for _, asset := range meta.Universe {
+		if asset.Name == coin {
+			return asset.SzDecimals
+		}
+	}
+
+	logger.Infof("⚠️  Precision information not found for %s, attempting to refresh meta...", coin)
+	if err := t.refreshMetaIfNeeded(coin); err != nil {
+		logger.Warnf("Failed to refresh meta: %v, using default precision 4", err)
+		return 4 // Default precision
+	}
+
+	// Try again after refresh
+	t.metaMutex.RLock()
+	defer t.metaMutex.RUnlock()
+
 	for _, asset := range t.meta.Universe {
 		if asset.Name == coin {
 			return asset.SzDecimals
 		}
 	}
 
-	logger.Infof("⚠️  Precision information not found for %s, using default precision 4", coin)
+	logger.Infof("⚠️  Precision information still not found for %s after refresh, using default precision 4", coin)
 	return 4 // Default precision
 }
 
@@ -1971,11 +2001,11 @@ func (t *HyperliquidTrader) GetClosedPnL(startTime time.Time, limit int) ([]Clos
 		}
 
 		// Determine side (Hyperliquid uses one-way mode)
-		side := "long"
+		var side string
 		if trade.Side == "SELL" || trade.Side == "Sell" {
-			side = "long" // Selling closes long
+			side = "short" // Selling opens/adds to short
 		} else {
-			side = "short" // Buying closes short
+			side = "long" // Buying opens/adds to long
 		}
 
 		// Calculate entry price from PnL

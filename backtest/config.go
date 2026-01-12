@@ -46,6 +46,8 @@ type BacktestConfig struct {
 	OverrideBasePrompt   bool     `json:"override_prompt"`
 	CacheAI              bool     `json:"cache_ai"`
 	ReplayOnly           bool     `json:"replay_only"`
+	EnableAnalysis       bool     `json:"enable_analysis"`
+	EnablePromptLab      bool     `json:"enable_prompt_lab"`
 
 	AICfg    AIConfig       `json:"ai"`
 	Leverage LeverageConfig `json:"leverage"`
@@ -141,6 +143,12 @@ func (cfg *BacktestConfig) Validate() error {
 		cfg.PromptTemplate = "default"
 	}
 	cfg.CustomPrompt = strings.TrimSpace(cfg.CustomPrompt)
+
+	// Default to enabled for analysis and prompt lab (can be disabled via config)
+	if !cfg.EnableAnalysis && !cfg.EnablePromptLab {
+		cfg.EnableAnalysis = true
+		cfg.EnablePromptLab = true
+	}
 
 	if cfg.AICfg.Provider == "" {
 		cfg.AICfg.Provider = "inherit"

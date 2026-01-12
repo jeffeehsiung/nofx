@@ -430,10 +430,14 @@ Then output your decisions in STRICT JSON ARRAY format (can include multiple coi
 func (e *DebateEngine) buildDebateUserPrompt(baseUserPrompt string, previousMessages []*store.DebateMessage, currentParticipant *store.DebateParticipant, round int) string {
 	var sb strings.Builder
 
-	// Add previous debate messages if any
+	// Add previous debate messages from OTHER participants (exclude currentParticipant's own messages)
 	if len(previousMessages) > 0 && round > 1 {
 		sb.WriteString("## Previous Debate Arguments\n\n")
 		for _, msg := range previousMessages {
+			// Skip messages from the current participant themselves
+			if msg.AIModelID == currentParticipant.AIModelID {
+				continue
+			}
 			emoji := store.PersonalityEmojis[msg.Personality]
 			sb.WriteString(fmt.Sprintf("### %s %s (%s) - Round %d:\n", emoji, msg.AIModelName, msg.Personality, msg.Round))
 			// Extract key points from previous messages

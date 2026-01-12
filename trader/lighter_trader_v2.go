@@ -138,7 +138,9 @@ func NewLighterTraderV2(walletAddr, apiKeyPrivateKeyHex string, apiKeyIndex int,
 		apiKeyPrivateKey: apiKeyPrivateKeyHex,
 		apiKeyIndex:      uint8(apiKeyIndex),
 		symbolPrecision:  make(map[string]SymbolPrecision),
+		precisionMutex:   sync.RWMutex{},
 		marketIndexMap:   make(map[string]uint16),
+		marketMutex:      sync.RWMutex{},
 	}
 
 	// 5. Initialize account (get account index)
@@ -354,11 +356,12 @@ func (t *LighterTraderV2) GetClosedPnL(startTime time.Time, limit int) ([]Closed
 			continue
 		}
 
-		side := "long"
+		// Determine position side: BUY = long, SELL = short
+		var side string
 		if trade.Side == "SELL" || trade.Side == "Sell" {
-			side = "long"
-		} else {
 			side = "short"
+		} else {
+			side = "long"
 		}
 
 		var entryPrice float64

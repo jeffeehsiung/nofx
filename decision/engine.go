@@ -361,6 +361,43 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 	return decision, nil
 }
 
+// BuildPromptsForContext builds system and user prompts without calling the AI.
+func BuildPromptsForContext(ctx *Context, engine *StrategyEngine, variant string) (string, string, error) {
+	if ctx == nil {
+		return "", "", fmt.Errorf("context is nil")
+	}
+	if engine == nil {
+		defaultConfig := store.GetDefaultStrategyConfig("en")
+		engine = NewStrategyEngine(&defaultConfig)
+	}
+
+	if len(ctx.MarketDataMap) == 0 {
+		if err := fetchMarketDataWithStrategy(ctx, engine); err != nil {
+			return "", "", fmt.Errorf("failed to fetch market data: %w", err)
+		}
+	}
+
+	if ctx.OITopDataMap == nil {
+		ctx.OITopDataMap = make(map[string]*OITopData)
+		oiPositions, err := provider.GetOITopPositions()
+		if err == nil {
+			for _, pos := range oiPositions {
+				ctx.OITopDataMap[pos.Symbol] = &OITopData{
+					Rank:              pos.Rank,
+					OIDeltaPercent:    pos.OIDeltaPercent,
+					OIDeltaValue:      pos.OIDeltaValue,
+					PriceDeltaPercent: pos.PriceDeltaPercent,
+				}
+			}
+		}
+	}
+
+	systemPrompt := engine.BuildSystemPrompt(ctx.Account.TotalEquity, variant)
+	userPrompt := engine.BuildUserPrompt(ctx)
+
+	return systemPrompt, userPrompt, nil
+}
+
 // ============================================================================
 // Market Data Fetching
 // ============================================================================

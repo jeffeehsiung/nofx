@@ -42,7 +42,10 @@ func NewHyperliquidTestSuite(t *testing.T) *HyperliquidTestSuite {
 		// We need to distinguish different requests by the "type" field in request body
 		var reqBody map[string]interface{}
 		if r.Method == "POST" {
-			json.NewDecoder(r.Body).Decode(&reqBody)
+			if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+				http.Error(w, "Invalid request body", http.StatusBadRequest)
+				return
+			}
 		}
 
 		// Try to get type from top level first, then from action object
@@ -190,7 +193,10 @@ func NewHyperliquidTestSuite(t *testing.T) *HyperliquidTestSuite {
 
 		// Serialize response
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(respBody)
+		if err := json.NewEncoder(w).Encode(respBody); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+			return
+		}
 	}))
 
 	// Create HyperliquidTrader, using mock server URL
@@ -281,7 +287,7 @@ func TestNewHyperliquidTrader(t *testing.T) {
 			walletAddr:    "0x1234567890123456789012345678901234567890",
 			testnet:       true,
 			wantError:     true,
-			errorContains: "Failed to parse private key",
+			errorContains: "parse private key",
 		},
 		{
 			name:          "Empty wallet address",
@@ -324,7 +330,10 @@ func TestNewHyperliquidTrader_Success(t *testing.T) {
 	// Create mock HTTP server
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var reqBody map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
 		reqType, _ := reqBody["type"].(string)
 
 		var respBody interface{}
@@ -367,7 +376,10 @@ func TestNewHyperliquidTrader_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(respBody)
+		if err := json.NewEncoder(w).Encode(respBody); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+			return
+		}
 	}))
 	defer mockServer.Close()
 

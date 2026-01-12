@@ -8,6 +8,9 @@ import (
 )
 
 func TestListCoin(t *testing.T) {
+	if TestApikey == "" {
+		t.Skip("Coinank API key not configured; skipping integration test")
+	}
 	client := NewCoinankClient(coinank_enum.MainUrl, TestApikey)
 	resp, err := client.ListCoin(context.TODO(), "SPOT")
 	if err != nil {
@@ -21,6 +24,9 @@ func TestListCoin(t *testing.T) {
 }
 
 func TestListSymbols(t *testing.T) {
+	if TestApikey == "" {
+		t.Skip("Coinank API key not configured; skipping integration test")
+	}
 	client := NewCoinankClient(coinank_enum.MainUrl, TestApikey)
 	resp, err := client.ListSymbols(context.TODO(), "Binance", "SWAP")
 	if err != nil {

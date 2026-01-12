@@ -432,6 +432,8 @@ export interface BacktestStartConfig {
   override_prompt?: boolean;
   cache_ai?: boolean;
   replay_only?: boolean;
+  enable_analysis?: boolean;
+  enable_prompt_lab?: boolean;
   checkpoint_interval_bars?: number;
   checkpoint_interval_seconds?: number;
   replay_decision_dir?: string;

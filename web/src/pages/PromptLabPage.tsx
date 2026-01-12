@@ -53,20 +53,35 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
   const [selectedVariant, setSelectedVariant] = useState<PromptVariant | null>(null)
   const [activating, setActivating] = useState<string | null>(null)
 
+  // Debug: Log runID to console
+  if (typeof window !== 'undefined' && runID) {
+    console.log('[PromptLabPage] runID:', runID)
+  }
+
   const { data, error, mutate } = useSWR<PromptVariantsResponse>(
     runID ? `/api/backtest/prompt-variants?run_id=${runID}` : null,
     async (url) => {
+      console.log('[PromptLabPage] Fetching:', url)
       const result = await httpClient.get<PromptVariantsResponse>(url)
-      if (!result.success) throw new Error('Failed to load variants')
+      console.log('[PromptLabPage] Response:', result)
+      if (!result.success) throw new Error(result.message || 'Failed to load variants')
       return result.data!
     },
     {
       refreshInterval: 5000, // Refresh every 5 seconds during backtest
+      onError: (err) => {
+        console.error('[PromptLabPage] SWR Error:', err)
+      }
     }
   )
 
-  const variants = data?.variants || []
-  const activeVariant = variants.find((v) => v.IsActive)
+  // Debug: Log loading states
+  if (runID && !data && !error) {
+    console.log('[PromptLabPage] Loading...')
+  }
+
+  const variants = Array.isArray(data?.variants) ? data.variants : []
+  const activeVariant = variants.length > 0 ? variants.find((v) => v.IsActive) : undefined
 
   // Auto-select active variant on load
   useEffect(() => {
@@ -110,6 +125,7 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
   }
 
   if (!runID) {
+    console.warn('[PromptLabPage] No runID provided!')
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -119,12 +135,16 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
               ? '请选择一个回测运行查看提示词优化'
               : 'Select a backtest run to view prompt optimization'}
           </p>
+          <p className="text-slate-500 text-xs mt-2">
+            (runID missing or not passed)
+          </p>
         </div>
       </div>
     )
   }
 
   if (error) {
+    console.error('[PromptLabPage] Error loading:', error)
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -132,13 +152,21 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
           <p className="text-red-400">
             {language === 'zh' ? '加载失败' : 'Failed to load'}
           </p>
-          <p className="text-slate-500 text-sm mt-2">{error.message}</p>
+          <p className="text-slate-500 text-sm mt-2">{error.message || String(error)}</p>
+          {error.message?.toLowerCase().includes('api not found') && (
+            <p className="text-slate-500 text-xs mt-2">
+              {language === 'zh'
+                ? '后端未运行或代理端口错误。请确认 http://localhost:8080/api/backtest/prompt-variants 可用且已登录。'
+                : 'Backend may be offline or proxy target is wrong. Ensure http://localhost:8080/api/backtest/prompt-variants is reachable and you are logged in.'}
+            </p>
+          )}
         </div>
       </div>
     )
   }
 
   if (!data) {
+    console.log('[PromptLabPage] Waiting for data...')
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -146,21 +174,30 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
           <p className="text-slate-400">
             {language === 'zh' ? '加载中...' : 'Loading...'}
           </p>
+          <p className="text-slate-500 text-xs mt-2">
+            runID: {runID}
+          </p>
         </div>
       </div>
     )
   }
 
   if (variants.length === 0) {
+    console.log('[PromptLabPage] No variants found (prompt optimization not enabled for this run)')
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <Sparkles className="h-12 w-12 mx-auto mb-4 text-slate-500" />
           <p className="text-slate-400">
-            {data.message ||
+            {data?.message ||
               (language === 'zh'
                 ? '此回测未启用提示词优化'
                 : 'Prompt optimization not enabled for this run')}
+          </p>
+          <p className="text-slate-500 text-xs mt-2">
+            {language === 'zh'
+              ? '请在启动回测时启用 "Enable Prompt Optimization" 来使用此功能'
+              : 'Enable "Prompt Optimization" when starting a backtest to use this feature'}
           </p>
         </div>
       </div>

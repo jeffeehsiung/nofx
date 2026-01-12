@@ -814,19 +814,6 @@ func (s *Server) resolveStrategyCoins(strategyConfig *store.StrategyConfig) ([]s
 	return symbols, nil
 }
 
-func (s *Server) resolveBacktestAIConfig(cfg *backtest.BacktestConfig, userID string) error {
-	if cfg == nil {
-		return fmt.Errorf("config is nil")
-	}
-	if s.store == nil {
-		return fmt.Errorf("System database not ready, cannot load AI model configuration")
-	}
-
-	cfg.UserID = normalizeUserID(userID)
-
-	return s.hydrateBacktestAIConfig(cfg)
-}
-
 func (s *Server) hydrateBacktestAIConfig(cfg *backtest.BacktestConfig) error {
 	if cfg == nil {
 		return fmt.Errorf("config is nil")

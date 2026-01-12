@@ -48,7 +48,10 @@ func (s *Server) handleGetStrategies(c *gin.Context) {
 	result := make([]gin.H, 0, len(strategies))
 	for _, st := range strategies {
 		var config store.StrategyConfig
-		json.Unmarshal([]byte(st.Config), &config)
+		if err := json.Unmarshal([]byte(st.Config), &config); err != nil {
+			logger.Warnf("Failed to parse strategy config: %v", err)
+			continue
+		}
 
 		result = append(result, gin.H{
 			"id":          st.ID,
@@ -84,7 +87,10 @@ func (s *Server) handleGetStrategy(c *gin.Context) {
 	}
 
 	var config store.StrategyConfig
-	json.Unmarshal([]byte(strategy.Config), &config)
+	if err := json.Unmarshal([]byte(strategy.Config), &config); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse strategy config: " + err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"id":          strategy.ID,
@@ -299,7 +305,10 @@ func (s *Server) handleGetActiveStrategy(c *gin.Context) {
 	}
 
 	var config store.StrategyConfig
-	json.Unmarshal([]byte(strategy.Config), &config)
+	if err := json.Unmarshal([]byte(strategy.Config), &config); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse strategy config: " + err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"id":          strategy.ID,

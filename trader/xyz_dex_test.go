@@ -173,7 +173,9 @@ func TestXyzAssetIndexLookup(t *testing.T) {
 
 	body, _ := io.ReadAll(resp.Body)
 	var meta testXyzDexMeta
-	json.Unmarshal(body, &meta)
+	if err := json.Unmarshal(body, &meta); err != nil {
+		t.Fatalf("Failed to parse meta: %v", err)
+	}
 
 	// Test lookup with different formats
 	testCases := []struct {
@@ -230,7 +232,9 @@ func TestXyzSzDecimalsLookup(t *testing.T) {
 
 	body, _ := io.ReadAll(resp.Body)
 	var meta testXyzDexMeta
-	json.Unmarshal(body, &meta)
+	if err := json.Unmarshal(body, &meta); err != nil {
+		t.Fatalf("Failed to parse meta: %v", err)
+	}
 
 	// Check szDecimals for various assets
 	expectedDecimals := map[string]int{
@@ -310,7 +314,9 @@ func TestXyzAssetIndexCalculation(t *testing.T) {
 
 	body, _ := io.ReadAll(resp.Body)
 	var meta testXyzDexMeta
-	json.Unmarshal(body, &meta)
+	if err := json.Unmarshal(body, &meta); err != nil {
+		t.Fatalf("Failed to parse meta: %v", err)
+	}
 
 	// Test asset index calculation for SILVER
 	// HIP-3 perp dex asset index formula: 100000 + perp_dex_index * 10000 + index_in_meta
@@ -418,7 +424,9 @@ func TestXyzDexOrderFlow(t *testing.T) {
 
 	body, _ := io.ReadAll(resp.Body)
 	var meta testXyzDexMeta
-	json.Unmarshal(body, &meta)
+	if err := json.Unmarshal(body, &meta); err != nil {
+		t.Fatalf("Failed to parse meta: %v", err)
+	}
 	t.Logf("✅ Fetched %d xyz assets", len(meta.Universe))
 
 	// Step 2: Find SILVER
@@ -448,10 +456,14 @@ func TestXyzDexOrderFlow(t *testing.T) {
 	resp2.Body.Close()
 
 	var mids map[string]string
-	json.Unmarshal(body2, &mids)
+	if err := json.Unmarshal(body2, &mids); err != nil {
+		t.Fatalf("Failed to parse prices: %v", err)
+	}
 	priceStr := mids["xyz:SILVER"]
 	var price float64
-	fmt.Sscanf(priceStr, "%f", &price)
+	if _, err := fmt.Sscanf(priceStr, "%f", &price); err != nil {
+		t.Fatalf("Failed to parse price: %v", err)
+	}
 	t.Logf("✅ Price: %s", priceStr)
 
 	// Step 4: Calculate order parameters
@@ -625,7 +637,9 @@ func TestXyzDexClosePosition(t *testing.T) {
 
 	// Parse position size
 	var posSize float64
-	fmt.Sscanf(pos.Szi, "%f", &posSize)
+	if _, err := fmt.Sscanf(pos.Szi, "%f", &posSize); err != nil {
+		t.Fatalf("Failed to parse position size: %v", err)
+	}
 
 	// Close position: if long (szi > 0), sell; if short (szi < 0), buy
 	isBuy := posSize < 0

@@ -1310,9 +1310,10 @@ func (t *AsterTrader) GetClosedPnL(startTime time.Time, limit int) ([]ClosedPnLR
 
 		// Determine side from PositionSide or trade direction
 		side := "long"
-		if trade.PositionSide == "SHORT" || trade.PositionSide == "short" {
+		switch trade.PositionSide {
+		case "SHORT", "short":
 			side = "short"
-		} else if trade.PositionSide == "BOTH" || trade.PositionSide == "" {
+		case "BOTH", "":
 			if trade.Side == "SELL" || trade.Side == "Sell" {
 				side = "long"
 			} else {

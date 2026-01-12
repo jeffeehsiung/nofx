@@ -243,7 +243,8 @@ func (t *FuturesTrader) determineOrderAction(side, positionSide string, realized
 	// If there's realized PnL, it's likely a close trade
 	isClose := realizedPnL != 0
 
-	if positionSide == "LONG" || positionSide == "" {
+	switch positionSide {
+	case "LONG", "":
 		if side == "BUY" {
 			if isClose {
 				return "close_short" // Buying to close short
@@ -255,7 +256,7 @@ func (t *FuturesTrader) determineOrderAction(side, positionSide string, realized
 			}
 			return "open_short"
 		}
-	} else if positionSide == "SHORT" {
+	case "SHORT":
 		if side == "SELL" {
 			if isClose {
 				return "close_long"

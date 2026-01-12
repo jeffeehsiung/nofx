@@ -3,6 +3,7 @@ package decision
 import (
 	"fmt"
 	"nofx/market"
+	"nofx/provider"
 	"sort"
 	"strings"
 	"time"
@@ -346,7 +347,7 @@ func formatKlineDataZH(symbol string, tfData map[string]*market.TimeframeSeriesD
 
 	for _, tf := range timeframes {
 		if data, ok := tfData[tf]; ok && len(data.Klines) > 0 {
-			sb.WriteString(fmt.Sprintf("#### %s 时间框架 (从旧到新)\n\n", tf))
+			sb.WriteString(fmt.Sprintf("#### %s %s 时间框架 (从旧到新)\n\n", symbol, tf))
 			sb.WriteString("```\n")
 			sb.WriteString("时间(UTC)      开盘      最高      最低      收盘      成交量\n")
 
@@ -383,7 +384,44 @@ func formatKlineDataZH(symbol string, tfData map[string]*market.TimeframeSeriesD
 
 // formatOIRankingZH 格式化OI排名数据（中文）
 func formatOIRankingZH(oiData interface{}) string {
-	// TODO: 根据实际OIRankingData结构实现
+	if oiData == nil {
+		return "## 市场持仓量排名\n\n(暂无数据)\n\n"
+	}
+
+	// Try to format as OIRankingData structure
+	if oiRanking, ok := oiData.(*provider.OIRankingData); ok {
+		if oiRanking == nil || (len(oiRanking.TopPositions) == 0 && len(oiRanking.LowPositions) == 0) {
+			return "## 市场持仓量排名\n\n(数据加载中...)\n\n"
+		}
+
+		var sb strings.Builder
+		sb.WriteString("## 市场持仓量排名\n\n")
+
+		if len(oiRanking.TopPositions) > 0 {
+			sb.WriteString("### 持仓量TOP (最高杠杆长仓)\n\n")
+			for i, pos := range oiRanking.TopPositions {
+				if i >= 5 {
+					break // 只显示前5个
+				}
+				sb.WriteString(fmt.Sprintf("- **%s**: %.2f (持仓变化: %.2f%%)\n", pos.Symbol, pos.CurrentOI, pos.OIDeltaPercent))
+			}
+			sb.WriteString("\n")
+		}
+
+		if len(oiRanking.LowPositions) > 0 {
+			sb.WriteString("### 持仓量LOW (最高杠杆空仓)\n\n")
+			for i, pos := range oiRanking.LowPositions {
+				if i >= 5 {
+					break
+				}
+				sb.WriteString(fmt.Sprintf("- **%s**: %.2f (持仓变化: %.2f%%)\n", pos.Symbol, pos.CurrentOI, pos.OIDeltaPercent))
+			}
+			sb.WriteString("\n")
+		}
+
+		return sb.String()
+	}
+
 	return "## 市场持仓量排名\n\n(数据加载中...)\n\n"
 }
 
@@ -618,7 +656,7 @@ func formatKlineDataEN(symbol string, tfData map[string]*market.TimeframeSeriesD
 
 	for _, tf := range sortedTF {
 		if data, ok := tfData[tf]; ok && len(data.Klines) > 0 {
-			sb.WriteString(fmt.Sprintf("#### %s Timeframe (oldest → latest)\n\n", tf))
+			sb.WriteString(fmt.Sprintf("#### %s %s Timeframe (oldest → latest)\n\n", symbol, tf))
 			sb.WriteString("```\n")
 			sb.WriteString("Time(UTC)      Open      High      Low       Close     Volume\n")
 
@@ -653,6 +691,44 @@ func formatKlineDataEN(symbol string, tfData map[string]*market.TimeframeSeriesD
 
 // formatOIRankingEN 格式化OI排名数据（英文）
 func formatOIRankingEN(oiData interface{}) string {
+	if oiData == nil {
+		return "## Market-wide OI Ranking\n\n(No data available)\n\n"
+	}
+
+	// Try to format as OIRankingData structure
+	if oiRanking, ok := oiData.(*provider.OIRankingData); ok {
+		if oiRanking == nil || (len(oiRanking.TopPositions) == 0 && len(oiRanking.LowPositions) == 0) {
+			return "## Market-wide OI Ranking\n\n(Loading data...)\n\n"
+		}
+
+		var sb strings.Builder
+		sb.WriteString("## Market-wide OI Ranking\n\n")
+
+		if len(oiRanking.TopPositions) > 0 {
+			sb.WriteString("### Top OI Positions (Highest Leverage Long)\n\n")
+			for i, pos := range oiRanking.TopPositions {
+				if i >= 5 {
+					break // Show only top 5
+				}
+				sb.WriteString(fmt.Sprintf("- **%s**: %.2f (OI Change: %.2f%%)\n", pos.Symbol, pos.CurrentOI, pos.OIDeltaPercent))
+			}
+			sb.WriteString("\n")
+		}
+
+		if len(oiRanking.LowPositions) > 0 {
+			sb.WriteString("### Low OI Positions (Highest Leverage Short)\n\n")
+			for i, pos := range oiRanking.LowPositions {
+				if i >= 5 {
+					break
+				}
+				sb.WriteString(fmt.Sprintf("- **%s**: %.2f (OI Change: %.2f%%)\n", pos.Symbol, pos.CurrentOI, pos.OIDeltaPercent))
+			}
+			sb.WriteString("\n")
+		}
+
+		return sb.String()
+	}
+
 	return "## Market-wide OI Ranking\n\n(Loading data...)\n\n"
 }
 

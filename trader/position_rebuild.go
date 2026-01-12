@@ -101,16 +101,18 @@ func determinePositionSide(trade TradeRecord) string {
 	// One-way mode (BOTH or empty): determine from trade direction and RealizedPnL
 	if trade.RealizedPnL == 0 {
 		// Opening trade
-		if trade.Side == "BUY" || trade.Side == "Buy" {
+		switch trade.Side {
+		case "BUY", "Buy":
 			return "long"
-		} else if trade.Side == "SELL" || trade.Side == "Sell" {
+		case "SELL", "Sell":
 			return "short"
 		}
 	} else {
 		// Closing trade
-		if trade.Side == "BUY" || trade.Side == "Buy" {
+		switch trade.Side {
+		case "BUY", "Buy":
 			return "short" // Buy to close short
-		} else if trade.Side == "SELL" || trade.Side == "Sell" {
+		case "SELL", "Sell":
 			return "long" // Sell to close long
 		}
 	}

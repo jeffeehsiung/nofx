@@ -107,13 +107,14 @@ func (t *BitgetTrader) GetTrades(startTime time.Time, limit int) ([]BitgetTrade,
 		side := strings.ToLower(fill.Side)
 		tradeSide := strings.ToLower(fill.TradeSide)
 
-		if tradeSide == "open" {
+		switch tradeSide {
+		case "open":
 			if side == "buy" {
 				orderAction = "open_long"
 			} else {
 				orderAction = "open_short"
 			}
-		} else if tradeSide == "close" {
+		case "close":
 			if side == "sell" {
 				orderAction = "close_long"
 			} else {

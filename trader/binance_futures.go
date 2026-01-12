@@ -29,8 +29,13 @@ func getBrOrderID() string {
 
 	// Generate 4-byte random number (8 hex digits)
 	randomBytes := make([]byte, 4)
-	rand.Read(randomBytes)
-	randomHex := hex.EncodeToString(randomBytes)
+	var randomHex string
+	if _, err := rand.Read(randomBytes); err != nil {
+		// Fallback to timestamp-only if random fails
+		randomHex = fmt.Sprintf("%08d", timestamp%100000000)
+	} else {
+		randomHex = hex.EncodeToString(randomBytes)
+	}
 
 	// Format: x-KzrpZaP9{13-digit timestamp}{8-digit random}
 	// Example: x-KzrpZaP91234567890123abcdef12 (exactly 31 characters)
@@ -1091,9 +1096,10 @@ func (t *FuturesTrader) GetClosedPnL(startTime time.Time, limit int) ([]ClosedPn
 
 		// Determine side from trade
 		side := "long"
-		if trade.PositionSide == "SHORT" || trade.PositionSide == "short" {
+		switch trade.PositionSide {
+		case "SHORT", "short":
 			side = "short"
-		} else if trade.PositionSide == "BOTH" || trade.PositionSide == "" {
+		case "BOTH", "":
 			// One-way mode: selling closes long, buying closes short
 			if trade.Side == "SELL" || trade.Side == "Sell" {
 				side = "long"

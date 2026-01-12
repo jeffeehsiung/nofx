@@ -272,7 +272,9 @@ func TestEquityAfterOpeningPosition(t *testing.T) {
 			if posAmt > 0 {
 				closePrice := price * 0.95 // 5% below for IOC sell
 				t.Logf("Closing position: SELL %.4f @ %.4f", posAmt, closePrice)
-				trader.placeXyzOrder("xyz:SILVER", false, posAmt, closePrice, true)
+				if err := trader.placeXyzOrder("xyz:SILVER", false, posAmt, closePrice, true); err != nil {
+					t.Logf("Close order error: %v", err)
+				}
 			}
 		}
 	}

@@ -231,7 +231,6 @@ func TestTraderListResponse_SystemPromptTemplate(t *testing.T) {
 	// Simulate trader object construction in handleTraderList
 	trader := &store.Trader{
 		ID:                   "trader-001",
-		UserID:               "user-1",
 		Name:                 "My Trader",
 		AIModelID:            "gpt-4",
 		ExchangeID:           "binance",

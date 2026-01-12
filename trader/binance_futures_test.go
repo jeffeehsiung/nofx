@@ -90,21 +90,22 @@ func NewBinanceFuturesTestSuite(t *testing.T) *BinanceFuturesTestSuite {
 		// Mock GetMarketPrice - /fapi/v1/ticker/price and /fapi/v2/ticker/price
 		case path == "/fapi/v1/ticker/price" || path == "/fapi/v2/ticker/price":
 			symbol := r.URL.Query().Get("symbol")
-			if symbol == "" {
+			switch symbol {
+			case "":
 				// Return all prices
 				respBody = []map[string]interface{}{
 					{"Symbol": "BTCUSDT", "Price": "50000.00", "Time": 1234567890},
 					{"Symbol": "ETHUSDT", "Price": "3000.00", "Time": 1234567890},
 				}
-			} else if symbol == "INVALIDUSDT" {
+			case "INVALIDUSDT":
 				// Return error
 				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"code": -1121,
 					"msg":  "Invalid symbol.",
 				})
 				return
-			} else {
+			default:
 				// Return single price (note: even with symbol parameter, return array)
 				price := "50000.00"
 				if symbol == "ETHUSDT" {
@@ -226,7 +227,9 @@ func NewBinanceFuturesTestSuite(t *testing.T) *BinanceFuturesTestSuite {
 			leverage := 10 // default value
 			if leverageStr != "" {
 				// Note: here we return an integer directly, not a string
-				fmt.Sscanf(leverageStr, "%d", &leverage)
+				if _, err := fmt.Sscanf(leverageStr, "%d", &leverage); err != nil {
+					leverage = 10 // fallback to default on error
+				}
 			}
 			respBody = map[string]interface{}{
 				"leverage":         leverage,
@@ -261,7 +264,9 @@ func NewBinanceFuturesTestSuite(t *testing.T) *BinanceFuturesTestSuite {
 
 		// Serialize response
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(respBody)
+		if err := json.NewEncoder(w).Encode(respBody); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}))
 
 	// Create futures.Client and configure to use mock server
@@ -338,7 +343,9 @@ func TestNewFuturesTrader(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(respBody)
+		if err := json.NewEncoder(w).Encode(respBody); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}))
 	defer mockServer.Close()
 

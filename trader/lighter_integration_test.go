@@ -44,7 +44,11 @@ func TestLighterAccountInit(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	// Verify account index
 	if trader.accountIndex != testAccountIndex {
@@ -58,7 +62,11 @@ func TestLighterAPIKeyVerification(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	// Verify API key
 	err := trader.checkClient()
@@ -73,7 +81,11 @@ func TestLighterGetBalance(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	balance, err := trader.GetBalance()
 	if err != nil {
@@ -105,7 +117,11 @@ func TestLighterGetPositions(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	positions, err := trader.GetPositions()
 	if err != nil {
@@ -131,7 +147,11 @@ func TestLighterGetMarketPrice(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	symbols := []string{"ETH", "BTC", "SOL"}
 
@@ -153,7 +173,11 @@ func TestLighterFetchMarketList(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	markets, err := trader.fetchMarketList()
 	if err != nil {
@@ -181,7 +205,11 @@ func TestLighterGetTrades(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	// Get trades from last 7 days
 	startTime := time.Now().Add(-7 * 24 * time.Hour)
@@ -206,7 +234,11 @@ func TestLighterGetClosedPnL(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	startTime := time.Now().Add(-7 * 24 * time.Hour)
 	records, err := trader.GetClosedPnL(startTime, 100)
@@ -231,7 +263,11 @@ func TestLighterCreateAndCancelLimitOrder(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	// Get current market price
 	marketPrice, err := trader.GetMarketPrice("ETH")
@@ -277,7 +313,11 @@ func TestLighterCancelAllOrders(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	// First create a few test orders
 	marketPrice, err := trader.GetMarketPrice("ETH")
@@ -320,7 +360,11 @@ func TestLighterOpenCloseLongFlow(t *testing.T) {
 	}
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	symbol := "ETH"
 	quantity := 0.01 // Minimum quantity
@@ -369,7 +413,11 @@ func TestLighterOpenCloseShortFlow(t *testing.T) {
 	}
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	symbol := "ETH"
 	quantity := 0.01
@@ -402,7 +450,11 @@ func TestLighterSetLeverage(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	// Test setting leverage
 	leverages := []int{5, 10, 20}
@@ -425,7 +477,11 @@ func TestLighterAuthTokenRefresh(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	// Get initial token
 	err := trader.ensureAuthToken()
@@ -457,7 +513,11 @@ func TestLighterInvalidSymbol(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	// Test with invalid symbol
 	_, err := trader.GetMarketPrice("INVALID_SYMBOL_XYZ")
@@ -472,7 +532,11 @@ func TestLighterCancelNonExistentOrder(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	// Try to cancel non-existent order
 	err := trader.CancelOrder("ETH", "999999999999")
@@ -489,7 +553,11 @@ func TestLighterOrderSync(t *testing.T) {
 	skipIfNoEnv(t)
 
 	trader := createTestTrader(t)
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			t.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	// Get trades to simulate order sync
 	startTime := time.Now().Add(-24 * time.Hour)
@@ -504,9 +572,10 @@ func TestLighterOrderSync(t *testing.T) {
 	openTrades := 0
 	closeTrades := 0
 	for _, trade := range trades {
-		if trade.OrderAction == "open_long" || trade.OrderAction == "open_short" {
+		switch trade.OrderAction {
+		case "open_long", "open_short":
 			openTrades++
-		} else if trade.OrderAction == "close_long" || trade.OrderAction == "close_short" {
+		case "close_long", "close_short":
 			closeTrades++
 		}
 	}
@@ -525,7 +594,11 @@ func BenchmarkLighterGetBalance(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create trader: %v", err)
 	}
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			b.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -545,7 +618,11 @@ func BenchmarkLighterGetMarketPrice(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create trader: %v", err)
 	}
-	defer trader.Cleanup()
+	defer func() {
+		if err := trader.Cleanup(); err != nil {
+			b.Errorf("Cleanup failed: %v", err)
+		}
+	}()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

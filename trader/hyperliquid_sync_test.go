@@ -141,7 +141,9 @@ func TestHyperliquidPositionBuilding(t *testing.T) {
 	})
 
 	// Clear positions for next test
-	db.Exec("DELETE FROM trader_positions")
+	if _, err := db.Exec("DELETE FROM trader_positions"); err != nil {
+		t.Fatalf("Failed to clear positions: %v", err)
+	}
 
 	// Test Case 2: Open Short → Close Short with BUY (the bug scenario!)
 	t.Run("Open Short then Close with BUY", func(t *testing.T) {
@@ -194,7 +196,9 @@ func TestHyperliquidPositionBuilding(t *testing.T) {
 	})
 
 	// Clear positions
-	db.Exec("DELETE FROM trader_positions")
+	if _, err := db.Exec("DELETE FROM trader_positions"); err != nil {
+		t.Fatalf("Failed to clear positions: %v", err)
+	}
 
 	// Test Case 3: Position Averaging (Open → Add → Close)
 	t.Run("Position Averaging", func(t *testing.T) {
@@ -258,7 +262,9 @@ func TestHyperliquidPositionBuilding(t *testing.T) {
 	})
 
 	// Clear positions
-	db.Exec("DELETE FROM trader_positions")
+	if _, err := db.Exec("DELETE FROM trader_positions"); err != nil {
+		t.Fatalf("Failed to clear positions: %v", err)
+	}
 
 	// Test Case 4: Partial Close
 	t.Run("Partial Close", func(t *testing.T) {

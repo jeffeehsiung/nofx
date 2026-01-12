@@ -1,6 +1,7 @@
 package trader
 
 import (
+	"nofx/logger"
 	"sync"
 	"time"
 )
@@ -12,6 +13,7 @@ const (
 	EventTypePriceSpike     EventType = "price_spike"     // Significant price movement
 	EventTypeVolumSpike     EventType = "volume_spike"    // Abnormal volume increase
 	EventTypeOrderImbalance EventType = "order_imbalance" // Order book imbalance
+	EventTypeMarketAnomaly  EventType = "market_anomaly"  // Market trigger detected
 	EventTypeOrderFilled    EventType = "order_filled"    // Order execution
 	EventTypePositionOpened EventType = "position_opened" // New position created
 	EventTypePositionClosed EventType = "position_closed" // Position closed
@@ -92,6 +94,7 @@ func (eb *EventBus) Publish(event TradingEvent) {
 			defer func() {
 				if r := recover(); r != nil {
 					// Log panic but continue processing other handlers
+					logger.Infof("⚠️  Event handler panicked: %v", r)
 				}
 			}()
 			h(event)

@@ -62,7 +62,9 @@ func NewBybitTraderTestSuite(t *testing.T) *BybitTraderTestSuite {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(respBody)
+		if err := json.NewEncoder(w).Encode(respBody); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		}
 	}))
 
 	// Create real Bybit trader (for interface compliance testing)
@@ -379,7 +381,9 @@ func TestBybitTrader_MockServerGetBalance(t *testing.T) {
 				},
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(respBody)
+			if err := json.NewEncoder(w).Encode(respBody); err != nil {
+				http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+			}
 			return
 		}
 		http.NotFound(w, r)
@@ -415,7 +419,9 @@ func TestBybitTrader_MockServerGetPositions(t *testing.T) {
 				},
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(respBody)
+			if err := json.NewEncoder(w).Encode(respBody); err != nil {
+				http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+			}
 			return
 		}
 		http.NotFound(w, r)
@@ -438,7 +444,9 @@ func TestBybitTrader_MockServerPlaceOrder(t *testing.T) {
 				},
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(respBody)
+			if err := json.NewEncoder(w).Encode(respBody); err != nil {
+				http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+			}
 			return
 		}
 		http.NotFound(w, r)
@@ -458,7 +466,9 @@ func TestBybitTrader_MockServerSetLeverage(t *testing.T) {
 				"result":  map[string]interface{}{},
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(respBody)
+			if err := json.NewEncoder(w).Encode(respBody); err != nil {
+				http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+			}
 			return
 		}
 		http.NotFound(w, r)

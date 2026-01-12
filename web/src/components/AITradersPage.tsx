@@ -15,6 +15,7 @@ import { getExchangeIcon } from './ExchangeIcons'
 import { getModelIcon } from './ModelIcons'
 import { TraderConfigModal } from './TraderConfigModal'
 import { ExchangeConfigModal } from './traders/ExchangeConfigModal'
+import { TraderSettingsModal } from './TraderSettingsModal'
 import { PunkAvatar, getTraderAvatar } from './PunkAvatar'
 import {
   Bot,
@@ -30,6 +31,7 @@ import {
   ExternalLink,
   Copy,
   Check,
+  Settings,
 } from 'lucide-react'
 import { confirmToast } from '../lib/notify'
 import { toast } from 'sonner'
@@ -147,9 +149,11 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showModelModal, setShowModelModal] = useState(false)
   const [showExchangeModal, setShowExchangeModal] = useState(false)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [editingModel, setEditingModel] = useState<string | null>(null)
   const [editingExchange, setEditingExchange] = useState<string | null>(null)
   const [editingTrader, setEditingTrader] = useState<any>(null)
+  const [settingsTrader, setSettingsTrader] = useState<any>(null)
   const [allModels, setAllModels] = useState<AIModel[]>([])
   const [allExchanges, setAllExchanges] = useState<Exchange[]>([])
   const [supportedModels, setSupportedModels] = useState<AIModel[]>([])
@@ -1388,6 +1392,21 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
                     </button>
 
                     <button
+                      onClick={() => {
+                        setSettingsTrader(trader)
+                        setShowSettingsModal(true)
+                      }}
+                      className="px-2 md:px-3 py-1.5 md:py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105 flex items-center gap-1 whitespace-nowrap"
+                      style={{
+                        background: 'rgba(132, 142, 156, 0.1)',
+                        color: '#848E9C',
+                      }}
+                      title={language === 'zh' ? '设置' : 'Settings'}
+                    >
+                      <Settings className="w-3 h-3 md:w-4 md:h-4" />
+                    </button>
+
+                    <button
                       onClick={() => handleDeleteTrader(trader.trader_id)}
                       className="px-2 md:px-3 py-1.5 md:py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105"
                       style={{
@@ -1485,6 +1504,24 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
             setEditingExchange(null)
           }}
           language={language}
+        />
+      )}
+
+      {/* Trader Settings Modal */}
+      {showSettingsModal && settingsTrader && (
+        <TraderSettingsModal
+          isOpen={showSettingsModal}
+          traderId={settingsTrader.trader_id}
+          traderName={settingsTrader.trader_name}
+          onClose={() => {
+            setShowSettingsModal(false)
+            setSettingsTrader(null)
+          }}
+          onSave={async (settings) => {
+            console.log('Trader settings:', settingsTrader.trader_id, settings)
+            // TODO: Save settings to backend when API is implemented
+            toast.success(language === 'zh' ? '设置已保存' : 'Settings saved')
+          }}
         />
       )}
     </div>

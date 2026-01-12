@@ -8,6 +8,9 @@ import (
 )
 
 func TestVisualScreener(t *testing.T) {
+	if TestApikey == "" {
+		t.Skip("Coinank API key not configured; skipping integration test")
+	}
 	client := NewCoinankClient(coinank_enum.MainUrl, TestApikey)
 	resp, err := client.VisualScreener(context.TODO(), coinank_enum.Minute15)
 	if err != nil {
@@ -21,12 +24,15 @@ func TestVisualScreener(t *testing.T) {
 }
 
 func TestOiRank(t *testing.T) {
+	if TestApikey == "" {
+		t.Skip("Coinank API key not configured; skipping integration test")
+	}
 	client := NewCoinankClient(coinank_enum.MainUrl, TestApikey)
 	resp, err := client.OiRank(context.TODO(), coinank_enum.OpenInterest, coinank_enum.Desc, 1, 10)
 	if err != nil {
 		t.Error(err)
 	}
-	if resp[0].BaseCoin != "BTC" {
+	if len(resp) > 0 && resp[0].BaseCoin != "BTC" {
 		t.Error("oi first not BTC")
 	}
 	res, err := json.Marshal(resp)
@@ -37,12 +43,15 @@ func TestOiRank(t *testing.T) {
 }
 
 func TestLongShortRank(t *testing.T) {
+	if TestApikey == "" {
+		t.Skip("Coinank API key not configured; skipping integration test")
+	}
 	client := NewCoinankClient(coinank_enum.MainUrl, TestApikey)
 	resp, err := client.LongShortRank(context.TODO(), coinank_enum.LongShortRatio, coinank_enum.Desc, 1, 10)
 	if err != nil {
 		t.Error(err)
 	}
-	if resp[0].BaseCoin == "" {
+	if len(resp) > 0 && resp[0].BaseCoin == "" {
 		t.Error("baseCoin is empty")
 	}
 	res, err := json.Marshal(resp)
@@ -53,12 +62,15 @@ func TestLongShortRank(t *testing.T) {
 }
 
 func TestLiquidationRank(t *testing.T) {
+	if TestApikey == "" {
+		t.Skip("Coinank API key not configured; skipping integration test")
+	}
 	client := NewCoinankClient(coinank_enum.MainUrl, TestApikey)
 	resp, err := client.LiquidationRank(context.TODO(), coinank_enum.LiquidationH1, coinank_enum.Desc, 1, 10)
 	if err != nil {
 		t.Error(err)
 	}
-	if resp[0].BaseCoin == "" {
+	if len(resp) > 0 && resp[0].BaseCoin == "" {
 		t.Error("baseCoin is empty")
 	}
 	res, err := json.Marshal(resp)

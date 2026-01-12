@@ -74,9 +74,10 @@ func NewAsterTraderTestSuite(t *testing.T) *AsterTraderTestSuite {
 			}
 			// Return different price based on symbol
 			price := "50000.00"
-			if symbol == "ETHUSDT" {
+			switch symbol {
+			case "ETHUSDT":
 				price = "3000.00"
-			} else if symbol == "INVALIDUSDT" {
+			case "INVALIDUSDT":
 				// Return error response
 				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]interface{}{
@@ -136,7 +137,9 @@ func NewAsterTraderTestSuite(t *testing.T) *AsterTraderTestSuite {
 			// Parse parameters from request to determine symbol
 			bodyBytes, _ := io.ReadAll(r.Body)
 			var orderParams map[string]interface{}
-			json.Unmarshal(bodyBytes, &orderParams)
+			if err := json.Unmarshal(bodyBytes, &orderParams); err != nil {
+				orderParams = make(map[string]interface{})
+			}
 
 			symbol := "BTCUSDT"
 			if s, ok := orderParams["symbol"].(string); ok {
@@ -184,7 +187,7 @@ func NewAsterTraderTestSuite(t *testing.T) *AsterTraderTestSuite {
 
 		// Serialize response
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(respBody)
+		_ = json.NewEncoder(w).Encode(respBody)
 	}))
 
 	// Generate a private key for testing

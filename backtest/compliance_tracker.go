@@ -130,10 +130,30 @@ func (ct *ComplianceTracker) CheckCompliance(cycle int, decision *decision.Decis
 func (ct *ComplianceTracker) evaluateRecommendation(rec string, dec *decision.Decision, feedback *FeedbackAnalysis) (bool, float64) {
 	recLower := strings.ToLower(rec)
 
+	// Use feedback patterns to adjust reward scaling
+	// If following patterns that led to success, increase rewards
+	rewardMultiplier := 1.0
+	if feedback != nil {
+		// Check if current decision aligns with success patterns
+		for _, pattern := range feedback.SuccessPatterns {
+			if pattern.AvgPnLPct > 0 && ct.decisionMatchesPattern(dec, pattern) {
+				rewardMultiplier = 1.5 // Boost reward for following winning patterns
+				break
+			}
+		}
+		// Check if current decision matches failure patterns (reduce reward)
+		for _, pattern := range feedback.FailurePatterns {
+			if pattern.AvgPnLPct < 0 && ct.decisionMatchesPattern(dec, pattern) {
+				rewardMultiplier = 0.7 // Reduce reward if still following losing patterns
+				break
+			}
+		}
+	}
+
 	// 1. Check leverage recommendations
 	if strings.Contains(recLower, "lower leverage") || strings.Contains(recLower, "reduce leverage") {
 		if dec.Leverage <= 3 {
-			return true, ct.config.RewardForCompliance
+			return true, ct.config.RewardForCompliance * rewardMultiplier
 		}
 		return false, ct.config.PenaltyForViolation
 	}
@@ -142,7 +162,7 @@ func (ct *ComplianceTracker) evaluateRecommendation(rec string, dec *decision.De
 	if strings.Contains(recLower, "reduce position size") || strings.Contains(recLower, "smaller position") {
 		// Position size is stored as PositionSizeUSD in Decision struct
 		if dec.PositionSizeUSD <= 200 {
-			return true, ct.config.RewardForCompliance
+			return true, ct.config.RewardForCompliance * rewardMultiplier
 		}
 		return false, ct.config.PenaltyForViolation
 	}
@@ -150,7 +170,7 @@ func (ct *ComplianceTracker) evaluateRecommendation(rec string, dec *decision.De
 	// 3. Check confidence recommendations
 	if strings.Contains(recLower, "70%+ confidence") || strings.Contains(recLower, "high-confidence") {
 		if dec.Confidence >= 70 {
-			return true, ct.config.RewardForCompliance
+			return true, ct.config.RewardForCompliance * rewardMultiplier
 		}
 		return false, ct.config.PenaltyForViolation
 	}
@@ -158,7 +178,7 @@ func (ct *ComplianceTracker) evaluateRecommendation(rec string, dec *decision.De
 	// 4. Check hold action recommendations (from overtrading pattern)
 	if strings.Contains(recLower, "reduce trading frequency") || strings.Contains(recLower, "reduce frequency") {
 		if dec.Action == "hold" {
-			return true, ct.config.RewardForCompliance
+			return true, ct.config.RewardForCompliance * rewardMultiplier
 		}
 		return false, ct.config.PenaltyForViolation
 	}
@@ -167,13 +187,13 @@ func (ct *ComplianceTracker) evaluateRecommendation(rec string, dec *decision.De
 	if strings.Contains(recLower, "discipline on stop-losses") || strings.Contains(recLower, "respect stop") {
 		// This would require tracking if stops were hit and followed
 		// For now, give partial credit if stop-loss is set
-		return true, ct.config.RewardForCompliance * 0.5 // Partial credit
+		return true, ct.config.RewardForCompliance * 0.5 * rewardMultiplier
 	}
 
 	// 6. Check selective trading
 	if strings.Contains(recLower, "selective trading") || strings.Contains(recLower, "only take trades") {
 		if dec.Action == "hold" || dec.Confidence >= 70 {
-			return true, ct.config.RewardForCompliance
+			return true, ct.config.RewardForCompliance * rewardMultiplier
 		}
 		return false, ct.config.PenaltyForViolation
 	}
@@ -182,11 +202,41 @@ func (ct *ComplianceTracker) evaluateRecommendation(rec string, dec *decision.De
 	if strings.Contains(recLower, "focus trading activity") || strings.Contains(recLower, "avoid trading during") {
 		// Extract hour from recommendation and compare
 		// For now, assume compliant
-		return true, ct.config.RewardForCompliance * 0.5
+		return true, ct.config.RewardForCompliance * 0.5 * rewardMultiplier
 	}
 
 	// Default: assume compliance if no specific violation detected
 	return true, 0.0
+}
+
+// decisionMatchesPattern checks if a decision aligns with a trading pattern
+func (ct *ComplianceTracker) decisionMatchesPattern(dec *decision.Decision, pattern TradingPattern) bool {
+	patternLower := strings.ToLower(pattern.PatternType)
+
+	// Match high leverage patterns
+	if strings.Contains(patternLower, "high_leverage") || strings.Contains(patternLower, "leverage") {
+		return dec.Leverage >= 5
+	}
+
+	// Match position size patterns
+	if strings.Contains(patternLower, "large_position") || strings.Contains(patternLower, "position_size") {
+		return dec.PositionSizeUSD >= 300
+	}
+
+	// Match confidence patterns
+	if strings.Contains(patternLower, "low_confidence") {
+		return dec.Confidence < 60
+	}
+	if strings.Contains(patternLower, "high_confidence") {
+		return dec.Confidence >= 70
+	}
+
+	// Match overtrading patterns
+	if strings.Contains(patternLower, "overtrading") || strings.Contains(patternLower, "frequency") {
+		return dec.Action != "hold" && dec.Action != "wait"
+	}
+
+	return false
 }
 
 // extractExpectation extracts what was expected from a recommendation

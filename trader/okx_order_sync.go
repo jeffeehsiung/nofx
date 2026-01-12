@@ -100,19 +100,20 @@ func (t *OKXTrader) GetTrades(startTime time.Time, limit int) ([]OKXTrade, error
 		posSide := strings.ToLower(fill.PosSide)
 		side := strings.ToLower(fill.Side)
 
-		if posSide == "long" {
+		switch posSide {
+		case "long":
 			if side == "buy" {
 				orderAction = "open_long"
 			} else {
 				orderAction = "close_long"
 			}
-		} else if posSide == "short" {
+		case "short":
 			if side == "sell" {
 				orderAction = "open_short"
 			} else {
 				orderAction = "close_short"
 			}
-		} else {
+		default:
 			// One-way mode (net position)
 			if side == "buy" {
 				orderAction = "open_long"

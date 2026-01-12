@@ -642,6 +642,15 @@ func (at *AutoTrader) checkMarketTriggers() bool {
 
 	if triggered && len(triggerReasons) > 0 {
 		logger.Infof("🚨 Market trigger detected: %s", strings.Join(triggerReasons, " | "))
+
+		// Publish market anomaly events to event bus
+		for _, reason := range triggerReasons {
+			at.publishMarketEvent(EventTypeMarketAnomaly, "", 0.8, map[string]interface{}{
+				"reason":    reason,
+				"timestamp": time.Now(),
+			})
+		}
+
 		return true
 	}
 
@@ -693,7 +702,9 @@ func (at *AutoTrader) runCycle() error {
 		logger.Infof("⏸ Risk control: Trading paused, remaining %.0f minutes", remaining.Minutes())
 		record.Success = false
 		record.ErrorMessage = fmt.Sprintf("Risk control paused, remaining %.0f minutes", remaining.Minutes())
-		at.saveDecision(record)
+		if err := at.saveDecision(record); err != nil {
+			logger.Infof("⚠️  Failed to save decision: %v", err)
+		}
 		return nil
 	}
 
@@ -707,12 +718,19 @@ func (at *AutoTrader) runCycle() error {
 	// 3. Check for order book triggers (Phase 1.3 - event-driven triggers)
 	at.checkOrderBookTriggers()
 
+	// 3.5. Check for market triggers (event-driven monitoring)
+	if at.checkMarketTriggers() {
+		logger.Info("🚨 Market trigger detected, proceeding with AI decision")
+	}
+
 	// 4. Collect trading context
 	ctx, err := at.buildTradingContext()
 	if err != nil {
 		record.Success = false
 		record.ErrorMessage = fmt.Sprintf("Failed to build trading context: %v", err)
-		at.saveDecision(record)
+		if saveErr := at.saveDecision(record); saveErr != nil {
+			logger.Infof("⚠️  Failed to save decision: %v", saveErr)
+		}
 		return fmt.Errorf("failed to build trading context: %w", err)
 	}
 
@@ -771,7 +789,9 @@ func (at *AutoTrader) runCycle() error {
 			}
 		}
 
-		at.saveDecision(record)
+		if saveErr := at.saveDecision(record); saveErr != nil {
+			logger.Infof("⚠️  Failed to save decision: %v", saveErr)
+		}
 		return fmt.Errorf("failed to get AI decision: %w", err)
 	}
 
@@ -1050,6 +1070,9 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 		CandidateCoins: candidateCoins,
 	}
 
+	// Surface current risk-control parameters to the prompt for live runs.
+	ctx.OptimizedWeights = decision.NewLiveOptimizedWeights(strategyConfig.RiskControl)
+
 	// 7. Add recent closed trades (if store is available)
 	if at.store != nil {
 		// Get recent 10 closed trades for AI context
@@ -1101,6 +1124,7 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 				AvgLoss:        stats.AvgLoss,
 				MaxDrawdownPct: stats.MaxDrawdownPct,
 			}
+			ctx.PerformanceFeedback = decision.NewLivePerformanceFeedback(stats)
 			logger.Infof("📈 [%s] Trading stats: %d trades, %.1f%% win rate, PF=%.2f, Sharpe=%.2f, DD=%.1f%%",
 				at.name, stats.TotalTrades, stats.WinRate, stats.ProfitFactor, stats.SharpeRatio, stats.MaxDrawdownPct)
 		}
@@ -1136,6 +1160,13 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 		if ctx.OIRankingData != nil {
 			logger.Infof("📊 [%s] OI ranking data ready: %d top, %d low positions",
 				at.name, len(ctx.OIRankingData.TopPositions), len(ctx.OIRankingData.LowPositions))
+		}
+	}
+
+	// Update market data monitors with fresh data
+	if ctx.MarketDataMap != nil {
+		for _, marketData := range ctx.MarketDataMap {
+			at.updateMarketData(marketData)
 		}
 	}
 
@@ -1595,6 +1626,16 @@ func (at *AutoTrader) GetName() string {
 	return at.name
 }
 
+// GetStrategyEngine returns the active strategy engine.
+func (at *AutoTrader) GetStrategyEngine() *decision.StrategyEngine {
+	return at.strategyEngine
+}
+
+// BuildContextSnapshot builds the current trading context without executing a cycle.
+func (at *AutoTrader) BuildContextSnapshot() (*decision.Context, error) {
+	return at.buildTradingContext()
+}
+
 // GetAIModel gets AI model
 func (at *AutoTrader) GetAIModel() string {
 	return at.aiModel
@@ -2009,10 +2050,6 @@ func (at *AutoTrader) checkPositionDrawdown() {
 		side := pos["side"].(string)
 		entryPrice := pos["entryPrice"].(float64)
 		markPrice := pos["markPrice"].(float64)
-		quantity := pos["positionAmt"].(float64)
-		if quantity < 0 {
-			quantity = -quantity // Short position quantity is negative, convert to positive
-		}
 
 		// Calculate current P&L percentage
 		leverage := int(config.DefaultMaxLeverage) // Default value
@@ -2301,14 +2338,8 @@ func (at *AutoTrader) createOrderRecord(orderID, symbol, action, positionSide st
 	// Determine order type (market for auto trader)
 	orderType := "MARKET"
 
-	// Determine side (BUY/SELL)
-	var side string
-	switch action {
-	case "open_long", "close_short":
-		side = "BUY"
-	case "open_short", "close_long":
-		side = "SELL"
-	}
+	// Determine side (BUY/SELL) using utility function
+	side := getSideFromAction(action)
 
 	// Use action as orderAction directly (keep lowercase format)
 	orderAction := action
