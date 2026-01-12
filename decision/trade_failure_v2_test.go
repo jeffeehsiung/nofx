@@ -9,12 +9,12 @@ import (
 func TestIsChasing(t *testing.T) {
 	tests := []struct {
 		name         string
-			order        *RecentOrder
+		order        *RecentOrder
 		shouldDetect bool
 	}{
 		{
 			name: "High slippage exceeds budget",
-					   order: &RecentOrder{
+			order: &RecentOrder{
 				EntrySlippage:       0.08,
 				EntrySlippageBudget: 0.03,
 				EntryFillTime:       1000,
@@ -24,7 +24,7 @@ func TestIsChasing(t *testing.T) {
 		},
 		{
 			name: "Normal execution",
-					   order: &RecentOrder{
+			order: &RecentOrder{
 				EntrySlippage:       0.01,
 				EntrySlippageBudget: 0.03,
 				EntryFillTime:       200,
@@ -53,7 +53,7 @@ func TestIsFalseBreakout(t *testing.T) {
 	}{
 		{
 			name: "No volume confirmation",
-			   order: &RecentOrder{
+			order: &RecentOrder{
 				VolumeAtEntry:  0.85,
 				OIDeltaAtEntry: 0.02,
 			},
@@ -61,7 +61,7 @@ func TestIsFalseBreakout(t *testing.T) {
 		},
 		{
 			name: "Strong confirmation",
-			   order: &RecentOrder{
+			order: &RecentOrder{
 				VolumeAtEntry:  1.35,
 				OIDeltaAtEntry: 0.25,
 			},
@@ -71,7 +71,7 @@ func TestIsFalseBreakout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-					   result := isFalseBreakout(tt.order)
+			result := isFalseBreakout(tt.order)
 			if result != tt.shouldDetect {
 				t.Errorf("expected %v, got %v", tt.shouldDetect, result)
 			}
@@ -88,14 +88,14 @@ func TestIsStopTooTight(t *testing.T) {
 	}{
 		{
 			name: "Stop way too tight",
-			   order: &RecentOrder{
+			order: &RecentOrder{
 				StopDistanceVsATR: 0.8,
 			},
 			shouldDetect: true,
 		},
 		{
 			name: "Stop at minimum",
-			   order: &RecentOrder{
+			order: &RecentOrder{
 				StopDistanceVsATR: 1.5,
 			},
 			shouldDetect: false,
@@ -123,12 +123,12 @@ func TestIsStopTooTight(t *testing.T) {
 func TestIsMomentumDecay(t *testing.T) {
 	tests := []struct {
 		name         string
-			order        *RecentOrder
+		order        *RecentOrder
 		shouldDetect bool
 	}{
 		{
 			name: "Both volume and OI collapse",
-					   order: &RecentOrder{
+			order: &RecentOrder{
 				VolumeDeltaDuringTrade: -0.40,
 				OIDeltaDuringTrade:     -0.25,
 			},
@@ -136,7 +136,7 @@ func TestIsMomentumDecay(t *testing.T) {
 		},
 		{
 			name: "Strong momentum sustained",
-					   order: &RecentOrder{
+			order: &RecentOrder{
 				VolumeDeltaDuringTrade: 0.10,
 				OIDeltaDuringTrade:     0.18,
 			},
@@ -158,12 +158,12 @@ func TestIsMomentumDecay(t *testing.T) {
 func TestIsLiquidityDried(t *testing.T) {
 	tests := []struct {
 		name         string
-			order        *RecentOrder
+		order        *RecentOrder
 		shouldDetect bool
 	}{
 		{
 			name: "Severe spread and depth deterioration",
-					   order: &RecentOrder{
+			order: &RecentOrder{
 				EntrySpread: 0.01,
 				ExitSpread:  0.04,
 				EntryDepth:  1000000,
@@ -173,7 +173,7 @@ func TestIsLiquidityDried(t *testing.T) {
 		},
 		{
 			name: "Stable conditions",
-					   order: &RecentOrder{
+			order: &RecentOrder{
 				EntrySpread: 0.02,
 				ExitSpread:  0.022,
 				EntryDepth:  250000,
@@ -274,41 +274,41 @@ func TestAnalyzeFailedTrade(t *testing.T) {
 	}{
 		{
 			name: "Clear chasing case",
-			   order: &RecentOrder{
+			order: &RecentOrder{
 				EntrySlippage:       0.09,
 				EntrySlippageBudget: 0.02,
 				EntryFillTime:       3000,
 				SignalTime:          100,
 				RealizedPnL:         -100,
 			},
-			   expectReason:  ReasonChasingEntry,
+			expectReason:  ReasonChasingEntry,
 			minConfidence: 0.7,
 		},
 		{
 			name: "False breakout case",
-			   order: &RecentOrder{
+			order: &RecentOrder{
 				VolumeAtEntry:     0.70,
 				OIDeltaAtEntry:    0.05,
-				RealizedPnL:             -50,
-				StopDistanceVsATR:       2.0, // avoid being flagged as stop too tight
+				RealizedPnL:       -50,
+				StopDistanceVsATR: 2.0, // avoid being flagged as stop too tight
 			},
-			   expectReason:  ReasonFalseBreakoutV2,
+			expectReason:  ReasonFalseBreakoutV2,
 			minConfidence: 0.7,
 		},
 		{
 			name: "Stop too tight case",
-			   order: &RecentOrder{
+			order: &RecentOrder{
 				StopDistanceVsATR: 0.7,
 				RealizedPnL:       -30,
 			},
-			   expectReason:  ReasonStopTooTight,
+			expectReason:  ReasonStopTooTight,
 			minConfidence: 0.7,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-					   result := AnalyzeFailedTrade(tt.order)
+			result := AnalyzeFailedTrade(tt.order)
 
 			if result == nil {
 				t.Errorf("analysis returned nil")

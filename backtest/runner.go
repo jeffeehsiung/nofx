@@ -77,6 +77,11 @@ type Runner struct {
 	// Position excursion tracking for MFE/MAE analysis
 	excursionsMu sync.RWMutex
 	excursions   map[string]*positionExcursion
+
+	// SMART 1.2 & 1.4: Symbol stats and model performance tracking
+	symbolStatsMu    sync.RWMutex
+	symbolStats      map[string]*SymbolStats // Track win rates per symbol
+	modelPerformance *ModelPerformance       // Track model drift for confidence thresholds
 }
 
 // positionExcursion tracks maximum favorable/adverse excursion for open positions
@@ -178,6 +183,9 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 		factorOptimizer:   factorOptimizer,
 		complianceTracker: complianceTracker,
 		excursions:        make(map[string]*positionExcursion),
+		// SMART: Initialize tracking fields for adaptive position sizing and confidence thresholds
+		symbolStats:      make(map[string]*SymbolStats),
+		modelPerformance: &ModelPerformance{},
 	}
 
 	if err := r.initLock(); err != nil {
@@ -222,19 +230,19 @@ func (r *Runner) lockHeartbeatLoop() {
 func (r *Runner) captureMicrostructure(symbol string, basePrice, execPrice float64, signalTs int64, marketData *market.Data) (float64, float64, int64, int64, float64) {
 	// Calculate spread from actual market microstructure
 	spread := calculateActualSpread(marketData, basePrice)
-	
+
 	// Calculate depth from actual volume data
 	depth := calculateMarketDepth(marketData, basePrice)
-	
+
 	// Signal time = when decision was made
 	signalTime := signalTs
-	
+
 	// Fill time = simulated execution time (immediate in backtest)
 	fillTime := signalTs
-	
+
 	// Calculate slippage budget based on actual spread and volatility
 	slippageBudget := calculateSlippageBudget(spread, marketData)
-	
+
 	return spread, depth, signalTime, fillTime, slippageBudget
 }
 
@@ -244,7 +252,7 @@ func calculateActualSpread(data *market.Data, currentPrice float64) float64 {
 	if data == nil || currentPrice <= 0 {
 		return 0
 	}
-	
+
 	// Try to get spread from recent 1m candles (most granular)
 	if data.TimeframeData != nil {
 		if tfData, ok := data.TimeframeData["1m"]; ok && len(tfData.Klines) > 0 {
@@ -274,13 +282,13 @@ func calculateActualSpread(data *market.Data, currentPrice float64) float64 {
 			}
 		}
 	}
-	
+
 	// Fallback: use ATR as spread proxy
 	atr := calculateATRFromSeries(data)
 	if atr > 0 && currentPrice > 0 {
 		return atr / currentPrice
 	}
-	
+
 	return 0
 }
 
@@ -290,7 +298,7 @@ func calculateMarketDepth(data *market.Data, currentPrice float64) float64 {
 	if data == nil || currentPrice <= 0 {
 		return 0
 	}
-	
+
 	// Use recent volume as proxy for depth
 	// Assumption: Market depth ≈ 10-20x average 1-minute volume for liquid markets
 	if data.IntradaySeries != nil && len(data.IntradaySeries.Volume) > 0 {
@@ -312,7 +320,7 @@ func calculateMarketDepth(data *market.Data, currentPrice float64) float64 {
 			return avgVolume * currentPrice * 15.0
 		}
 	}
-	
+
 	// Fallback: try timeframe volume data
 	if data.TimeframeData != nil {
 		if tfData, ok := data.TimeframeData["1m"]; ok && len(tfData.Klines) > 0 {
@@ -332,7 +340,7 @@ func calculateMarketDepth(data *market.Data, currentPrice float64) float64 {
 			}
 		}
 	}
-	
+
 	return 0
 }
 
@@ -342,10 +350,10 @@ func calculateSlippageBudget(spread float64, data *market.Data) float64 {
 	if spread <= 0 {
 		return 0
 	}
-	
+
 	// Base budget: 2x spread
 	budget := spread * 2.0
-	
+
 	// Adjust for volatility regime
 	if data != nil {
 		atr := calculateATRFromSeries(data)
@@ -354,13 +362,13 @@ func calculateSlippageBudget(spread float64, data *market.Data) float64 {
 			// High volatility (>5% ATR): increase budget by 50%
 			if atrPct > 0.05 {
 				budget *= 1.5
-			// Very low volatility (<1% ATR): decrease budget by 30%
+				// Very low volatility (<1% ATR): decrease budget by 30%
 			} else if atrPct < 0.01 {
 				budget *= 0.7
 			}
 		}
 	}
-	
+
 	return budget
 }
 
@@ -379,7 +387,7 @@ func (r *Runner) releaseLock() {
 func (r *Runner) initExcursion(symbol, side string, entryPrice float64, entryTime int64) {
 	r.excursionsMu.Lock()
 	defer r.excursionsMu.Unlock()
-	
+
 	key := positionKey(symbol, side)
 	r.excursions[key] = &positionExcursion{
 		entryPrice:   entryPrice,
@@ -395,7 +403,7 @@ func (r *Runner) initExcursion(symbol, side string, entryPrice float64, entryTim
 func (r *Runner) trackExcursions(priceMap map[string]float64, ts int64) {
 	r.excursionsMu.Lock()
 	defer r.excursionsMu.Unlock()
-	
+
 	positions := r.account.Positions()
 	for _, pos := range positions {
 		key := positionKey(pos.Symbol, pos.Side)
@@ -411,12 +419,12 @@ func (r *Runner) trackExcursions(priceMap map[string]float64, ts int64) {
 			}
 			r.excursions[key] = exc
 		}
-		
+
 		currentPrice := priceMap[pos.Symbol]
 		if currentPrice <= 0 {
 			continue
 		}
-		
+
 		// Calculate unrealized PnL in USD
 		var unrealizedPnL float64
 		if pos.Side == "long" {
@@ -424,7 +432,7 @@ func (r *Runner) trackExcursions(priceMap map[string]float64, ts int64) {
 		} else {
 			unrealizedPnL = (pos.EntryPrice - currentPrice) * pos.Quantity
 		}
-		
+
 		// Update MFE/MAE
 		if unrealizedPnL > exc.maxFavorable {
 			exc.maxFavorable = unrealizedPnL
@@ -432,7 +440,7 @@ func (r *Runner) trackExcursions(priceMap map[string]float64, ts int64) {
 		if unrealizedPnL < exc.maxAdverse {
 			exc.maxAdverse = unrealizedPnL
 		}
-		
+
 		exc.lastUpdate = ts
 	}
 }
@@ -442,19 +450,19 @@ func (r *Runner) trackExcursions(priceMap map[string]float64, ts int64) {
 func (r *Runner) getExcursion(symbol, side string) (mfe, mae float64) {
 	r.excursionsMu.Lock()
 	defer r.excursionsMu.Unlock()
-	
+
 	key := positionKey(symbol, side)
 	exc, exists := r.excursions[key]
 	if !exists {
 		return 0, 0
 	}
-	
+
 	mfe = exc.maxFavorable
 	mae = exc.maxAdverse
-	
+
 	// Clean up - position is closing
 	delete(r.excursions, key)
-	
+
 	return mfe, mae
 }
 
@@ -948,7 +956,19 @@ func (r *Runner) executeDecision(dec decision.Decision, priceMap map[string]floa
 
 	switch dec.Action {
 	case "open_long":
-		qty := r.determineQuantity(dec, basePrice)
+		// Get market data for this symbol
+		marketData, _, _ := r.feed.BuildMarketData(ts)
+		symbolMarketData := marketData[symbol]
+
+		// Use market-aware position sizing if feature flag enabled
+		var qty float64
+		if r.cfg.UseSmartHeuristics {
+			// SMART 1.1-1.4: Use market-aware position sizing with smart heuristics
+			qty = r.determineQuantityWithMarketData(dec, basePrice, symbolMarketData)
+		} else {
+			// Legacy position sizing (hardcoded defaults)
+			qty = r.determineQuantity(dec, basePrice)
+		}
 		if qty <= 0 {
 			return actionRecord, nil, "", fmt.Errorf("invalid qty")
 		}
@@ -956,46 +976,54 @@ func (r *Runner) executeDecision(dec decision.Decision, priceMap map[string]floa
 		if err != nil {
 			return actionRecord, nil, "", err
 		}
-		
+
 		// Initialize excursion tracking for this position
 		r.initExcursion(symbol, "long", execPrice, ts)
-		
+
 		actionRecord.Quantity = qty
 		actionRecord.Price = execPrice
 		actionRecord.Leverage = pos.Leverage
-		
-		// Get market data for this symbol
-		marketData, _, _ := r.feed.BuildMarketData(ts)
-		symbolMarketData := marketData[symbol]
-		
+
 		// Capture microstructure data for Trade Failure V2 analysis
 		spread, depth, signalTime, fillTime, slippageBudget := r.captureMicrostructure(symbol, basePrice, execPrice, ts, symbolMarketData)
-		
+
 		trade := TradeEvent{
-			Timestamp:       ts,
-			Symbol:          symbol,
-			Action:          dec.Action,
-			Side:            "long",
-			Quantity:        qty,
-			Price:           execPrice,
-			Fee:             fee,
-			Slippage:        execPrice - basePrice,
-			OrderValue:      execPrice * qty,
-			RealizedPnL:     0,
-			Leverage:        pos.Leverage,
-			Cycle:           cycle,
-			PositionAfter:   pos.Quantity,
+			Timestamp:     ts,
+			Symbol:        symbol,
+			Action:        dec.Action,
+			Side:          "long",
+			Quantity:      qty,
+			Price:         execPrice,
+			Fee:           fee,
+			Slippage:      execPrice - basePrice,
+			OrderValue:    execPrice * qty,
+			RealizedPnL:   0,
+			Leverage:      pos.Leverage,
+			Cycle:         cycle,
+			PositionAfter: pos.Quantity,
 			// Microstructure fields
-			Spread:          spread,
-			Depth:           depth,
-			SignalTime:      signalTime,
-			FillTime:        fillTime,
-			SlippageBudget:  slippageBudget,
+			Spread:         spread,
+			Depth:          depth,
+			SignalTime:     signalTime,
+			FillTime:       fillTime,
+			SlippageBudget: slippageBudget,
 		}
 		return actionRecord, []TradeEvent{trade}, "", nil
 
 	case "open_short":
-		qty := r.determineQuantity(dec, basePrice)
+		// Get market data for this symbol
+		marketData, _, _ := r.feed.BuildMarketData(ts)
+		symbolMarketData := marketData[symbol]
+
+		// Use market-aware position sizing if feature flag enabled
+		var qty float64
+		if r.cfg.UseSmartHeuristics {
+			// SMART 1.1-1.4: Use market-aware position sizing with smart heuristics
+			qty = r.determineQuantityWithMarketData(dec, basePrice, symbolMarketData)
+		} else {
+			// Legacy position sizing (hardcoded defaults)
+			qty = r.determineQuantity(dec, basePrice)
+		}
 		if qty <= 0 {
 			return actionRecord, nil, "", fmt.Errorf("invalid qty")
 		}
@@ -1003,41 +1031,37 @@ func (r *Runner) executeDecision(dec decision.Decision, priceMap map[string]floa
 		if err != nil {
 			return actionRecord, nil, "", err
 		}
-		
+
 		// Initialize excursion tracking for this position
 		r.initExcursion(symbol, "short", execPrice, ts)
-		
+
 		actionRecord.Quantity = qty
 		actionRecord.Price = execPrice
 		actionRecord.Leverage = pos.Leverage
-		
-		// Get market data for this symbol
-		marketData, _, _ := r.feed.BuildMarketData(ts)
-		symbolMarketData := marketData[symbol]
-		
+
 		// Capture microstructure data for Trade Failure V2 analysis
 		spread, depth, signalTime, fillTime, slippageBudget := r.captureMicrostructure(symbol, basePrice, execPrice, ts, symbolMarketData)
-		
+
 		trade := TradeEvent{
-			Timestamp:       ts,
-			Symbol:          symbol,
-			Action:          dec.Action,
-			Side:            "short",
-			Quantity:        qty,
-			Price:           execPrice,
-			Fee:             fee,
-			Slippage:        basePrice - execPrice,
-			OrderValue:      execPrice * qty,
-			RealizedPnL:     0,
-			Leverage:        pos.Leverage,
-			Cycle:           cycle,
-			PositionAfter:   pos.Quantity,
+			Timestamp:     ts,
+			Symbol:        symbol,
+			Action:        dec.Action,
+			Side:          "short",
+			Quantity:      qty,
+			Price:         execPrice,
+			Fee:           fee,
+			Slippage:      basePrice - execPrice,
+			OrderValue:    execPrice * qty,
+			RealizedPnL:   0,
+			Leverage:      pos.Leverage,
+			Cycle:         cycle,
+			PositionAfter: pos.Quantity,
 			// Microstructure fields
-			Spread:          spread,
-			Depth:           depth,
-			SignalTime:      signalTime,
-			FillTime:        fillTime,
-			SlippageBudget:  slippageBudget,
+			Spread:         spread,
+			Depth:          depth,
+			SignalTime:     signalTime,
+			FillTime:       fillTime,
+			SlippageBudget: slippageBudget,
 		}
 		return actionRecord, []TradeEvent{trade}, "", nil
 
@@ -1051,41 +1075,44 @@ func (r *Runner) executeDecision(dec decision.Decision, priceMap map[string]floa
 		if err != nil {
 			return actionRecord, nil, "", err
 		}
-		
+
+		// SMART 1.2: Record trade outcome for adaptive position sizing
+		r.recordTradeOutcome(symbol, realized-fee)
+
 		// Capture MFE/MAE before removing excursion tracking
 		mfe, mae := r.getExcursion(symbol, "long")
-		
+
 		actionRecord.Quantity = qty
 		actionRecord.Price = execPrice
 		actionRecord.Leverage = posLev
-		
+
 		// Get market data for this symbol
 		marketData, _, _ := r.feed.BuildMarketData(ts)
 		symbolMarketData := marketData[symbol]
-		
+
 		// Capture microstructure data for Trade Failure V2 analysis
 		spread, depth, signalTime, fillTime, slippageBudget := r.captureMicrostructure(symbol, basePrice, execPrice, ts, symbolMarketData)
-		
+
 		trade := TradeEvent{
-			Timestamp:       ts,
-			Symbol:          symbol,
-			Action:          dec.Action,
-			Side:            "long",
-			Quantity:        qty,
-			Price:           execPrice,
-			Fee:             fee,
-			Slippage:        basePrice - execPrice,
-			OrderValue:      execPrice * qty,
-			RealizedPnL:     realized - fee,
-			Leverage:        posLev,
-			Cycle:           cycle,
-			PositionAfter:   r.remainingPosition(symbol, "long"),
+			Timestamp:     ts,
+			Symbol:        symbol,
+			Action:        dec.Action,
+			Side:          "long",
+			Quantity:      qty,
+			Price:         execPrice,
+			Fee:           fee,
+			Slippage:      basePrice - execPrice,
+			OrderValue:    execPrice * qty,
+			RealizedPnL:   realized - fee,
+			Leverage:      posLev,
+			Cycle:         cycle,
+			PositionAfter: r.remainingPosition(symbol, "long"),
 			// Microstructure fields
-			Spread:          spread,
-			Depth:           depth,
-			SignalTime:      signalTime,
-			FillTime:        fillTime,
-			SlippageBudget:  slippageBudget,
+			Spread:         spread,
+			Depth:          depth,
+			SignalTime:     signalTime,
+			FillTime:       fillTime,
+			SlippageBudget: slippageBudget,
 			// Excursion tracking
 			MaxFavorableExcursion: mfe,
 			MaxAdverseExcursion:   mae,
@@ -1102,41 +1129,44 @@ func (r *Runner) executeDecision(dec decision.Decision, priceMap map[string]floa
 		if err != nil {
 			return actionRecord, nil, "", err
 		}
-		
+
+		// SMART 1.2: Record trade outcome for adaptive position sizing
+		r.recordTradeOutcome(symbol, realized-fee)
+
 		// Capture MFE/MAE before removing excursion tracking
 		mfe, mae := r.getExcursion(symbol, "short")
-		
+
 		actionRecord.Quantity = qty
 		actionRecord.Price = execPrice
 		actionRecord.Leverage = posLev
-		
+
 		// Get market data for this symbol
 		marketData, _, _ := r.feed.BuildMarketData(ts)
 		symbolMarketData := marketData[symbol]
-		
+
 		// Capture microstructure data for Trade Failure V2 analysis
 		spread, depth, signalTime, fillTime, slippageBudget := r.captureMicrostructure(symbol, basePrice, execPrice, ts, symbolMarketData)
-		
+
 		trade := TradeEvent{
-			Timestamp:       ts,
-			Symbol:          symbol,
-			Action:          dec.Action,
-			Side:            "short",
-			Quantity:        qty,
-			Price:           execPrice,
-			Fee:             fee,
-			Slippage:        execPrice - basePrice,
-			OrderValue:      execPrice * qty,
-			RealizedPnL:     realized - fee,
-			Leverage:        posLev,
-			Cycle:           cycle,
-			PositionAfter:   r.remainingPosition(symbol, "short"),
+			Timestamp:     ts,
+			Symbol:        symbol,
+			Action:        dec.Action,
+			Side:          "short",
+			Quantity:      qty,
+			Price:         execPrice,
+			Fee:           fee,
+			Slippage:      execPrice - basePrice,
+			OrderValue:    execPrice * qty,
+			RealizedPnL:   realized - fee,
+			Leverage:      posLev,
+			Cycle:         cycle,
+			PositionAfter: r.remainingPosition(symbol, "short"),
 			// Microstructure fields
-			Spread:          spread,
-			Depth:           depth,
-			SignalTime:      signalTime,
-			FillTime:        fillTime,
-			SlippageBudget:  slippageBudget,
+			Spread:         spread,
+			Depth:          depth,
+			SignalTime:     signalTime,
+			FillTime:       fillTime,
+			SlippageBudget: slippageBudget,
 			// Excursion tracking
 			MaxFavorableExcursion: mfe,
 			MaxAdverseExcursion:   mae,
@@ -1160,18 +1190,24 @@ func (r *Runner) determineQuantity(dec decision.Decision, price float64) float64
 	// Get leverage for this symbol
 	leverage := r.resolveLeverage(dec.Leverage, dec.Symbol)
 	if leverage <= 0 {
-		leverage = 5
+		// SMART 1.1: Dynamic leverage based on market conditions
+		// TODO: Replace with: leverage = CalculateOptimalLeverage(dec.Symbol, marketData, equity)
+		leverage = 5 // Current fallback; volatility-aware version coming
 	}
 
-	// Calculate available margin (leave some buffer for fees)
+	// Calculate available margin
 	availableCash := r.account.Cash()
-	maxMarginToUse := availableCash * 0.9 // Use max 90% of available cash
+	// SMART 1.4: Smart margin allowance - currently static 90%
+	// TODO: Replace with: marginBudget := CalculateMaxMarginAllowance(snapshot, marketData)
+	maxMarginBudget := 0.9 // Will be market-aware (drawdown, position count, volatility adjusted)
+	maxMarginToUse := availableCash * maxMarginBudget
 	maxPositionValue := maxMarginToUse * float64(leverage)
 
 	sizeUSD := dec.PositionSizeUSD
 	if sizeUSD <= 0 {
-		// Default to 5% of equity, but cap to available margin
-		sizeUSD = 0.05 * equity
+		// SMART 1.2: Adaptive position sizing based on account state and market conditions
+		// TODO: Replace with: sizeUSD := CalculateAdaptivePositionSize(dec.Symbol, dec.Confidence, snapshot, marketData, recentStats)
+		sizeUSD = 0.05 * equity // Current 5% default; will become market-aware
 	}
 
 	// Cap position size to what we can actually afford
@@ -1186,6 +1222,106 @@ func (r *Runner) determineQuantity(dec decision.Decision, price float64) float64
 		qty = 0
 	}
 	return qty
+}
+
+// determineQuantityWithMarketData calculates position size using smart heuristics (SMART 1.1-1.4)
+// This is the market-aware version that will eventually replace determineQuantity
+func (r *Runner) determineQuantityWithMarketData(dec decision.Decision, price float64, marketData *market.Data) float64 {
+	snapshot := r.snapshotState()
+	equity := snapshot.Equity
+	if equity <= 0 {
+		equity = r.account.InitialBalance()
+	}
+
+	// Convert BacktestState to AccountSnapshot for smart heuristics
+	accountSnapshot := r.snapshotToAccountSnapshot(snapshot)
+
+	// SMART 1.1: Dynamic leverage based on volatility and symbol
+	var leverage int
+	if dec.Leverage > 0 {
+		leverage = dec.Leverage
+	} else if marketData != nil {
+		leverage = CalculateOptimalLeverage(dec.Symbol, marketData, equity)
+	} else {
+		leverage = r.resolveLeverage(0, dec.Symbol)
+		if leverage <= 0 {
+			leverage = 5
+		}
+	}
+
+	// Calculate available margin
+	availableCash := r.account.Cash()
+
+	// SMART 1.4: Smart margin allowance based on account state and volatility
+	var maxMarginBudget float64
+	if marketData != nil {
+		maxMarginBudget = CalculateMaxMarginAllowance(accountSnapshot, marketData)
+	} else {
+		maxMarginBudget = 0.9 // Fallback to default
+	}
+
+	maxMarginToUse := availableCash * maxMarginBudget
+	maxPositionValue := maxMarginToUse * float64(leverage)
+
+	// SMART 1.2: Adaptive position sizing
+	var sizeUSD float64
+	if dec.PositionSizeUSD > 0 {
+		sizeUSD = dec.PositionSizeUSD
+	} else {
+		// Get symbol stats for position sizing decision
+		symbolStats := r.getSymbolStats(dec.Symbol)
+
+		if marketData != nil {
+			sizeUSD = CalculateAdaptivePositionSize(
+				dec.Symbol,
+				dec.Confidence,
+				accountSnapshot,
+				marketData,
+				symbolStats,
+			)
+		} else {
+			// Fallback to 5% default
+			sizeUSD = 0.05 * equity
+		}
+	}
+
+	// Cap position size to what we can actually afford
+	if sizeUSD > maxPositionValue {
+		logger.Debugf("📊 Backtest: capping smart position from %.2f to %.2f (leverage: %dx)",
+			sizeUSD, maxPositionValue, leverage)
+		sizeUSD = maxPositionValue
+	}
+
+	qty := sizeUSD / price
+	if qty < 0 {
+		qty = 0
+	}
+	return qty
+}
+
+// snapshotToAccountSnapshot converts BacktestState to AccountSnapshot for smart heuristics
+func (r *Runner) snapshotToAccountSnapshot(state BacktestState) *AccountSnapshot {
+	positions := make([]PositionSnapshot, 0, len(state.Positions))
+	for _, pos := range state.Positions {
+		positions = append(positions, pos)
+	}
+
+	// Calculate current drawdown
+	initialEquity := r.cfg.InitialBalance
+	currentDrawdown := state.Equity - state.MaxEquity
+	if state.MaxEquity <= 0 {
+		currentDrawdown = 0
+	}
+
+	return &AccountSnapshot{
+		Equity:          state.Equity,
+		Cash:            state.Cash,
+		Positions:       positions,
+		CurrentDrawdown: currentDrawdown,
+		MaxDrawdown:     state.MinEquity - initialEquity,
+		DailyPnL:        state.RealizedPnL, // Simplified - would need actual daily tracking
+		RecentTrades:    []TradeRecord{},   // TODO: Implement recent trade tracking
+	}
 }
 
 func (r *Runner) determineCloseQuantity(symbol, side string, dec decision.Decision) float64 {
@@ -1637,6 +1773,56 @@ func (r *Runner) snapshotState() BacktestState {
 		copyState.Positions[k] = v
 	}
 	return copyState
+}
+
+// recordTradeOutcome records a trade result for symbol performance tracking (SMART 1.2)
+// Note: Extended tracking of symbol statistics for position sizing decisions
+func (r *Runner) recordTradeOutcome(symbol string, pnl float64) {
+	r.symbolStatsMu.Lock()
+	defer r.symbolStatsMu.Unlock()
+
+	if _, exists := r.symbolStats[symbol]; !exists {
+		r.symbolStats[symbol] = &SymbolStats{
+			WinRate:    0.5, // Default 50%
+			AvgProfit:  0,
+			MaxLoss:    0,
+			SampleSize: 0,
+		}
+	}
+
+	stats := r.symbolStats[symbol]
+	stats.SampleSize++
+
+	if pnl > 0 {
+		// Update win rate using weighted average
+		stats.WinRate = (stats.WinRate*(float64(stats.SampleSize-1)) + 1.0) / float64(stats.SampleSize)
+		stats.AvgProfit = (stats.AvgProfit*(float64(stats.SampleSize-1)) + pnl) / float64(stats.SampleSize)
+	} else if pnl < 0 {
+		// Update win rate using weighted average
+		stats.WinRate = (stats.WinRate * float64(stats.SampleSize-1)) / float64(stats.SampleSize)
+		if pnl < stats.MaxLoss {
+			stats.MaxLoss = pnl
+		}
+	}
+}
+
+// getSymbolStats returns statistics for a symbol, used in position sizing calculations
+func (r *Runner) getSymbolStats(symbol string) *SymbolStats {
+	r.symbolStatsMu.RLock()
+	defer r.symbolStatsMu.RUnlock()
+
+	if stats, exists := r.symbolStats[symbol]; exists {
+		return stats
+	}
+	// Return empty stats with 50% default win rate if symbol not yet tracked
+	return &SymbolStats{WinRate: 0.5, SampleSize: 0}
+}
+
+// recordPredictionOutcome records model prediction accuracy for drift detection (SMART 2.2)
+func (r *Runner) recordPredictionOutcome(symbol string, correct bool) {
+	if r.modelPerformance != nil {
+		r.modelPerformance.RecordPrediction(symbol, correct)
+	}
 }
 
 func (r *Runner) persistMetadata() {

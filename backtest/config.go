@@ -55,6 +55,9 @@ type BacktestConfig struct {
 	CheckpointIntervalSeconds int    `json:"checkpoint_interval_seconds,omitempty"`
 	ReplayDecisionDir         string `json:"replay_decision_dir,omitempty"`
 
+	// Feature flags for A/B testing and gradual rollout
+	UseSmartHeuristics bool `json:"use_smart_heuristics"` // SMART 1.1-1.4: Use market-aware position sizing (default: false for backward compatibility)
+
 	// Internal: loaded strategy config (set by Manager when StrategyID is provided)
 	loadedStrategy *store.StrategyConfig `json:"-"`
 }

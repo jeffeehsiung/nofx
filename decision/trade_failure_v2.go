@@ -80,24 +80,24 @@ func AnalyzeFailedTrade(order *RecentOrder) *FailedTradeAnalysis {
 		confidence float64
 	}{
 		// High confidence, highly specific rules (check first)
-			   {isChasing, ReasonChasingEntry, 0.90},
-			   {isLateExitGiveBack, ReasonLateExitGiveBack, 0.88},
-			   {isStopTooTight, ReasonStopTooTight, 0.88},
-			   {isMomentumDecay, ReasonMomentumDecay, 0.85},
-			   {isFalseBreakout, ReasonFalseBreakoutV2, 0.85},
-			   {isLiquidityDried, ReasonLiquidityDried, 0.83},
-			   {isPrematureEntry, ReasonPrematureEntry, 0.82},
-			   {isStopHitRegimeChange, ReasonStopHitRegimeChange, 0.80},
-			   {isHighSlippageRegime, ReasonSlippageExceeded, 0.78},
-			   {isFundingDrag, ReasonFundingDrag, 0.79},
+		{isChasing, ReasonChasingEntry, 0.90},
+		{isLateExitGiveBack, ReasonLateExitGiveBack, 0.88},
+		{isStopTooTight, ReasonStopTooTight, 0.88},
+		{isMomentumDecay, ReasonMomentumDecay, 0.85},
+		{isFalseBreakout, ReasonFalseBreakoutV2, 0.85},
+		{isLiquidityDried, ReasonLiquidityDried, 0.83},
+		{isPrematureEntry, ReasonPrematureEntry, 0.82},
+		{isStopHitRegimeChange, ReasonStopHitRegimeChange, 0.80},
+		{isHighSlippageRegime, ReasonSlippageExceeded, 0.78},
+		{isFundingDrag, ReasonFundingDrag, 0.79},
 	}
 
 	// Find FIRST matching rule (highest priority match wins)
-	    var bestMatch *struct {
-		    check      func(*RecentOrder) bool
-		    reason     TradeFailureReason
-		    confidence float64
-	    }
+	var bestMatch *struct {
+		check      func(*RecentOrder) bool
+		reason     TradeFailureReason
+		confidence float64
+	}
 
 	for i := range ruleSequence {
 		rule := &ruleSequence[i]
@@ -155,43 +155,43 @@ func isChasing(order *RecentOrder) bool {
 
 // isFalseBreakoutV2 detects breakouts without volume or OI confirmation
 func isFalseBreakout(order *RecentOrder) bool {
-       if order == nil {
-	       return false
-       }
-       // Use provided values; if percent-like (>10), convert to ratio.
-       volumeRatio := order.VolumeAtEntry
-       if volumeRatio > 10 {
-	       volumeRatio = volumeRatio / 100.0
-       }
-       oiRatio := order.OIDeltaAtEntry
-       if oiRatio > 10 {
-	       oiRatio = oiRatio / 100.0
-       }
+	if order == nil {
+		return false
+	}
+	// Use provided values; if percent-like (>10), convert to ratio.
+	volumeRatio := order.VolumeAtEntry
+	if volumeRatio > 10 {
+		volumeRatio = volumeRatio / 100.0
+	}
+	oiRatio := order.OIDeltaAtEntry
+	if oiRatio > 10 {
+		oiRatio = oiRatio / 100.0
+	}
 
-       // Rule: Both volume AND OI must be weak
-       weakVolume := volumeRatio < 0.90 // < 90%
-       weakOI := oiRatio < 0.30         // < 30% increase
-       return weakVolume && weakOI
+	// Rule: Both volume AND OI must be weak
+	weakVolume := volumeRatio < 0.90 // < 90%
+	weakOI := oiRatio < 0.30         // < 30% increase
+	return weakVolume && weakOI
 }
 
 // isPrematureEntry detects entries before confirmation criteria
 func isPrematureEntry(order *RecentOrder) bool {
-       if order == nil {
-	       return false
-       }
-       volumeRatio := order.VolumeAtEntry
-       if volumeRatio > 10 {
-	       volumeRatio = volumeRatio / 100.0
-       }
-       oiRatio := order.OIDeltaAtEntry
-       if oiRatio > 10 {
-	       oiRatio = oiRatio / 100.0
-       }
+	if order == nil {
+		return false
+	}
+	volumeRatio := order.VolumeAtEntry
+	if volumeRatio > 10 {
+		volumeRatio = volumeRatio / 100.0
+	}
+	oiRatio := order.OIDeltaAtEntry
+	if oiRatio > 10 {
+		oiRatio = oiRatio / 100.0
+	}
 
-       // Rule: Both volume and OI below thresholds
-       lowVolume := volumeRatio < 0.90 // < 90%
-       lowOI := oiRatio < 0.50         // < 50%
-       return lowVolume && lowOI
+	// Rule: Both volume and OI below thresholds
+	lowVolume := volumeRatio < 0.90 // < 90%
+	lowOI := oiRatio < 0.50         // < 50%
+	return lowVolume && lowOI
 }
 
 // isStopTooTight detects stops closer than risk management threshold
@@ -230,21 +230,21 @@ func isLiquidityDried(order *RecentOrder) bool {
 
 // isStopHitRegimeChange detects trend reversal or market regime shift
 func isStopHitRegimeChange(order *RecentOrder) bool {
-       if order == nil {
-	       return false
-       }
-       // Approximate regime risk using unified fields (no entry/exit split available)
-       // If market is not trending and chop is high, consider regime change risk.
-       if order.MarketRegime != "trending" {
-	       if order.ChopScore > 0.5 {
-		       return true
-	       }
-       }
-       // If trend strength is weak (|trend| < 0.2), treat as unfavorable regime
-       if math.Abs(order.TrendStrength) < 0.2 {
-	       return true
-       }
-       return false
+	if order == nil {
+		return false
+	}
+	// Approximate regime risk using unified fields (no entry/exit split available)
+	// If market is not trending and chop is high, consider regime change risk.
+	if order.MarketRegime != "trending" {
+		if order.ChopScore > 0.5 {
+			return true
+		}
+	}
+	// If trend strength is weak (|trend| < 0.2), treat as unfavorable regime
+	if math.Abs(order.TrendStrength) < 0.2 {
+		return true
+	}
+	return false
 }
 
 // isLateExitGiveBack detects poor exit timing with large give-back
@@ -301,31 +301,31 @@ func populateEvidence(analysis *FailedTradeAnalysis, order *RecentOrder) {
 			analysis.Evidence["fill_delay_ms"] = order.EntryFillTime - order.SignalTime
 		}
 
-	       case ReasonFalseBreakoutV2:
-		       analysis.Evidence["volume_at_entry"] = order.VolumeAtEntry
-		       analysis.Evidence["oi_delta_at_entry"] = order.OIDeltaAtEntry
-		       v := order.VolumeAtEntry
-		       if v > 10 {
-			       v = v / 100.0
-		       }
-		       oi := order.OIDeltaAtEntry
-		       if oi > 10 {
-			       oi = oi / 100.0
-		       }
-		       analysis.Evidence["volume_strength"] = fmt.Sprintf("%.0f%%", v*100)
-		       analysis.Evidence["oi_strength"] = fmt.Sprintf("%.0f%%", oi*100)
+	case ReasonFalseBreakoutV2:
+		analysis.Evidence["volume_at_entry"] = order.VolumeAtEntry
+		analysis.Evidence["oi_delta_at_entry"] = order.OIDeltaAtEntry
+		v := order.VolumeAtEntry
+		if v > 10 {
+			v = v / 100.0
+		}
+		oi := order.OIDeltaAtEntry
+		if oi > 10 {
+			oi = oi / 100.0
+		}
+		analysis.Evidence["volume_strength"] = fmt.Sprintf("%.0f%%", v*100)
+		analysis.Evidence["oi_strength"] = fmt.Sprintf("%.0f%%", oi*100)
 
-	       case ReasonPrematureEntry:
-		       v := order.VolumeAtEntry
-		       if v > 10 {
-			       v = v / 100.0
-		       }
-		       oi := order.OIDeltaAtEntry
-		       if oi > 10 {
-			       oi = oi / 100.0
-		       }
-		       analysis.Evidence["volume_check"] = fmt.Sprintf("%.0f%% (need 90%%)", v*100)
-		       analysis.Evidence["oi_check"] = fmt.Sprintf("%.0f%% (need 50%%)", oi*100)
+	case ReasonPrematureEntry:
+		v := order.VolumeAtEntry
+		if v > 10 {
+			v = v / 100.0
+		}
+		oi := order.OIDeltaAtEntry
+		if oi > 10 {
+			oi = oi / 100.0
+		}
+		analysis.Evidence["volume_check"] = fmt.Sprintf("%.0f%% (need 90%%)", v*100)
+		analysis.Evidence["oi_check"] = fmt.Sprintf("%.0f%% (need 50%%)", oi*100)
 
 	case ReasonStopTooTight:
 		analysis.Evidence["stop_distance_vs_atr"] = order.StopDistanceVsATR
@@ -345,10 +345,10 @@ func populateEvidence(analysis *FailedTradeAnalysis, order *RecentOrder) {
 		analysis.Evidence["exit_depth"] = order.ExitDepth
 		analysis.Evidence["depth_ratio"] = order.ExitDepth / order.EntryDepth
 
-	       case ReasonStopHitRegimeChange:
-		       analysis.Evidence["trend_strength"] = order.TrendStrength
-		       analysis.Evidence["market_regime"] = order.MarketRegime
-		       analysis.Evidence["chop_score"] = order.ChopScore
+	case ReasonStopHitRegimeChange:
+		analysis.Evidence["trend_strength"] = order.TrendStrength
+		analysis.Evidence["market_regime"] = order.MarketRegime
+		analysis.Evidence["chop_score"] = order.ChopScore
 
 	case ReasonLateExitGiveBack:
 		analysis.Evidence["max_favorable_excursion"] = fmt.Sprintf("%.2f%%", order.MaxFavorableExcursion*100)
@@ -451,8 +451,8 @@ func generateDetailedNotes(reason TradeFailureReason, order *RecentOrder, eviden
 	case ReasonLiquidityDried:
 		return fmt.Sprintf("Liquidity evaporated during the trade. Bid-ask spread widened %.1fx (from %.3f to %.3f) and available depth fell %.1f%% (from $%.0f to $%.0f). Execution became difficult.", order.ExitSpread/order.EntrySpread, order.EntrySpread, order.ExitSpread, (1-order.ExitDepth/order.EntryDepth)*100, order.EntryDepth, order.ExitDepth)
 
-	       case ReasonStopHitRegimeChange:
-		       return fmt.Sprintf("Unfavorable regime during trade. Trend strength was %.2f and market regime '%s' with chop score %.2f. Stop likely hit due to regime risk, not just tight positioning.", order.TrendStrength, order.MarketRegime, order.ChopScore)
+	case ReasonStopHitRegimeChange:
+		return fmt.Sprintf("Unfavorable regime during trade. Trend strength was %.2f and market regime '%s' with chop score %.2f. Stop likely hit due to regime risk, not just tight positioning.", order.TrendStrength, order.MarketRegime, order.ChopScore)
 
 	case ReasonLateExitGiveBack:
 		mfeStr := evidence["max_favorable_excursion"].(string)

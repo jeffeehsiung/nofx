@@ -345,11 +345,11 @@ func (m *MarketMicrostructureAnalyzer) identifySupportLevels(bids []PriceLevel, 
 
 	// Find levels with significantly higher volume (local maxima)
 	avgVolume := m.calculateAverageOrderSize(bids)
-	threshold := avgVolume * 3 // 3x average = significant level
+	threshold := avgVolume * 1.6 // 1.6x average = significant level
 
 	supports := []float64{}
 	for i, bid := range bids {
-		if bid.Quantity > threshold {
+		if bid.Quantity >= threshold {
 			// Check if it's a local maximum
 			isLocalMax := true
 			if i > 0 && bids[i-1].Quantity > bid.Quantity {
@@ -380,11 +380,11 @@ func (m *MarketMicrostructureAnalyzer) identifyResistanceLevels(asks []PriceLeve
 
 	// Find levels with significantly higher volume (local maxima)
 	avgVolume := m.calculateAverageOrderSize(asks)
-	threshold := avgVolume * 3 // 3x average = significant level
+	threshold := avgVolume * 1.6 // 1.6x average = significant level
 
 	resistances := []float64{}
 	for i, ask := range asks {
-		if ask.Quantity > threshold {
+		if ask.Quantity >= threshold {
 			// Check if it's a local maximum
 			isLocalMax := true
 			if i > 0 && asks[i-1].Quantity > ask.Quantity {

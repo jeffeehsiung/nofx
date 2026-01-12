@@ -89,7 +89,7 @@ type DecisionOutcome struct {
 
 	// What went right/wrong
 	Analysis string `json:"analysis"`
-	
+
 	// NEW: Detailed microstructure data for Trade Failure V2 analysis
 	RecentOrder *decision.RecentOrder `json:"recent_order,omitempty"`
 }
@@ -235,7 +235,7 @@ type ClosedPosition struct {
 	RealizedPnL float64
 	EntryEvent  TradeEvent
 	ExitEvent   TradeEvent
-	
+
 	// Market data snapshots for microstructure analysis
 	EntryMarketData *market.Data
 	ExitMarketData  *market.Data
@@ -282,7 +282,7 @@ func (fg *FeedbackGenerator) extractClosedPositions(events []TradeEvent) []Close
 // This is the bridge between backtest execution and Trade Failure V2 analysis
 func buildRecentOrderFromPosition(pos ClosedPosition) *decision.RecentOrder {
 	holdDuration := pos.ExitTime.Sub(pos.EntryTime)
-	
+
 	order := &decision.RecentOrder{
 		Symbol:       pos.Symbol,
 		Side:         pos.Side,
@@ -294,7 +294,7 @@ func buildRecentOrderFromPosition(pos ClosedPosition) *decision.RecentOrder {
 		HoldDuration: formatDuration(holdDuration),
 		Leverage:     pos.Leverage,
 	}
-	
+
 	// Calculate PnL percentage
 	if pos.EntryPrice > 0 {
 		if pos.Side == "long" {
@@ -303,7 +303,7 @@ func buildRecentOrderFromPosition(pos ClosedPosition) *decision.RecentOrder {
 			order.PnLPct = ((pos.EntryPrice - pos.ExitPrice) / pos.EntryPrice) * 100 * float64(pos.Leverage)
 		}
 	}
-	
+
 	// Populate microstructure data from entry event (use actual captured values)
 	order.EntrySpread = pos.EntryEvent.Spread
 	order.EntryDepth = pos.EntryEvent.Depth
@@ -313,14 +313,14 @@ func buildRecentOrderFromPosition(pos ClosedPosition) *decision.RecentOrder {
 	order.EntrySlippageBudget = pos.EntryEvent.SlippageBudget
 	order.SignalTime = pos.EntryEvent.SignalTime
 	order.EntryFillTime = pos.EntryEvent.FillTime
-	
+
 	// Populate microstructure data from exit event (use actual captured values)
 	order.ExitSpread = pos.ExitEvent.Spread
 	order.ExitDepth = pos.ExitEvent.Depth
 	if pos.ExitPrice > 0 {
 		order.ExitSlippage = math.Abs(pos.ExitEvent.Slippage / pos.ExitPrice)
 	}
-	
+
 	// Populate market data from entry snapshot
 	if pos.EntryMarketData != nil {
 		order.ATRAtEntry = calculateATRFromSeries(pos.EntryMarketData)
@@ -331,13 +331,13 @@ func buildRecentOrderFromPosition(pos ClosedPosition) *decision.RecentOrder {
 		order.VolumeAtEntry = extractVolumeRatio(pos.EntryMarketData)
 		order.OIDeltaAtEntry = extractOIDelta(pos.EntryMarketData)
 	}
-	
+
 	// Calculate deltas during trade (entry vs exit market data)
 	if pos.EntryMarketData != nil && pos.ExitMarketData != nil {
 		order.VolumeDeltaDuringTrade = extractVolumeRatio(pos.ExitMarketData) - extractVolumeRatio(pos.EntryMarketData)
 		order.OIDeltaDuringTrade = extractOIDelta(pos.ExitMarketData) - extractOIDelta(pos.EntryMarketData)
 	}
-	
+
 	// Calculate stop distance vs ATR if we have ATR and entry spread
 	// Use entry spread + 2*ATR as reasonable stop estimate (ATR-based risk management)
 	if order.ATRAtEntry > 0 && pos.EntryPrice > 0 {
@@ -347,17 +347,17 @@ func buildRecentOrderFromPosition(pos ClosedPosition) *decision.RecentOrder {
 		order.StopDistance = stopDistance
 		order.StopDistanceVsATR = stopDistance / atrPct
 	}
-	
+
 	// Populate excursion metrics from TradeEvent
 	order.MaxFavorableExcursion = pos.EntryEvent.MaxFavorableExcursion
 	order.MaxAdverseExcursion = pos.ExitEvent.MaxAdverseExcursion
-	
+
 	// Calculate giveback: how much profit was left on the table after peak
 	// GiveBack = MaxFavorableExcursion - RealizedPnL
 	if order.MaxFavorableExcursion > 0 && pos.RealizedPnL > 0 {
 		order.GiveBackFromPeak = order.MaxFavorableExcursion - pos.RealizedPnL
 	}
-	
+
 	return order
 }
 
@@ -406,7 +406,7 @@ func extractMarketRegime(data *market.Data) string {
 	// Determine regime from trend strength and chop
 	trendStrength := extractTrendStrength(data)
 	chopScore := extractChopScore(data)
-	
+
 	if chopScore > 0.6 {
 		return "sideways"
 	} else if math.Abs(trendStrength) > 0.3 {
@@ -420,7 +420,7 @@ func extractVolatilityRegime(data *market.Data) string {
 	if atr == 0 {
 		return "normal"
 	}
-	
+
 	// Classify based on ATR relative to price
 	atrPct := atr / data.CurrentPrice
 	if atrPct < 0.02 {
@@ -768,15 +768,15 @@ func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome,
 	// ============================================================================
 	// TIER 1: Execution-Level Failure Analysis (Trade Failure V2)
 	// ============================================================================
-	
+
 	// Analyze failures using microstructure-based Trade Failure V2
 	v2FailureReasons := make(map[string]struct {
-		count       int
-		pnlSum      float64
-		evidence    []string
-		examples    []*decision.RecentOrder
+		count    int
+		pnlSum   float64
+		evidence []string
+		examples []*decision.RecentOrder
 	})
-	
+
 	for _, outcome := range outcomes {
 		// Only analyze failed trades that have microstructure data
 		if !outcome.Success && outcome.RecentOrder != nil {
@@ -785,38 +785,38 @@ func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome,
 			if analysis != nil {
 				reason := string(analysis.PrimaryReason)
 				confidence := analysis.ConfidenceScore
-				
+
 				entry := v2FailureReasons[reason]
 				entry.count++
 				entry.pnlSum += outcome.RealizedPnLPct
-				
+
 				// Store evidence (top 3 examples per reason)
 				if len(entry.examples) < 3 {
 					entry.examples = append(entry.examples, outcome.RecentOrder)
 				}
-				
+
 				// Store detailed notes from V2 analysis
-				evidence := fmt.Sprintf("%s (confidence: %.0f%%)", 
+				evidence := fmt.Sprintf("%s (confidence: %.0f%%)",
 					analysis.DetailedNotes, confidence*100)
 				if len(evidence) > 100 {
 					evidence = evidence[:100] + "..."
 				}
 				entry.evidence = append(entry.evidence, evidence)
-				
+
 				v2FailureReasons[reason] = entry
 			}
 		}
 	}
-	
+
 	// Convert V2 failure reasons to trading patterns
 	for reason, data := range v2FailureReasons {
 		if data.count >= fg.config.MinPatternFrequency {
 			avgPnL := data.pnlSum / float64(data.count)
-			
+
 			// Get V2 recommendation
 			v2Reason := decision.TradeFailureReason(reason)
 			recommendation := getV2Recommendation(v2Reason)
-			
+
 			patterns = append(patterns, TradingPattern{
 				PatternType:    reason, // e.g., "chasing_entry", "stop_too_tight"
 				Frequency:      data.count,
@@ -828,7 +828,7 @@ func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome,
 			})
 		}
 	}
-	
+
 	// ============================================================================
 	// TIER 2: Behavioral Pattern Detection (Original Feedback System)
 	// ============================================================================
@@ -1372,29 +1372,29 @@ func (analysis *FeedbackAnalysis) FormatForPrompt(lang string) string {
 			// Separate V2 execution failures from other patterns
 			var v2Failures []TradingPattern
 			var otherFailures []TradingPattern
-			
+
 			for _, pattern := range analysis.FailurePatterns {
 				// V2 failure reasons contain microstructure keywords
-				if strings.Contains(pattern.PatternType, "_") || 
-				   strings.Contains(pattern.Description, "Execution-level") {
+				if strings.Contains(pattern.PatternType, "_") ||
+					strings.Contains(pattern.Description, "Execution-level") {
 					v2Failures = append(v2Failures, pattern)
 				} else {
 					otherFailures = append(otherFailures, pattern)
 				}
 			}
-			
+
 			// Display V2 execution-level diagnostics
 			if len(v2Failures) > 0 {
 				sb.WriteString("### 📋 执行级失败诊断 (微观结构分析)\n\n")
 				sb.WriteString("**这些失败根植于市场执行条件和入场/出场时机：**\n\n")
-				
+
 				for i, pattern := range v2Failures {
 					if i >= 5 { // Limit to top 5
 						break
 					}
 					sb.WriteString(fmt.Sprintf("**%s**\n", pattern.Description))
 					sb.WriteString(fmt.Sprintf("   发生: %d 次 | 平均亏损: %.2f%%\n", pattern.Frequency, pattern.AvgPnLPct))
-					
+
 					// Display evidence (first 2 pieces)
 					if len(pattern.Evidence) > 0 {
 						for j, evidence := range pattern.Evidence {
@@ -1404,11 +1404,11 @@ func (analysis *FeedbackAnalysis) FormatForPrompt(lang string) string {
 							sb.WriteString(fmt.Sprintf("   证据: %s\n", evidence))
 						}
 					}
-					
+
 					sb.WriteString(fmt.Sprintf("   **行动**: %s\n\n", pattern.Recommendation))
 				}
 			}
-			
+
 			// Display other failure patterns
 			if len(otherFailures) > 0 {
 				sb.WriteString("### ⚠️ 其他发现的失败模式\n\n")
@@ -1483,29 +1483,29 @@ func (analysis *FeedbackAnalysis) FormatForPrompt(lang string) string {
 			// Separate V2 execution failures from other patterns
 			var v2Failures []TradingPattern
 			var otherFailures []TradingPattern
-			
+
 			for _, pattern := range analysis.FailurePatterns {
 				// V2 failure reasons contain microstructure keywords
-				if strings.Contains(pattern.PatternType, "_") || 
-				   strings.Contains(pattern.Description, "Execution-level") {
+				if strings.Contains(pattern.PatternType, "_") ||
+					strings.Contains(pattern.Description, "Execution-level") {
 					v2Failures = append(v2Failures, pattern)
 				} else {
 					otherFailures = append(otherFailures, pattern)
 				}
 			}
-			
+
 			// Display V2 execution-level diagnostics
 			if len(v2Failures) > 0 {
 				sb.WriteString("### 📋 Execution-Level Failure Diagnostics (Microstructure)\n\n")
 				sb.WriteString("**These failures are rooted in actual market execution conditions and entry/exit timing:**\n\n")
-				
+
 				for i, pattern := range v2Failures {
 					if i >= 5 { // Limit to top 5
 						break
 					}
 					sb.WriteString(fmt.Sprintf("**%s**\n", pattern.Description))
 					sb.WriteString(fmt.Sprintf("   Occurred: %d times | Avg Loss: %.2f%%\n", pattern.Frequency, pattern.AvgPnLPct))
-					
+
 					// Display evidence (first 2 pieces)
 					if len(pattern.Evidence) > 0 {
 						for j, evidence := range pattern.Evidence {
@@ -1515,11 +1515,11 @@ func (analysis *FeedbackAnalysis) FormatForPrompt(lang string) string {
 							sb.WriteString(fmt.Sprintf("   Evidence: %s\n", evidence))
 						}
 					}
-					
+
 					sb.WriteString(fmt.Sprintf("   **Action**: %s\n\n", pattern.Recommendation))
 				}
 			}
-			
+
 			// Display other failure patterns
 			if len(otherFailures) > 0 {
 				sb.WriteString("### ⚠️ Other Identified Failure Patterns\n\n")
@@ -1708,7 +1708,6 @@ func getV2Recommendation(reason decision.TradeFailureReason) string {
 		return "Review execution quality and market conditions for this failure mode."
 	}
 }
-
 
 // FormatForDebate formats the feedback for multi-agent debate context
 // Emphasizes areas of contention and decision points tailored to agent roles

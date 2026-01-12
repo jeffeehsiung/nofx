@@ -1490,55 +1490,55 @@ func (s *Server) pollAndUpdateOrderStatus(orderRecordID int64, traderID, exchang
 		// err is nil here; proceed to inspect status
 		statusStr, _ := status["status"].(string)
 		if statusStr == "FILLED" {
-				// Get actual fill price
-				if avgPrice, ok := status["avgPrice"].(float64); ok && avgPrice > 0 {
-					actualPrice = avgPrice
-				}
-				// Get actual executed quantity
-				if execQty, ok := status["executedQty"].(float64); ok && execQty > 0 {
-					actualQty = execQty
-				}
-				// Get commission/fee
-				if commission, ok := status["commission"].(float64); ok {
-					fee = commission
-				}
+			// Get actual fill price
+			if avgPrice, ok := status["avgPrice"].(float64); ok && avgPrice > 0 {
+				actualPrice = avgPrice
+			}
+			// Get actual executed quantity
+			if execQty, ok := status["executedQty"].(float64); ok && execQty > 0 {
+				actualQty = execQty
+			}
+			// Get commission/fee
+			if commission, ok := status["commission"].(float64); ok {
+				fee = commission
+			}
 
-				logger.Infof("  ✅ Order filled: avgPrice=%.6f, qty=%.6f, fee=%.6f", actualPrice, actualQty, fee)
+			logger.Infof("  ✅ Order filled: avgPrice=%.6f, qty=%.6f, fee=%.6f", actualPrice, actualQty, fee)
 
-				// Update order status to FILLED
-				if err := s.store.Order().UpdateOrderStatus(orderRecordID, "FILLED", actualQty, actualPrice, fee); err != nil {
-					logger.Infof("  ⚠️ Failed to update order status: %v", err)
-					return
-				}
-
-				// Record fill details
-				tradeID := fmt.Sprintf("%s-%d", orderID, time.Now().UnixNano())
-				fillRecord := &store.TraderFill{
-					TraderID:        traderID,
-					ExchangeID:      exchangeID,
-					ExchangeType:    exchangeType,
-					OrderID:         orderRecordID,
-					ExchangeOrderID: orderID,
-					ExchangeTradeID: tradeID,
-					Symbol:          symbol,
-					Side:            getSideFromAction(orderAction),
-					Price:           actualPrice,
-					Quantity:        actualQty,
-					QuoteQuantity:   actualPrice * actualQty,
-					Commission:      fee,
-					CommissionAsset: "USDT",
-					RealizedPnL:     0,
-					IsMaker:         false,
-					CreatedAt:       time.Now(),
-				}
-
-				if err := s.store.Order().CreateFill(fillRecord); err != nil {
-					logger.Infof("  ⚠️ Failed to record fill: %v", err)
-				} else {
-					logger.Infof("  📝 Fill recorded: price=%.6f, qty=%.6f", actualPrice, actualQty)
-				}
-
+			// Update order status to FILLED
+			if err := s.store.Order().UpdateOrderStatus(orderRecordID, "FILLED", actualQty, actualPrice, fee); err != nil {
+				logger.Infof("  ⚠️ Failed to update order status: %v", err)
 				return
+			}
+
+			// Record fill details
+			tradeID := fmt.Sprintf("%s-%d", orderID, time.Now().UnixNano())
+			fillRecord := &store.TraderFill{
+				TraderID:        traderID,
+				ExchangeID:      exchangeID,
+				ExchangeType:    exchangeType,
+				OrderID:         orderRecordID,
+				ExchangeOrderID: orderID,
+				ExchangeTradeID: tradeID,
+				Symbol:          symbol,
+				Side:            getSideFromAction(orderAction),
+				Price:           actualPrice,
+				Quantity:        actualQty,
+				QuoteQuantity:   actualPrice * actualQty,
+				Commission:      fee,
+				CommissionAsset: "USDT",
+				RealizedPnL:     0,
+				IsMaker:         false,
+				CreatedAt:       time.Now(),
+			}
+
+			if err := s.store.Order().CreateFill(fillRecord); err != nil {
+				logger.Infof("  ⚠️ Failed to record fill: %v", err)
+			} else {
+				logger.Infof("  📝 Fill recorded: price=%.6f, qty=%.6f", actualPrice, actualQty)
+			}
+
+			return
 		} else if statusStr == "CANCELED" || statusStr == "EXPIRED" || statusStr == "REJECTED" {
 			logger.Infof("  ⚠️ Order %s, updating status", statusStr)
 			s.store.Order().UpdateOrderStatus(orderRecordID, statusStr, 0, 0, 0)
@@ -2413,7 +2413,6 @@ func (s *Server) handleKlines(c *gin.Context) {
 	c.JSON(http.StatusOK, klines)
 }
 
-
 // getKlinesFromAlpaca fetches kline data from Alpaca API for US stocks
 func (s *Server) getKlinesFromAlpaca(symbol, interval string, limit int) ([]market.Kline, error) {
 	// Create Alpaca client
@@ -2487,7 +2486,6 @@ func (s *Server) getKlinesFromTwelveData(symbol, interval string, limit int) ([]
 
 	return klines, nil
 }
-
 
 // handleSymbols returns available symbols for a given exchange
 func (s *Server) handleSymbols(c *gin.Context) {

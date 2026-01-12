@@ -434,8 +434,18 @@ func TestCumulativeVolume(t *testing.T) {
 
 	// Test percentage from mid
 	expectedPct := ((50000.0 - 50005.0) / 50005.0) * 100
-	if cumulative[0].PercentageFromMid < expectedPct*0.99 || cumulative[0].PercentageFromMid > expectedPct*1.01 {
-		t.Errorf("Expected percentage around %.4f%%, got %.4f%%", expectedPct, cumulative[0].PercentageFromMid)
+	lowerBound := expectedPct * 0.99
+	upperBound := expectedPct * 1.01
+	actual := cumulative[0].PercentageFromMid
+	
+	// For negative percentages, the bounds are reversed
+	if expectedPct < 0 {
+		lowerBound = expectedPct * 1.01
+		upperBound = expectedPct * 0.99
+	}
+	
+	if actual < lowerBound || actual > upperBound {
+		t.Errorf("Expected percentage between %.6f%% and %.6f%%, got %.6f%%", lowerBound, upperBound, actual)
 	}
 }
 

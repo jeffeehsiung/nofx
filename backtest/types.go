@@ -75,14 +75,14 @@ type TradeEvent struct {
 	PositionAfter   float64 `json:"position_after"`
 	LiquidationFlag bool    `json:"liquidation"`
 	Note            string  `json:"note,omitempty"`
-	
+
 	// Microstructure data for trade failure analysis
-	Spread          float64 `json:"spread,omitempty"`           // Bid-ask spread at execution
-	Depth           float64 `json:"depth,omitempty"`            // Available liquidity (USD)
-	SignalTime      int64   `json:"signal_time,omitempty"`      // When signal was generated
-	FillTime        int64   `json:"fill_time,omitempty"`        // When order was filled
-	SlippageBudget  float64 `json:"slippage_budget,omitempty"`  // Expected slippage tolerance
-	
+	Spread         float64 `json:"spread,omitempty"`          // Bid-ask spread at execution
+	Depth          float64 `json:"depth,omitempty"`           // Available liquidity (USD)
+	SignalTime     int64   `json:"signal_time,omitempty"`     // When signal was generated
+	FillTime       int64   `json:"fill_time,omitempty"`       // When order was filled
+	SlippageBudget float64 `json:"slippage_budget,omitempty"` // Expected slippage tolerance
+
 	// Position excursion tracking (only populated on close events)
 	MaxFavorableExcursion float64 `json:"mfe,omitempty"` // Best unrealized PnL (USD)
 	MaxAdverseExcursion   float64 `json:"mae,omitempty"` // Worst unrealized PnL (USD)

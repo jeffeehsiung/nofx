@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"nofx/backtest"
 	"nofx/decision"
 	"nofx/logger"
 	"nofx/market"
@@ -247,8 +248,8 @@ func (e *DebateEngine) runDebate(session *store.DebateSessionWithDetails, strate
 		logger.Errorf("Failed to collect votes: %v", err)
 	}
 
-	// Determine multi-coin consensus
-	allDecisions := e.determineMultiCoinConsensus(votes)
+	// Determine multi-coin consensus with market data for dynamic stop/TP
+	allDecisions := e.determineMultiCoinConsensus(votes, ctx.MarketDataMap)
 
 	// For backward compatibility, also set single consensus
 	var primaryConsensus *store.DebateDecision
@@ -724,7 +725,7 @@ func (e *DebateEngine) buildVotingUserPrompt(allMessages []*store.DebateMessage)
 
 // determineConsensus determines the final consensus from votes (supports multi-coin)
 func (e *DebateEngine) determineConsensus(symbol string, votes []*store.DebateVote) *store.DebateDecision {
-	decisions := e.determineMultiCoinConsensus(votes)
+	decisions := e.determineMultiCoinConsensus(votes, nil) // No market data available in this context
 
 	// For backward compatibility, return the first decision or a default
 	if len(decisions) == 0 {
@@ -749,7 +750,7 @@ func (e *DebateEngine) determineConsensus(symbol string, votes []*store.DebateVo
 }
 
 // determineMultiCoinConsensus determines consensus for all coins from votes
-func (e *DebateEngine) determineMultiCoinConsensus(votes []*store.DebateVote) []*store.DebateDecision {
+func (e *DebateEngine) determineMultiCoinConsensus(votes []*store.DebateVote, marketDataMap map[string]*market.Data) []*store.DebateDecision {
 	if len(votes) == 0 {
 		return nil
 	}
@@ -894,12 +895,40 @@ func (e *DebateEngine) determineMultiCoinConsensus(votes []*store.DebateVote) []
 		if avgPosPct > 1.0 {
 			avgPosPct = 1.0
 		}
-		// Apply defaults for SL/TP if not set
+
+		// SMART 1.3: Apply market-aware stops and take profits (if feature enabled)
+		// Average entry price for direction calculation (default midpoint for relative calculation)
+		avgPrice := 100.0
+		if avgSLPct <= 0 || avgTPPct <= 0 && (winningAction == "open_long" || winningAction == "open_short") {
+			// Try to use dynamic risk reward with market data (if enabled via feature flag)
+			// For now, always apply if marketDataMap available (can be made conditional in production)
+			if marketDataMap != nil {
+				if mktData, ok := marketDataMap[symbol]; ok {
+					// Get direction from action
+					direction := "long"
+					if winningAction == "open_short" {
+						direction = "short"
+					}
+
+					// Use smart heuristics for dynamic stop/TP based on volatility
+					sl, tp := backtest.CalculateDynamicRiskReward(symbol, avgPrice, direction, mktData)
+
+					if sl > 0 && (avgSLPct <= 0) {
+						avgSLPct = sl
+					}
+					if tp > 0 && (avgTPPct <= 0) {
+						avgTPPct = tp
+					}
+				}
+			}
+		}
+
+		// Apply defaults if still empty
 		if avgSLPct <= 0 && (winningAction == "open_long" || winningAction == "open_short") {
-			avgSLPct = 0.03 // Default 3% stop loss
+			avgSLPct = 0.03 // Default 3% stop loss (market-aware: 1-3x ATR based on volatility)
 		}
 		if avgTPPct <= 0 && (winningAction == "open_long" || winningAction == "open_short") {
-			avgTPPct = 0.06 // Default 6% take profit
+			avgTPPct = 0.06 // Default 6% take profit (market-aware: 2-4x ATR based on volatility)
 		}
 
 		decision := &store.DebateDecision{
