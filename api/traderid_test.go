@@ -60,6 +60,16 @@ func isValidTraderIDFormat(traderID, expectedExchange, expectedModel string) boo
 	}
 
 	// AI model may contain hyphens (e.g. gpt-4), so need to reconstruct
+	// Reconstruct model from middle parts (everything except first and last)
+	if len(parts) < 3 {
+		return false
+	}
+	modelParts := parts[1 : len(parts)-1]
+	modelName := strings.Join(modelParts, "_")
+	if modelName != expectedModel {
+		return false
+	}
+
 	// Last part should be UUID
 	uuidPart := parts[len(parts)-1]
 

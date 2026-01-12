@@ -42,9 +42,6 @@ type OKXTrader struct {
 	secretKey  string
 	passphrase string
 
-	// Margin mode setting
-	isCrossMargin bool
-
 	// Position mode: "long_short_mode" (hedge) or "net_mode" (one-way)
 	positionMode string
 
@@ -1094,6 +1091,7 @@ func (t *OKXTrader) CancelTakeProfitOrders(symbol string) error {
 // cancelAlgoOrders cancels algo orders
 func (t *OKXTrader) cancelAlgoOrders(symbol string, orderType string) error {
 	instId := t.convertSymbol(symbol)
+	logger.Infof("Canceling algo orders for %s (type: %s)", symbol, orderType)
 
 	// Get pending algo orders
 	path := fmt.Sprintf("%s?instType=SWAP&instId=%s&ordType=conditional", okxAlgoPendingPath, instId)

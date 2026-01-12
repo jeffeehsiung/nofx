@@ -892,7 +892,9 @@ func (t *BybitTrader) cancelConditionalOrders(symbol string, orderType string) e
 				"symbol":   symbol,
 				"orderId":  orderId,
 			}
-			t.client.NewUtaBybitServiceWithParams(cancelParams).CancelOrder(context.Background())
+			if _, err := t.client.NewUtaBybitServiceWithParams(cancelParams).CancelOrder(context.Background()); err != nil {
+				logger.Warnf("Failed to cancel order %s: %v", orderId, err)
+			}
 		}
 	}
 

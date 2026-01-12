@@ -132,7 +132,7 @@ func (t *BybitTrader) parseTradesResult(list []map[string]interface{}) ([]BybitT
 		// Determine order action based on side and closedSize
 		// If closedSize > 0, it's a close trade
 		// Side: Buy = long direction, Sell = short direction
-		orderAction := "open_long"
+		var orderAction string
 		if closedSize > 0 {
 			// This is a close trade
 			if strings.ToLower(side) == "sell" {

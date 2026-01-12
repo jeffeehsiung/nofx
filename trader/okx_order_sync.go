@@ -96,7 +96,7 @@ func (t *OKXTrader) GetTrades(startTime time.Time, limit int) ([]OKXTrade, error
 		// - sell + long = close long
 		// - sell + short = open short
 		// - buy + short = close short
-		orderAction := "open_long"
+		var orderAction string
 		posSide := strings.ToLower(fill.PosSide)
 		side := strings.ToLower(fill.Side)
 

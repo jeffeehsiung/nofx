@@ -54,8 +54,6 @@ func TestEntryPriceSyncConsistency(t *testing.T) {
 
 			// Create mock local position
 			localPos := &store.TraderPosition{
-				Symbol:     "ETHUSDT",
-				Side:       "long",
 				EntryPrice: tt.localPrice,
 			}
 
@@ -103,8 +101,6 @@ func TestEntryPriceSyncWithDifferentSymbols(t *testing.T) {
 		}
 
 		localPos := &store.TraderPosition{
-			Symbol:     sym.symbol,
-			Side:       sym.side,
 			EntryPrice: sym.localPrice,
 		}
 
@@ -175,15 +171,8 @@ func TestEntryPricePrecisionWithWeightedAverage(t *testing.T) {
 // TestEntryPriceSyncTimingConsistency verifies entry prices remain consistent over time
 func TestEntryPriceSyncTimingConsistency(t *testing.T) {
 	// Position entry price should be consistent even if queried multiple times
-	entryTime := time.Now()
-
 	localPos := &store.TraderPosition{
-		ID:         1,
-		Symbol:     "ETHUSDT",
-		Side:       "long",
 		EntryPrice: 100.0,
-		EntryTime:  entryTime,
-		Status:     "OPEN",
 	}
 
 	// Simulate multiple queries over time
