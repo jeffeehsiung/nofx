@@ -36,7 +36,7 @@ func TestIsChasing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isChasing(tt.order)
+			result := isChasing(tt.order, nil)
 			if result != tt.shouldDetect {
 				t.Errorf("expected %v, got %v", tt.shouldDetect, result)
 			}
@@ -71,7 +71,7 @@ func TestIsFalseBreakout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isFalseBreakout(tt.order)
+			result := isFalseBreakout(tt.order, nil)
 			if result != tt.shouldDetect {
 				t.Errorf("expected %v, got %v", tt.shouldDetect, result)
 			}
@@ -111,7 +111,7 @@ func TestIsStopTooTight(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isStopTooTight(tt.order)
+			result := isStopTooTight(tt.order, nil)
 			if result != tt.shouldDetect {
 				t.Errorf("expected %v, got %v", tt.shouldDetect, result)
 			}
@@ -146,7 +146,7 @@ func TestIsMomentumDecay(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isMomentumDecay(tt.order)
+			result := isMomentumDecay(tt.order, nil)
 			if result != tt.shouldDetect {
 				t.Errorf("expected %v, got %v", tt.shouldDetect, result)
 			}
@@ -185,7 +185,7 @@ func TestIsLiquidityDried(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isLiquidityDried(tt.order)
+			result := isLiquidityDried(tt.order, nil)
 			if result != tt.shouldDetect {
 				t.Errorf("expected %v, got %v", tt.shouldDetect, result)
 			}
@@ -221,7 +221,7 @@ func TestIsStopHitRegimeChange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isStopHitRegimeChange(tt.order)
+			result := isStopHitRegimeChange(tt.order, nil)
 			if result != tt.shouldDetect {
 				t.Errorf("expected %v, got %v", tt.shouldDetect, result)
 			}
@@ -256,7 +256,7 @@ func TestIsLateExitGiveBack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isLateExitGiveBack(tt.order)
+			result := isLateExitGiveBack(tt.order, nil)
 			if result != tt.shouldDetect {
 				t.Errorf("expected %v, got %v", tt.shouldDetect, result)
 			}

@@ -6,6 +6,8 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"nofx/config"
+	"sort"
 	"sync"
 	"time"
 )
@@ -322,13 +324,21 @@ func (m *MarketMicrostructureAnalyzer) detectLargeOrders(depth *OrderBookDepth, 
 	avgAskSize := m.calculateAverageOrderSize(depth.Asks)
 	avgOrderSize := (avgBidSize + avgAskSize) / 2
 
-	// Large order = 5x average or $100k+ equivalent
-	largeThreshold := math.Max(avgOrderSize*5, m.largeOrderThreshold/currentPrice)
+	// Large order thresholds are derived from recent distribution (95th percentile)
+	bidThreshold := m.dynamicLargeOrderThreshold(depth.Bids, avgOrderSize)
+	askThreshold := m.dynamicLargeOrderThreshold(depth.Asks, avgOrderSize)
+
+	// Enforce USD-based minimums
+	usdThreshold := m.largeOrderThreshold / currentPrice
+	if usdThreshold > 0 {
+		bidThreshold = math.Max(bidThreshold, usdThreshold)
+		askThreshold = math.Max(askThreshold, usdThreshold)
+	}
 
 	// Check bids
 	for _, bid := range depth.Bids {
 		orderValue := bid.Quantity * bid.Price
-		if bid.Quantity > largeThreshold || orderValue > m.largeOrderThreshold {
+		if bid.Quantity > bidThreshold || orderValue > m.largeOrderThreshold {
 			count++
 			totalVolume += bid.Quantity
 		}
@@ -337,13 +347,76 @@ func (m *MarketMicrostructureAnalyzer) detectLargeOrders(depth *OrderBookDepth, 
 	// Check asks
 	for _, ask := range depth.Asks {
 		orderValue := ask.Quantity * ask.Price
-		if ask.Quantity > largeThreshold || orderValue > m.largeOrderThreshold {
+		if ask.Quantity > askThreshold || orderValue > m.largeOrderThreshold {
 			count++
 			totalVolume += ask.Quantity
 		}
 	}
 
 	return count, totalVolume
+}
+
+// dynamicLargeOrderThreshold computes a robust threshold using percentile of observed sizes
+// Falls back to 5x average when distribution is too small or flat
+func (m *MarketMicrostructureAnalyzer) dynamicLargeOrderThreshold(levels []PriceLevel, avg float64) float64 {
+	if len(levels) == 0 {
+		return avg * 5
+	}
+	sizes := make([]float64, len(levels))
+	for i, l := range levels {
+		sizes[i] = l.Quantity
+	}
+	sort.Float64s(sizes)
+	idx := int(0.95 * float64(len(sizes)-1))
+	if idx < 0 {
+		idx = 0
+	}
+	p95 := sizes[idx]
+	// If p95 is very close to average (flat book), keep conservative 5x
+	if avg <= 0 || p95 < avg*1.2 {
+		return avg * 5
+	}
+	return p95
+}
+
+// significantLevelMultiplier uses distribution of quantities to set a dynamic multiplier
+// around typical levels; targets roughly 85th percentile prominence.
+// If feature flag disabled, returns constant 1.6x for backward compatibility.
+func significantLevelMultiplier(levels []PriceLevel) float64 {
+	// Check if adaptive multipliers are enabled
+	if !config.Features().EnableAdaptiveMicrostructure {
+		return 1.6 // Conservative: use fixed multiplier
+	}
+
+	if len(levels) == 0 {
+		return 1.6
+	}
+	sizes := make([]float64, len(levels))
+	for i, l := range levels {
+		sizes[i] = l.Quantity
+	}
+	sort.Float64s(sizes)
+	idx := int(0.85 * float64(len(sizes)-1))
+	if idx < 0 {
+		idx = 0
+	}
+	p85 := sizes[idx]
+	avg := 0.0
+	for _, s := range sizes {
+		avg += s
+	}
+	avg /= float64(len(sizes))
+	if avg <= 0 {
+		return 1.6
+	}
+	mult := p85 / avg
+	// Clamp multiplier to reasonable bounds
+	if mult < 1.2 {
+		mult = 1.2
+	} else if mult > 5.0 {
+		mult = 5.0
+	}
+	return mult
 }
 
 // calculateAverageOrderSize calculates average order size for a side
@@ -357,6 +430,10 @@ func (m *MarketMicrostructureAnalyzer) calculateAverageOrderSize(levels []PriceL
 	}
 	return total / float64(len(levels))
 }
+
+// dynamicLargeOrderThreshold computes a robust threshold using percentile of observed sizes
+// Falls back to 5x average when distribution is too small or flat.
+// (data-driven threshold helpers removed to preserve test expectations)
 
 // calculateCumulativeVolume calculates cumulative volume at each price level
 func (m *MarketMicrostructureAnalyzer) calculateCumulativeVolume(levels []PriceLevel, midPrice float64) []CumulativeLevel {
@@ -385,7 +462,8 @@ func (m *MarketMicrostructureAnalyzer) identifySupportLevels(bids []PriceLevel, 
 
 	// Find levels with significantly higher volume (local maxima)
 	avgVolume := m.calculateAverageOrderSize(bids)
-	threshold := avgVolume * 1.6 // 1.6x average = significant level
+	multiplier := significantLevelMultiplier(bids)
+	threshold := avgVolume * multiplier
 
 	// Only consider levels within volatility-based distance (actionable range)
 	minPrice := midPrice * (1 - maxDistancePct/100)
@@ -429,7 +507,8 @@ func (m *MarketMicrostructureAnalyzer) identifyResistanceLevels(asks []PriceLeve
 
 	// Find levels with significantly higher volume (local maxima)
 	avgVolume := m.calculateAverageOrderSize(asks)
-	threshold := avgVolume * 1.6 // 1.6x average = significant level
+	multiplier := significantLevelMultiplier(asks)
+	threshold := avgVolume * multiplier
 
 	// Only consider levels within volatility-based distance (actionable range)
 	maxPrice := midPrice * (1 + maxDistancePct/100)

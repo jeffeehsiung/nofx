@@ -114,6 +114,15 @@ func formatContextData(ctx *Context, lang Language) string {
 		}
 	}
 
+	// 8. Market Microstructure (if available)
+	if len(ctx.MicrostructureDataMap) > 0 {
+		if lang == LangChinese {
+			sb.WriteString(formatMicrostructureZH(ctx.MicrostructureDataMap))
+		} else {
+			sb.WriteString(formatMicrostructureEN(ctx.MicrostructureDataMap))
+		}
+	}
+
 	return sb.String()
 }
 
@@ -714,4 +723,140 @@ func formatOptimizedWeightsEN(weights interface{}) string {
 	}
 
 	return ""
+}
+
+// formatMicrostructureZH formats market microstructure data (Chinese)
+func formatMicrostructureZH(microstructureMap map[string]*market.MarketMicrostructure) string {
+	if len(microstructureMap) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## 📊 市场微观结构分析\n\n")
+	sb.WriteString("**说明**: 订单簿分析提供支撑/阻力位、流动性深度和买卖压力信息\n\n")
+
+	for symbol, ms := range microstructureMap {
+		if ms == nil {
+			continue
+		}
+
+		sb.WriteString(fmt.Sprintf("### %s 微观结构\n\n", symbol))
+
+		// Support levels
+		if len(ms.SupportLevels) > 0 {
+			sb.WriteString("**支撑位** (价格下方的买单聚集区):\n")
+			for i, price := range ms.SupportLevels {
+				if i >= 3 {
+					break // Top 3 only
+				}
+				distance := (ms.CurrentPrice - price) / ms.CurrentPrice * 100
+				sb.WriteString(fmt.Sprintf("- %.2f USDT (距离: -%.2f%%)\n", price, distance))
+			}
+			sb.WriteString("\n")
+		}
+
+		// Resistance levels
+		if len(ms.ResistanceLevels) > 0 {
+			sb.WriteString("**阻力位** (价格上方的卖单聚集区):\n")
+			for i, price := range ms.ResistanceLevels {
+				if i >= 3 {
+					break // Top 3 only
+				}
+				distance := (price - ms.CurrentPrice) / ms.CurrentPrice * 100
+				sb.WriteString(fmt.Sprintf("- %.2f USDT (距离: +%.2f%%)\n", price, distance))
+			}
+			sb.WriteString("\n")
+		}
+
+		// Order book metrics
+		sb.WriteString("**订单簿指标**:\n")
+		sb.WriteString(fmt.Sprintf("- 买卖压力: %.2f ", ms.OrderBookImbalance))
+		if ms.OrderBookImbalance > 0.6 {
+			sb.WriteString("(买盘占优 🟢)\n")
+		} else if ms.OrderBookImbalance < 0.4 {
+			sb.WriteString("(卖盘占优 🔴)\n")
+		} else {
+			sb.WriteString("(相对平衡 ⚪)\n")
+		}
+		sb.WriteString(fmt.Sprintf("- 买卖价差: %.4f%% ", ms.BidAskSpread))
+		if ms.BidAskSpread < 0.05 {
+			sb.WriteString("(流动性良好)\n")
+		} else if ms.BidAskSpread > 0.2 {
+			sb.WriteString("(流动性较差)\n")
+		} else {
+			sb.WriteString("(流动性正常)\n")
+		}
+		sb.WriteString(fmt.Sprintf("- 订单簿深度: 买%.0f | 卖%.0f USDT\n", ms.BidDepth, ms.AskDepth))
+		sb.WriteString(fmt.Sprintf("- VWAP偏离: %.2f%%\n\n", ms.VWAPDeviation))
+	}
+
+	return sb.String()
+}
+
+// formatMicrostructureEN formats market microstructure data (English)
+func formatMicrostructureEN(microstructureMap map[string]*market.MarketMicrostructure) string {
+	if len(microstructureMap) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## 📊 Market Microstructure Analysis\n\n")
+	sb.WriteString("**Note**: Order book analysis provides support/resistance levels, liquidity depth, and buy/sell pressure\n\n")
+
+	for symbol, ms := range microstructureMap {
+		if ms == nil {
+			continue
+		}
+
+		sb.WriteString(fmt.Sprintf("### %s Microstructure\n\n", symbol))
+
+		// Support levels
+		if len(ms.SupportLevels) > 0 {
+			sb.WriteString("**Support Levels** (bid order clusters below price):\n")
+			for i, price := range ms.SupportLevels {
+				if i >= 3 {
+					break // Top 3 only
+				}
+				distance := (ms.CurrentPrice - price) / ms.CurrentPrice * 100
+				sb.WriteString(fmt.Sprintf("- $%.2f (distance: -%.2f%%)\n", price, distance))
+			}
+			sb.WriteString("\n")
+		}
+
+		// Resistance levels
+		if len(ms.ResistanceLevels) > 0 {
+			sb.WriteString("**Resistance Levels** (ask order clusters above price):\n")
+			for i, price := range ms.ResistanceLevels {
+				if i >= 3 {
+					break // Top 3 only
+				}
+				distance := (price - ms.CurrentPrice) / ms.CurrentPrice * 100
+				sb.WriteString(fmt.Sprintf("- $%.2f (distance: +%.2f%%)\n", price, distance))
+			}
+			sb.WriteString("\n")
+		}
+
+		// Order book metrics
+		sb.WriteString("**Order Book Metrics**:\n")
+		sb.WriteString(fmt.Sprintf("- Order Book Imbalance: %.2f ", ms.OrderBookImbalance))
+		if ms.OrderBookImbalance > 0.6 {
+			sb.WriteString("(buy pressure 🟢)\n")
+		} else if ms.OrderBookImbalance < 0.4 {
+			sb.WriteString("(sell pressure 🔴)\n")
+		} else {
+			sb.WriteString("(balanced ⚪)\n")
+		}
+		sb.WriteString(fmt.Sprintf("- Spread: %.4f%% ", ms.BidAskSpread))
+		if ms.BidAskSpread < 0.05 {
+			sb.WriteString("(good liquidity)\n")
+		} else if ms.BidAskSpread > 0.2 {
+			sb.WriteString("(poor liquidity)\n")
+		} else {
+			sb.WriteString("(normal liquidity)\n")
+		}
+		sb.WriteString(fmt.Sprintf("- Order Book Depth: Bid $%.0f | Ask $%.0f\n", ms.BidDepth, ms.AskDepth))
+		sb.WriteString(fmt.Sprintf("- VWAP Deviation: %.2f%%\n\n", ms.VWAPDeviation))
+	}
+
+	return sb.String()
 }

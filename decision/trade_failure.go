@@ -63,9 +63,21 @@ type FailedTradeAnalysis struct {
 // ============================================================================
 
 // AnalyzeFailedTrade deterministically categorizes failed trades with evidence
+// Uses default thresholds if thresholds parameter is nil
 func AnalyzeFailedTrade(order *RecentOrder) *FailedTradeAnalysis {
+	return AnalyzeFailedTradeWithThresholds(order, nil)
+}
+
+// AnalyzeFailedTradeWithThresholds allows using calibrated thresholds from historical data
+func AnalyzeFailedTradeWithThresholds(order *RecentOrder, thresholds *FailureThresholds) *FailedTradeAnalysis {
 	if order == nil {
 		return nil
+	}
+
+	// Use defaults if no thresholds provided
+	if thresholds == nil {
+		defaultThresholds := DefaultFailureThresholds()
+		thresholds = &defaultThresholds
 	}
 
 	analysis := &FailedTradeAnalysis{
@@ -75,7 +87,7 @@ func AnalyzeFailedTrade(order *RecentOrder) *FailedTradeAnalysis {
 	// Evaluate rules in priority order, pick FIRST matching rule with highest specificity
 	// Earlier rules are more specific and take precedence
 	ruleSequence := []struct {
-		check      func(*RecentOrder) bool
+		check      func(*RecentOrder, *FailureThresholds) bool
 		reason     TradeFailureReason
 		confidence float64
 	}{
@@ -94,14 +106,14 @@ func AnalyzeFailedTrade(order *RecentOrder) *FailedTradeAnalysis {
 
 	// Find FIRST matching rule (highest priority match wins)
 	var bestMatch *struct {
-		check      func(*RecentOrder) bool
+		check      func(*RecentOrder, *FailureThresholds) bool
 		reason     TradeFailureReason
 		confidence float64
 	}
 
 	for i := range ruleSequence {
 		rule := &ruleSequence[i]
-		if rule.check(order) {
+		if rule.check(order, thresholds) {
 			bestMatch = rule
 			break // Take the first match (highest priority)
 		}
@@ -133,7 +145,7 @@ func AnalyzeFailedTrade(order *RecentOrder) *FailedTradeAnalysis {
 // ============================================================================
 
 // isChasing detects late entry with adverse slippage
-func isChasing(order *RecentOrder) bool {
+func isChasing(order *RecentOrder, _ *FailureThresholds) bool {
 	if order == nil {
 		return false
 	}
@@ -154,10 +166,17 @@ func isChasing(order *RecentOrder) bool {
 }
 
 // isFalseBreakoutV2 detects breakouts without volume or OI confirmation
-func isFalseBreakout(order *RecentOrder) bool {
+func isFalseBreakout(order *RecentOrder, thresholds *FailureThresholds) bool {
 	if order == nil {
 		return false
 	}
+
+	// Use defaults if no thresholds provided
+	if thresholds == nil {
+		defaults := DefaultFailureThresholds()
+		thresholds = &defaults
+	}
+
 	// Use provided values; if percent-like (>10), convert to ratio.
 	volumeRatio := order.VolumeAtEntry
 	if volumeRatio > 10 {
@@ -168,17 +187,24 @@ func isFalseBreakout(order *RecentOrder) bool {
 		oiRatio = oiRatio / 100.0
 	}
 
-	// Rule: Both volume AND OI must be weak
-	weakVolume := volumeRatio < 0.90 // < 90%
-	weakOI := oiRatio < 0.30         // < 30% increase
+	// Rule: Both volume AND OI must be weak (use calibrated thresholds)
+	weakVolume := volumeRatio < thresholds.WeakVolumeThreshold
+	weakOI := oiRatio < thresholds.WeakOIThreshold
 	return weakVolume && weakOI
 }
 
 // isPrematureEntry detects entries before confirmation criteria
-func isPrematureEntry(order *RecentOrder) bool {
+func isPrematureEntry(order *RecentOrder, thresholds *FailureThresholds) bool {
 	if order == nil {
 		return false
 	}
+
+	// Use defaults if no thresholds provided
+	if thresholds == nil {
+		defaults := DefaultFailureThresholds()
+		thresholds = &defaults
+	}
+
 	volumeRatio := order.VolumeAtEntry
 	if volumeRatio > 10 {
 		volumeRatio = volumeRatio / 100.0
@@ -188,14 +214,14 @@ func isPrematureEntry(order *RecentOrder) bool {
 		oiRatio = oiRatio / 100.0
 	}
 
-	// Rule: Both volume and OI below thresholds
-	lowVolume := volumeRatio < 0.90 // < 90%
-	lowOI := oiRatio < 0.50         // < 50%
+	// Rule: Both volume and OI below thresholds (use calibrated values)
+	lowVolume := volumeRatio < thresholds.PrematureVolumeThreshold
+	lowOI := oiRatio < thresholds.PrematureOIThreshold
 	return lowVolume && lowOI
 }
 
 // isStopTooTight detects stops closer than risk management threshold
-func isStopTooTight(order *RecentOrder) bool {
+func isStopTooTight(order *RecentOrder, _ *FailureThresholds) bool {
 	if order == nil {
 		return false
 	}
@@ -204,32 +230,46 @@ func isStopTooTight(order *RecentOrder) bool {
 }
 
 // isMomentumDecay detects volume/OI collapse during trade
-func isMomentumDecay(order *RecentOrder) bool {
+func isMomentumDecay(order *RecentOrder, thresholds *FailureThresholds) bool {
 	if order == nil {
 		return false
 	}
-	// Rule: Both volume AND OI decline significantly
-	volumeDropped := order.VolumeDeltaDuringTrade < -0.30 // > 30% drop
-	oiDropped := order.OIDeltaDuringTrade < -0.20         // > 20% drop
+
+	// Use defaults if no thresholds provided
+	if thresholds == nil {
+		defaults := DefaultFailureThresholds()
+		thresholds = &defaults
+	}
+
+	// Rule: Both volume AND OI decline significantly (use calibrated thresholds)
+	volumeDropped := order.VolumeDeltaDuringTrade < thresholds.VolumeDecayThreshold
+	oiDropped := order.OIDeltaDuringTrade < thresholds.OIDecayThreshold
 	return volumeDropped && oiDropped
 }
 
 // isLiquidityDried detects spread widening and depth reduction
-func isLiquidityDried(order *RecentOrder) bool {
+func isLiquidityDried(order *RecentOrder, thresholds *FailureThresholds) bool {
 	if order == nil {
 		return false
 	}
-	// Rule: Both spread widened AND depth shrunk significantly
+
+	// Use defaults if no thresholds provided
+	if thresholds == nil {
+		defaults := DefaultFailureThresholds()
+		thresholds = &defaults
+	}
+
+	// Rule: Both spread widened AND depth shrunk significantly (use calibrated values)
 	if order.EntrySpread > 0 && order.ExitSpread > 0 {
-		spreadWorsened := order.ExitSpread > (order.EntrySpread * 2.0) // 2x worse
-		depthShrunk := order.ExitDepth < (order.EntryDepth * 0.50)     // 50% reduction
+		spreadWorsened := order.ExitSpread > (order.EntrySpread * thresholds.SpreadWorseningMultiple)
+		depthShrunk := order.ExitDepth < (order.EntryDepth * thresholds.DepthReductionThreshold)
 		return spreadWorsened && depthShrunk
 	}
 	return false
 }
 
 // isStopHitRegimeChange detects trend reversal or market regime shift
-func isStopHitRegimeChange(order *RecentOrder) bool {
+func isStopHitRegimeChange(order *RecentOrder, _ *FailureThresholds) bool {
 	if order == nil {
 		return false
 	}
@@ -248,7 +288,7 @@ func isStopHitRegimeChange(order *RecentOrder) bool {
 }
 
 // isLateExitGiveBack detects poor exit timing with large give-back
-func isLateExitGiveBack(order *RecentOrder) bool {
+func isLateExitGiveBack(order *RecentOrder, _ *FailureThresholds) bool {
 	if order == nil {
 		return false
 	}
@@ -261,7 +301,7 @@ func isLateExitGiveBack(order *RecentOrder) bool {
 }
 
 // isHighSlippageRegime detects slippage that's excessive for market conditions
-func isHighSlippageRegime(order *RecentOrder) bool {
+func isHighSlippageRegime(order *RecentOrder, _ *FailureThresholds) bool {
 	if order == nil {
 		return false
 	}
@@ -274,7 +314,7 @@ func isHighSlippageRegime(order *RecentOrder) bool {
 }
 
 // isFundingDrag detects when funding/borrow costs are significant
-func isFundingDrag(order *RecentOrder) bool {
+func isFundingDrag(order *RecentOrder, _ *FailureThresholds) bool {
 	if order == nil {
 		return false
 	}

@@ -19,6 +19,7 @@ import type {
   BacktestEquityPoint,
   BacktestTradeEvent,
   BacktestMetrics,
+  BacktestAnalysis,
   BacktestRunMetadata,
   BacktestKlinesResponse,
   Strategy,
@@ -580,6 +581,13 @@ export const api = {
       headers: getAuthHeaders(),
     })
     return handleJSONResponse<BacktestMetrics>(res)
+  },
+
+  async getBacktestAnalysis(runId: string): Promise<BacktestAnalysis> {
+    const res = await fetch(`${API_BASE}/backtest/analysis?run_id=${runId}`, {
+      headers: getAuthHeaders(),
+    })
+    return handleJSONResponse<BacktestAnalysis>(res)
   },
 
   async getBacktestKlines(

@@ -9,29 +9,37 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"nofx/mcp"
 	"nofx/store"
 )
 
 type Manager struct {
-	mu         sync.RWMutex
-	runners    map[string]*Runner
-	metadata   map[string]*RunMetadata
-	cancels    map[string]context.CancelFunc
-	mcpClient  mcp.AIClient
-	aiResolver AIConfigResolver
+	mu                     sync.RWMutex
+	runners                map[string]*Runner
+	metadata               map[string]*RunMetadata
+	cancels                map[string]context.CancelFunc
+	mcpClient              mcp.AIClient
+	aiResolver             AIConfigResolver
+	calibrationScheduler   *CalibrationScheduler
 }
 
 type AIConfigResolver func(*BacktestConfig) error
 
 func NewManager(defaultClient mcp.AIClient) *Manager {
-	return &Manager{
+	m := &Manager{
 		runners:   make(map[string]*Runner),
 		metadata:  make(map[string]*RunMetadata),
 		cancels:   make(map[string]context.CancelFunc),
 		mcpClient: defaultClient,
 	}
+
+	// Initialize and start calibration scheduler (monthly recalibration)
+	m.calibrationScheduler = NewCalibrationScheduler(m, 30*24*time.Hour)
+	m.calibrationScheduler.Start()
+
+	return m
 }
 
 func (m *Manager) SetAIResolver(resolver AIConfigResolver) {
@@ -99,6 +107,9 @@ func (m *Manager) Start(ctx context.Context, cfg BacktestConfig) (*Runner, error
 
 	m.storeMetadata(cfg.RunID, meta)
 	m.launchWatcher(cfg.RunID, runner)
+
+	// Kick off short-term adaptive calibration of market monitors if applicable
+	// (no-op here; monitors recalibrate internally on updates)
 	return runner, nil
 }
 
@@ -354,6 +365,19 @@ func (m *Manager) GetMetrics(runID string) (*Metrics, error) {
 	return LoadMetrics(runID)
 }
 
+// GetAnalysis returns the feedback analysis for a backtest run (if available)
+func (m *Manager) GetAnalysis(runID string) (*FeedbackAnalysis, error) {
+	// First try to get from running runner
+	if runner, ok := m.GetRunner(runID); ok {
+		if analysis := runner.GetFeedbackAnalysis(); analysis != nil {
+			return analysis, nil
+		}
+	}
+	
+	// Fall back to loading from disk
+	return LoadFeedbackAnalysis(runID)
+}
+
 func (m *Manager) Cleanup(runID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -490,4 +514,18 @@ func (m *Manager) RestoreRuns() error {
 // RestoreRunsFromDisk retains the old method name for backward compatibility.
 func (m *Manager) RestoreRunsFromDisk() error {
 	return m.RestoreRuns()
+}
+
+// Shutdown stops all background processes including the calibration scheduler
+func (m *Manager) Shutdown() {
+	if m.calibrationScheduler != nil {
+		m.calibrationScheduler.Stop()
+	}
+}
+
+// TriggerManualCalibration manually runs threshold calibration
+func (m *Manager) TriggerManualCalibration() {
+	if m.calibrationScheduler != nil {
+		m.calibrationScheduler.RunManualCalibration()
+	}
 }

@@ -1,6 +1,8 @@
 package market
 
 import (
+	"math"
+	"sort"
 	"sync"
 	"time"
 )
@@ -34,6 +36,9 @@ type OrderBookMonitor struct {
 	volumeSpikeMultiple float64              // How many times baseline = spike (e.g., 2.0 = 2x)
 	priceMoveThreshold  float64              // % price movement threshold (0.005 = 0.5%)
 	cooldownDuration    time.Duration        // Minimum time between same trigger type
+	imbalanceHistory    []float64            // Recent imbalance samples for calibration
+	volumeSpikeHistory  []float64            // Recent volume ratios for calibration
+	priceMoveHistory    []float64            // Recent price move magnitudes for calibration
 }
 
 // NewOrderBookMonitor creates a new order book monitor for a symbol
@@ -52,6 +57,9 @@ func NewOrderBookMonitor(symbol string) *OrderBookMonitor {
 		volumeSpikeMultiple: 2.0,              // 2x or more
 		priceMoveThreshold:  0.005,            // 0.5%
 		cooldownDuration:    30 * time.Second, // Don't fire same trigger more than once per 30s
+		imbalanceHistory:    make([]float64, 0, 240),
+		volumeSpikeHistory:  make([]float64, 0, 240),
+		priceMoveHistory:    make([]float64, 0, 240),
 	}
 }
 
@@ -69,6 +77,12 @@ func (m *OrderBookMonitor) UpdatePrice(price float64) {
 	if len(m.priceHistory) > 20 {
 		m.priceHistory = m.priceHistory[1:]
 		m.priceTimestamps = m.priceTimestamps[1:]
+	}
+
+	if m.lastPrice > 0 && price > 0 {
+		change := math.Abs(price-m.lastPrice) / m.lastPrice
+		m.priceMoveHistory = appendWithLimit(m.priceMoveHistory, change, 240)
+		m.recalibrateThresholdsLocked()
 	}
 
 	m.lastPrice = price
@@ -104,6 +118,13 @@ func (m *OrderBookMonitor) UpdateVolume(volume float64) {
 		}
 		m.volumeBaseline = total / float64(len(m.volumeHistory))
 	}
+
+	if m.volumeBaseline > 0 && len(m.volumeHistory) > 0 {
+		currentVolume := m.volumeHistory[len(m.volumeHistory)-1]
+		ratio := currentVolume / m.volumeBaseline
+		m.volumeSpikeHistory = appendWithLimit(m.volumeSpikeHistory, ratio, 240)
+		m.recalibrateThresholdsLocked()
+	}
 }
 
 // UpdateOrderBook updates order book imbalance (buy/sell ratio)
@@ -117,6 +138,9 @@ func (m *OrderBookMonitor) UpdateOrderBook(buyVolume, sellVolume float64) {
 	if total > 0 {
 		m.orderBookImbalance = buyVolume / total
 	}
+
+	m.imbalanceHistory = appendWithLimit(m.imbalanceHistory, m.orderBookImbalance, 240)
+	m.recalibrateThresholdsLocked()
 }
 
 // CheckTriggers checks for all order book triggers and returns any detected
@@ -193,6 +217,8 @@ func (m *OrderBookMonitor) checkVolumeSpikerigger(now time.Time) *OrderBookTrigg
 
 	currentVolume := m.volumeHistory[len(m.volumeHistory)-1]
 	volumeRatio := currentVolume / m.volumeBaseline
+	m.volumeSpikeHistory = appendWithLimit(m.volumeSpikeHistory, volumeRatio, 240)
+	m.recalibrateThresholdsLocked()
 
 	if volumeRatio >= m.volumeSpikeMultiple {
 		lastFireTime := m.lastTriggerTime["volume_spike"]
@@ -244,6 +270,9 @@ func (m *OrderBookMonitor) checkPriceMovementTrigger(now time.Time) *OrderBookTr
 	if absChange < 0 {
 		absChange = -absChange
 	}
+
+	m.priceMoveHistory = appendWithLimit(m.priceMoveHistory, absChange, 240)
+	m.recalibrateThresholdsLocked()
 
 	if absChange >= m.priceMoveThreshold {
 		lastFireTime := m.lastTriggerTime["price_movement"]
@@ -317,4 +346,66 @@ func (m *OrderBookMonitor) SetCooldown(duration time.Duration) {
 	defer m.mu.Unlock()
 
 	m.cooldownDuration = duration
+}
+
+// recalibrateThresholdsLocked adapts thresholds based on recent distribution of observed signals.
+// Caller must hold m.mu.
+func (m *OrderBookMonitor) recalibrateThresholdsLocked() {
+	if len(m.imbalanceHistory) >= 20 {
+		deviations := make([]float64, len(m.imbalanceHistory))
+		for i, v := range m.imbalanceHistory {
+			deviations[i] = math.Abs(v - 0.5)
+		}
+		dev := percentile(deviations, 0.90)
+		dev = clamp(dev, 0.10, 0.25)
+		m.imbalanceThreshold = 0.5 - dev
+	}
+
+	if len(m.volumeSpikeHistory) >= 20 {
+		spike := percentile(m.volumeSpikeHistory, 0.90)
+		m.volumeSpikeMultiple = clamp(spike, 1.2, 5.0)
+	}
+
+	if len(m.priceMoveHistory) >= 20 {
+		move := percentile(m.priceMoveHistory, 0.90)
+		m.priceMoveThreshold = clamp(move, 0.001, 0.05)
+	}
+}
+
+func appendWithLimit(values []float64, v float64, limit int) []float64 {
+	values = append(values, v)
+	if len(values) > limit {
+		values = values[len(values)-limit:]
+	}
+	return values
+}
+
+func percentile(values []float64, p float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+
+	cpy := make([]float64, len(values))
+	copy(cpy, values)
+	sort.Float64s(cpy)
+
+	idx := int(p * float64(len(cpy)-1))
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(cpy) {
+		idx = len(cpy) - 1
+	}
+
+	return cpy[idx]
+}
+
+func clamp(v, min, max float64) float64 {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }

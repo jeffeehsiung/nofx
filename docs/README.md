@@ -6,21 +6,36 @@ Welcome to the NOFX documentation! This page helps you find the right documentat
 
 ---
 
+## 🎯 Quick Navigation / 快速导航
+
+| Your Role | Start Here | Time Needed |
+|-----------|------------|-------------|
+| **👨‍💻 Developer (New)** | **[Developer Onboarding Guide](DEVELOPER_ONBOARDING.md)** ⭐ | 15 hours |
+| **📊 Quick Reference** | **[Documentation Index](INDEX.md)** | 5 min |
+| 👤 End User | [Main README](../README.md) | 10 min |
+| 🐳 Quick Deploy | [Docker Guide](getting-started/docker-deploy.en.md) | 15 min |
+
+---
+
 ## 🚀 Getting Started / 快速开始
 
-**New to NOFX? Start here!**
+**New to NOFX? Choose your path:**
 
-| Document | Description | 描述 |
-|----------|-------------|------|
-| [Main README](../README.md) | Project overview, features, quick start | 项目概述、功能、快速入门 |
-| [Getting Started Index (EN)](getting-started/README.md) | All deployment options | 所有部署选项 |
-| [Getting Started Index (中文)](getting-started/README.zh-CN.md) | 所有部署选项 | All deployment options |
-| [Docker Deployment (EN)](getting-started/docker-deploy.en.md) | Deploy with Docker (recommended) | Docker 部署（推荐） |
-| [Docker Deployment (中文)](getting-started/docker-deploy.zh-CN.md) | Docker 部署指南（中文） | Docker deployment guide |
-| [Custom API (EN)](getting-started/custom-api.en.md) | Connect custom AI API providers | 连接自定义 AI API |
-| [Custom API (中文)](getting-started/custom-api.md) | 连接自定义 AI API 提供商 | Custom AI provider guide |
+| Document | For Who | 描述 |
+|----------|---------|------|
+| **[🎓 Developer Onboarding](DEVELOPER_ONBOARDING.md)** | **Programmers new to codebase** | **Complete system understanding** |
+| [📑 Documentation Index](INDEX.md) | Looking for specific docs | Quick lookup table |
+| [Main README](../README.md) | Everyone | Project overview, quick start |
+| [Getting Started Index (EN)](getting-started/README.md) | Deployers | All deployment options |
+| [Getting Started Index (中文)](getting-started/README.zh-CN.md) | 部署者 | 所有部署选项 |
+| [Docker Deployment (EN)](getting-started/docker-deploy.en.md) | Quick setup | Docker 部署（推荐） |
+| [Docker Deployment (中文)](getting-started/docker-deploy.zh-CN.md) | 快速设置 | Docker deployment guide |
+| [Custom API (EN)](getting-started/custom-api.en.md) | Advanced users | 连接自定义 AI API |
+| [Custom API (中文)](getting-started/custom-api.md) | 高级用户 | Custom AI provider guide |
 
 **Quick Links:**
+- 👨‍💻 **New programmer?** → **[Developer Onboarding](DEVELOPER_ONBOARDING.md)** (START HERE!)
+- 📑 **Looking for something specific?** → [Documentation Index](INDEX.md)
 - 📖 See all options → [Getting Started](getting-started/README.md) / [快速开始](getting-started/README.zh-CN.md)
 - 🐳 Want easiest setup? → [Docker (EN)](getting-started/docker-deploy.en.md) / [Docker (中文)](getting-started/docker-deploy.zh-CN.md)
 - 🤖 Custom AI model? → [Custom API (EN)](getting-started/custom-api.en.md) / [自定义 API](getting-started/custom-api.md)
@@ -79,13 +94,22 @@ Welcome to the NOFX documentation! This page helps you find the right documentat
 
 **For developers who want to understand the internals**
 
-| Document | Description | 描述 |
-|----------|-------------|------|
-| [Architecture Overview (EN)](architecture/README.md) | System architecture, modules, and design | 系统架构、模块和设计 |
-| [Architecture Overview (中文)](architecture/README.zh-CN.md) | 系统架构、模块和设计 | System architecture overview |
-| API Reference *(coming soon)* | HTTP API documentation | HTTP API 文档 |
-| Database Schema *(coming soon)* | SQLite database structure | SQLite 数据库结构 |
-| Testing Guide *(coming soon)* | How to write tests | 如何编写测试 |
+| Document | For Who | 描述 |
+|----------|---------|------|
+| **[🎓 Developer Onboarding Guide](DEVELOPER_ONBOARDING.md)** | **New programmers** | **Complete system walkthrough** |
+| [📑 Documentation Index](INDEX.md) | Quick reference | Fast lookup table |
+| [Architecture Overview (EN)](architecture/README.md) | System designers | 系统架构、模块和设计 |
+| [Architecture Overview (中文)](architecture/README.zh-CN.md) | 系统设计者 | System architecture overview |
+| [🔥 Threshold Calibration Guide](threshold-calibration.md) | **Algorithm developers** | **Data-driven optimization** |
+| [Magic Number Elimination](magic-number-elimination-summary.md) | Code quality | Implementation details |
+| API Reference *(coming soon)* | API developers | HTTP API 文档 |
+| Database Schema *(coming soon)* | Database developers | SQLite 数据库结构 |
+| Testing Guide *(coming soon)* | QA engineers | 如何编写测试 |
+
+**Developer Quick Start:**
+1. **New to codebase?** → Read [Developer Onboarding Guide](DEVELOPER_ONBOARDING.md) (15 hours)
+2. **Looking for specific info?** → Check [Documentation Index](INDEX.md) (5 min)
+3. **Want to optimize?** → Study [Threshold Calibration Guide](threshold-calibration.md)
 
 ---
 

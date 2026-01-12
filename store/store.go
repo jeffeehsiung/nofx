@@ -16,16 +16,17 @@ type Store struct {
 	db *sql.DB
 
 	// Sub-stores (lazy initialization)
-	user     *UserStore
-	aiModel  *AIModelStore
-	exchange *ExchangeStore
-	trader   *TraderStore
-	decision *DecisionStore
-	backtest *BacktestStore
-	position *PositionStore
-	strategy *StrategyStore
-	equity   *EquityStore
-	order    *OrderStore
+	user         *UserStore
+	aiModel      *AIModelStore
+	exchange     *ExchangeStore
+	trader       *TraderStore
+	decision     *DecisionStore
+	backtest     *BacktestStore
+	position     *PositionStore
+	strategy     *StrategyStore
+	equity       *EquityStore
+	order        *OrderStore
+	tradeOutcome *TradeOutcomeStore
 
 	// Encryption functions
 	encryptFunc func(string) string
@@ -156,6 +157,9 @@ func (s *Store) initTables() error {
 	}
 	if err := s.Order().InitTables(); err != nil {
 		return fmt.Errorf("failed to initialize order tables: %w", err)
+	}
+	if err := s.TradeOutcome().InitTables(); err != nil {
+		return fmt.Errorf("failed to initialize trade outcome tables: %w", err)
 	}
 	return nil
 }
@@ -289,6 +293,16 @@ func (s *Store) Order() *OrderStore {
 		s.order = NewOrderStore(s.db)
 	}
 	return s.order
+}
+
+// TradeOutcome gets trade outcome storage
+func (s *Store) TradeOutcome() *TradeOutcomeStore {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.tradeOutcome == nil {
+		s.tradeOutcome = NewTradeOutcomeStore(s.db)
+	}
+	return s.tradeOutcome
 }
 
 // Close closes database connection

@@ -118,14 +118,23 @@ func DefaultFeedbackConfig() FeedbackConfig {
 type FeedbackGenerator struct {
 	runID  string
 	config FeedbackConfig
+
+	// Calibrated thresholds for Trade Failure V2 (defaults if calibration unavailable)
+	failureThresholds decision.FailureThresholds
 }
 
 // NewFeedbackGenerator creates a new feedback generator
 func NewFeedbackGenerator(runID string, config FeedbackConfig) *FeedbackGenerator {
 	return &FeedbackGenerator{
-		runID:  runID,
-		config: config,
+		runID:             runID,
+		config:            config,
+		failureThresholds: decision.DefaultFailureThresholds(),
 	}
+}
+
+// SetFailureThresholds injects calibrated thresholds (idempotent fallback-safe)
+func (fg *FeedbackGenerator) SetFailureThresholds(thresholds decision.FailureThresholds) {
+	fg.failureThresholds = thresholds
 }
 
 // GenerateFeedback analyzes recent performance and generates actionable insights
@@ -780,8 +789,8 @@ func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome,
 	for _, outcome := range outcomes {
 		// Only analyze failed trades that have microstructure data
 		if !outcome.Success && outcome.RecentOrder != nil {
-			// Call Trade Failure V2 analysis
-			analysis := decision.AnalyzeFailedTrade(outcome.RecentOrder)
+			thresholds := fg.failureThresholds
+			analysis := decision.AnalyzeFailedTradeWithThresholds(outcome.RecentOrder, &thresholds)
 			if analysis != nil {
 				reason := string(analysis.PrimaryReason)
 				confidence := analysis.ConfidenceScore

@@ -1482,6 +1482,23 @@ func (at *AutoTrader) executeCloseLongWithRecord(decision *decision.Decision, ac
 	// Record order to database and poll for confirmation
 	at.recordAndConfirmOrder(order, decision.Symbol, "close_long", quantity, marketData.CurrentPrice, 0, entryPrice)
 
+	// Analyze the closed trade for failure patterns (Issue #2: Live Trade Failure Analysis)
+	if at.store != nil {
+		pnlPct := 0.0
+		if entryPrice > 0 {
+			pnlPct = ((marketData.CurrentPrice - entryPrice) / entryPrice) * 100
+		}
+		// Save trade outcome for failure analysis and calibration
+		outcome := &store.TradeOutcome{
+			Symbol:     decision.Symbol,
+			Profitable: pnlPct >= 0,
+			PnLPct:     pnlPct,
+		}
+		if err := at.store.TradeOutcome().Save(outcome); err != nil {
+			logger.Warnf("⚠️ Failed to save trade outcome: %v", err)
+		}
+	}
+
 	logger.Infof("  ✓ Position closed successfully")
 	return nil
 }
@@ -1545,6 +1562,24 @@ func (at *AutoTrader) executeCloseShortWithRecord(decision *decision.Decision, a
 
 	// Record order to database and poll for confirmation
 	at.recordAndConfirmOrder(order, decision.Symbol, "close_short", quantity, marketData.CurrentPrice, 0, entryPrice)
+
+	// Analyze the closed trade for failure patterns (Issue #2: Live Trade Failure Analysis)
+	if at.store != nil {
+		pnlPct := 0.0
+		if entryPrice > 0 {
+			// For short positions, profit = (entry - exit) / entry * 100
+			pnlPct = ((entryPrice - marketData.CurrentPrice) / entryPrice) * 100
+		}
+		// Save trade outcome for failure analysis and calibration
+		outcome := &store.TradeOutcome{
+			Symbol:     decision.Symbol,
+			Profitable: pnlPct >= 0,
+			PnLPct:     pnlPct,
+		}
+		if err := at.store.TradeOutcome().Save(outcome); err != nil {
+			logger.Warnf("⚠️ Failed to save trade outcome: %v", err)
+		}
+	}
 
 	logger.Infof("  ✓ Position closed successfully")
 	return nil

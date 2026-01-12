@@ -33,10 +33,16 @@ func (s *Server) registerBacktestRoutes(router *gin.RouterGroup) {
 	router.GET("/equity", s.handleBacktestEquity)
 	router.GET("/trades", s.handleBacktestTrades)
 	router.GET("/metrics", s.handleBacktestMetrics)
+	router.GET("/analysis", s.handleBacktestAnalysis)
 	router.GET("/trace", s.handleBacktestTrace)
 	router.GET("/decisions", s.handleBacktestDecisions)
 	router.GET("/export", s.handleBacktestExport)
 	router.GET("/klines", s.handleBacktestKlines)
+	
+	// Issue 4: Prompt optimization endpoints
+	router.GET("/prompt-variants", s.handleGetPromptVariants)
+	router.GET("/prompt-performance", s.handleGetPromptPerformance)
+	router.POST("/prompt-activate", s.handleActivatePrompt)
 }
 
 type backtestStartRequest struct {
@@ -408,6 +414,36 @@ func (s *Server) handleBacktestMetrics(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, metrics)
+}
+
+// handleBacktestAnalysis returns failure pattern analysis, recommendations, and top losing trades
+func (s *Server) handleBacktestAnalysis(c *gin.Context) {
+	if s.backtestManager == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "backtest manager unavailable"})
+		return
+	}
+
+	userID := normalizeUserID(c.GetString("user_id"))
+
+	runID := c.Query("run_id")
+	if runID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "run_id is required"})
+		return
+	}
+	if _, err := s.ensureBacktestRunOwnership(runID, userID); writeBacktestAccessError(c, err) {
+		return
+	}
+
+	analysis, err := s.backtestManager.GetAnalysis(runID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, os.ErrNotExist) {
+			c.JSON(http.StatusAccepted, gin.H{"error": "analysis not ready yet"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, analysis)
 }
 
 func (s *Server) handleBacktestTrace(c *gin.Context) {

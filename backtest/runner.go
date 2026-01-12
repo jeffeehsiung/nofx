@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"nofx/config"
 	"nofx/logger"
 	"os"
 	"path/filepath"
@@ -68,6 +69,7 @@ type Runner struct {
 	feedbackConfig    FeedbackConfig
 	lastFeedback      *FeedbackAnalysis
 	feedbackCycle     int // Track when feedback was last generated
+	failureThresholds decision.FailureThresholds
 
 	// Advanced optimization systems
 	promptOptimizer   *PromptOptimizer
@@ -119,6 +121,47 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	// Initialize feedback loop
 	feedbackConfig := DefaultFeedbackConfig()
 	feedbackGenerator := NewFeedbackGenerator(cfg.RunID, feedbackConfig)
+
+	failureThresholds := decision.DefaultFailureThresholds()
+
+	// Try to load calibrated thresholds from disk if enabled
+	if config.Features().CalibrateOnStartup {
+		if loadedJSON, valid, err := config.LoadCalibratedThresholdsJSON(""); err == nil && valid {
+			// Convert from JSON to decision.FailureThresholds
+			failureThresholds = decision.FailureThresholds{
+				WeakVolumeThreshold:      loadedJSON.WeakVolumeThreshold,
+				WeakOIThreshold:          loadedJSON.WeakOIThreshold,
+				PrematureVolumeThreshold: loadedJSON.PrematureVolumeThreshold,
+				PrematureOIThreshold:     loadedJSON.PrematureOIThreshold,
+				VolumeDecayThreshold:     loadedJSON.VolumeDecayThreshold,
+				OIDecayThreshold:         loadedJSON.OIDecayThreshold,
+				SpreadWorseningMultiple:  loadedJSON.SpreadWorseningMultiple,
+				DepthReductionThreshold:  loadedJSON.DepthReductionThreshold,
+			}
+			logger.Infof("applied calibrated failure thresholds from disk")
+		} else if err != nil {
+			logger.Warnf("failed to load calibrated thresholds: %v", err)
+			// Fall back to runtime calibration
+			if calibrated, sampleSize, summary, err := calibrateFailureThresholds(cfg.RunID, feedbackGenerator, 500); err != nil {
+				logger.Infof("using default failure thresholds (calibration unavailable): %v", err)
+			} else {
+				failureThresholds = calibrated
+				logger.Infof("applied calibrated failure thresholds from %d historical trades", sampleSize)
+				logger.Info(summary)
+			}
+		}
+	} else {
+		// Offline calibration path
+		if calibrated, sampleSize, summary, err := calibrateFailureThresholds(cfg.RunID, feedbackGenerator, 500); err != nil {
+			logger.Infof("using default failure thresholds (calibration unavailable): %v", err)
+		} else {
+			failureThresholds = calibrated
+			logger.Infof("applied calibrated failure thresholds from %d historical trades", sampleSize)
+			logger.Info(summary)
+		}
+	}
+
+	feedbackGenerator.SetFailureThresholds(failureThresholds)
 
 	// Initialize advanced optimization systems
 	// Use a default system prompt (will be overridden by StrategyEngine)
@@ -179,6 +222,7 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 		feedbackGenerator: feedbackGenerator,
 		feedbackConfig:    feedbackConfig,
 		feedbackCycle:     0,
+		failureThresholds: failureThresholds,
 		promptOptimizer:   promptOptimizer,
 		factorOptimizer:   factorOptimizer,
 		complianceTracker: complianceTracker,
@@ -508,6 +552,15 @@ func (r *Runner) CurrentMetadata() *RunMetadata {
 	meta.CreatedAt = r.createdAt
 	meta.UpdatedAt = state.LastUpdate
 	return meta
+}
+
+// GetFeedbackAnalysis returns the current feedback analysis (if available)
+// This includes failure patterns, recommended actions, and top losing trades
+func (r *Runner) GetFeedbackAnalysis() *FeedbackAnalysis {
+	if r == nil {
+		return nil
+	}
+	return r.lastFeedback
 }
 
 func (r *Runner) loop(ctx context.Context) {

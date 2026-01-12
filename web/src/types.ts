@@ -364,6 +364,54 @@ export interface BacktestMetrics {
   >;
 }
 
+export interface TradingPattern {
+  pattern_type: string;
+  frequency: number;
+  avg_pnl: number;
+  avg_pnl_pct: number;
+  description: string;
+  evidence: string[];
+  recommendation: string;
+}
+
+export interface DecisionOutcome {
+  timestamp: string;
+  symbol: string;
+  action: string;
+  reasoning: string;
+  confidence: number;
+  entry_price: number;
+  position_size: number;
+  leverage: number;
+  exit_price: number;
+  hold_duration: string;
+  realized_pnl: number;
+  realized_pnl_pct: number;
+  success: boolean;
+  analysis: string;
+}
+
+export interface BacktestAnalysis {
+  analysis_period: string;
+  start_time: string;
+  end_time: string;
+  decisions_covered: number;
+  total_return: number;
+  total_return_pct: number;
+  win_rate: number;
+  profit_factor: number;
+  sharpe_ratio: number;
+  max_drawdown: number;
+  success_patterns: TradingPattern[];
+  failure_patterns: TradingPattern[];
+  key_insights: string[];
+  recommended_actions: string[];
+  top_winning_trades: DecisionOutcome[];
+  top_losing_trades: DecisionOutcome[];
+  market_conditions: string;
+  regime_analysis: Record<string, number>;
+}
+
 export interface BacktestStartConfig {
   run_id?: string;
   ai_model_id?: string;

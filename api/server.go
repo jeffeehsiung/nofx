@@ -108,6 +108,9 @@ func (s *Server) setupRoutes() {
 		// System config (no authentication required, for frontend to determine admin mode/registration status)
 		api.GET("/config", s.handleGetSystemConfig)
 
+		// Feature flags (authentication required for toggle, but readable without auth)
+		api.GET("/features", s.handleGetFeatures)
+
 		// Crypto related endpoints (no authentication required)
 		api.GET("/crypto/config", s.cryptoHandler.HandleGetCryptoConfig)
 		api.GET("/crypto/public-key", s.cryptoHandler.HandleGetPublicKey)
@@ -156,6 +159,10 @@ func (s *Server) setupRoutes() {
 			// AI model configuration
 			protected.GET("/models", s.handleGetModelConfigs)
 			protected.PUT("/models", s.handleUpdateModelConfigs)
+
+			// Feature flags (admin control)
+			protected.GET("/features/adaptive", s.handleGetAdaptiveFeature)
+			protected.PUT("/features/adaptive", s.handleToggleAdaptiveFeature)
 
 			// Exchange configuration
 			protected.GET("/exchanges", s.handleGetExchangeConfigs)
@@ -224,6 +231,55 @@ func (s *Server) handleGetSystemConfig(c *gin.Context) {
 		"registration_enabled": cfg.RegistrationEnabled,
 		"btc_eth_leverage":     int(config.DefaultMaxLeverage), // Default value
 		"altcoin_leverage":     int(config.OptimalLeverage),    // Default value
+	})
+}
+
+// handleGetFeatures Get current feature flags state (public endpoint)
+func (s *Server) handleGetFeatures(c *gin.Context) {
+	flags := config.Features()
+	c.JSON(http.StatusOK, gin.H{
+		"adaptive_microstructure": flags.EnableAdaptiveMicrostructure,
+		"calibrate_on_startup":    flags.CalibrateOnStartup,
+		"drift_alert_pct":         flags.DriftAlertThresholdPct,
+		"verbose_drift_logging":   flags.VerboseDriftLogging,
+	})
+}
+
+// handleGetAdaptiveFeature Get current state of adaptive microstructure feature
+func (s *Server) handleGetAdaptiveFeature(c *gin.Context) {
+	flags := config.Features()
+	c.JSON(http.StatusOK, gin.H{
+		"enabled": flags.EnableAdaptiveMicrostructure,
+		"description": "Uses percentile-based dynamic multipliers for market data instead of fixed thresholds",
+	})
+}
+
+// handleToggleAdaptiveFeature Toggle adaptive microstructure feature (requires authentication)
+func (s *Server) handleToggleAdaptiveFeature(c *gin.Context) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// Check if user is authenticated (authMiddleware should ensure this)
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
+
+	logger.Infof("User %v toggled adaptive microstructure to: %v", userID, req.Enabled)
+
+	// Set the feature
+	config.SetAdaptiveMicrostructure(req.Enabled)
+
+	c.JSON(http.StatusOK, gin.H{
+		"enabled": req.Enabled,
+		"message": fmt.Sprintf("Adaptive microstructure is now %s", map[bool]string{true: "enabled", false: "disabled"}[req.Enabled]),
 	})
 }
 

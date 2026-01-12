@@ -2,10 +2,11 @@ package market
 
 import (
 	"fmt"
-	"github.com/gorilla/websocket"
 	"nofx/logger"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // BinanceWebSocketClient implements WebSocketClient for Binance
@@ -88,7 +89,7 @@ func (c *BinanceWebSocketClient) Disconnect() error {
 	}
 
 	c.isConnected = false
-	
+
 	// Safely close stopCh channel (only if not already closed)
 	select {
 	case <-c.stopCh:
