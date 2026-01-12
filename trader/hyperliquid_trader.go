@@ -665,6 +665,10 @@ func (t *HyperliquidTrader) SetLeverage(symbol string, leverage int) error {
 
 // refreshMetaIfNeeded refreshes meta information when invalid (triggered when Asset ID is 0)
 func (t *HyperliquidTrader) refreshMetaIfNeeded(coin string) error {
+	if t.exchange == nil {
+		return fmt.Errorf("exchange is not initialized")
+	}
+
 	assetID := t.exchange.Info().NameToAsset(coin)
 	if assetID != 0 {
 		return nil // Meta is normal, no refresh needed

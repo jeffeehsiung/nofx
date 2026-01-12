@@ -98,9 +98,10 @@ func TestGetSzDecimals_NilMeta(t *testing.T) {
 	trader := &HyperliquidTrader{
 		meta:      nil,
 		metaMutex: sync.RWMutex{},
+		exchange:  nil, // Exchange is nil, so refreshMetaIfNeeded will fail and return default
 	}
 
-	// Should return default value 4 when meta is nil
+	// Should return default value 4 when meta is nil and refresh fails
 	decimals := trader.getSzDecimals("BTC")
 	expectedDecimals := 4
 
