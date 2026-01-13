@@ -1,25 +1,27 @@
 {
-  "analysis_period": "Last 23 trades",
+  "analysis_period": "Last 240 trades",
   "start_time": "2025-12-14T01:14:59.999+08:00",
-  "end_time": "2025-12-16T23:14:59.999+08:00",
-  "decisions_covered": 23,
+  "end_time": "2026-01-12T15:14:59.999+08:00",
+  "decisions_covered": 240,
   "total_return": 0,
-  "total_return_pct": -8.624135990945323,
-  "win_rate": 45.45454545454545,
-  "profit_factor": 2.2907554937922825,
-  "sharpe_ratio": 0.048309095873931646,
-  "max_drawdown": 6.4556561401354005,
+  "total_return_pct": 35.354102503416215,
+  "win_rate": 36.134453781512605,
+  "profit_factor": 0.7857923990669221,
+  "sharpe_ratio": -0.008989787792420288,
+  "max_drawdown": 41.32360013470352,
   "success_patterns": null,
   "failure_patterns": null,
   "key_insights": [
-    "🔴 CRITICAL: Portfolio down -8.62%. Immediate strategy revision needed",
-    "✅ Good profit factor (2.29). Average wins sufficiently larger than losses",
-    "✅ Drawdown well-controlled at 6.5%"
+    "✅ Strong performance: +35.35%. Current strategy is working well",
+    "📉 Low win rate (36.1%, 0 of 0 trades). Focus on better entry timing and trade selection",
+    "⚠️ Profit factor 0.79 \u003c 1.0: Losses exceed profits. Let winners run longer",
+    "🔴 CRITICAL: 41.3% max drawdown is excessive. Reduce position sizes and leverage"
   ],
   "recommended_actions": [
-    "1. REDUCE POSITION SIZES: Start with 50% of current position sizes until profitability improves",
-    "2. TIGHTER STOP-LOSSES: Set stop-losses at 2-3% maximum loss per trade",
-    "3. SELECTIVE TRADING: Only take trades with 70%+ confidence and clear technical setup"
+    "4. IMPROVE ENTRY TIMING: Wait for stronger confirmations (multiple timeframe alignment + volume)",
+    "5. SKIP LOW-CONFIDENCE TRADES: Avoid trades with confidence \u003c 70%",
+    "11. LET WINNERS RUN: Move stop-loss to breakeven and let profitable trades reach larger targets",
+    "12. IMPROVE RISK/REWARD: Target at least 2:1 reward-to-risk ratio on all trades"
   ],
   "top_winning_trades": [],
   "top_losing_trades": [],

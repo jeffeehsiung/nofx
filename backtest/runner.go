@@ -908,6 +908,7 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 		},
 		CandidateCoins: make([]string, 0, len(candidateCoins)),
 		Positions:      r.snapshotPositions(priceMap),
+		CycleNumber:    callCount, // Set the decision cycle number
 	}
 	for _, coin := range candidateCoins {
 		record.CandidateCoins = append(record.CandidateCoins, coin.Symbol)
