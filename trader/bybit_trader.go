@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"nofx/logger"
 	"strconv"
@@ -730,25 +729,10 @@ func (t *BybitTrader) getQtyStep(symbol string) float64 {
 
 // FormatQuantity formats quantity
 func (t *BybitTrader) FormatQuantity(symbol string, quantity float64) (string, error) {
-	// Get qtyStep for this symbol
-	qtyStep := t.getQtyStep(symbol)
-
-	// Align quantity according to qtyStep (round down to nearest step)
-	alignedQty := math.Floor(quantity/qtyStep) * qtyStep
-
-	// Calculate required decimal places
-	decimals := 0
-	if qtyStep < 1 {
-		stepStr := strconv.FormatFloat(qtyStep, 'f', -1, 64)
-		if idx := strings.Index(stepStr, "."); idx >= 0 {
-			decimals = len(stepStr) - idx - 1
-		}
-	}
-
-	// Format
-	format := fmt.Sprintf("%%.%df", decimals)
-	formatted := fmt.Sprintf(format, alignedQty)
-
+	// Bybit defaults to 3 decimal places for quantity formatting
+	const defaultDecimals = 3
+	format := fmt.Sprintf("%%.%df", defaultDecimals)
+	formatted := fmt.Sprintf(format, quantity)
 	return formatted, nil
 }
 

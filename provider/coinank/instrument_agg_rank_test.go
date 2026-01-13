@@ -81,10 +81,17 @@ func TestLiquidationRank(t *testing.T) {
 }
 
 func TestPriceRank(t *testing.T) {
+	if TestApikey == "" {
+		t.Skip("Coinank API key not configured; skipping integration test")
+	}
 	client := NewCoinankClient(coinank_enum.MainUrl, TestApikey)
 	resp, err := client.PriceRank(context.TODO(), coinank_enum.Price, coinank_enum.Desc, 1, 10)
 	if err != nil {
 		t.Error(err)
+	}
+	if len(resp) == 0 {
+		t.Error("response is empty")
+		return
 	}
 	if resp[0].BaseCoin == "" {
 		t.Error("baseCoin is empty")
@@ -97,10 +104,17 @@ func TestPriceRank(t *testing.T) {
 }
 
 func TestVolumeRank(t *testing.T) {
+	if TestApikey == "" {
+		t.Skip("Coinank API key not configured; skipping integration test")
+	}
 	client := NewCoinankClient(coinank_enum.MainUrl, TestApikey)
 	resp, err := client.VolumeRank(context.TODO(), coinank_enum.Turnover24h, coinank_enum.Desc, 1, 10)
 	if err != nil {
 		t.Error(err)
+	}
+	if len(resp) == 0 {
+		t.Error("response is empty")
+		return
 	}
 	if resp[0].BaseCoin == "" {
 		t.Error("baseCoin is empty")

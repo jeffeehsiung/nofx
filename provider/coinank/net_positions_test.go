@@ -9,6 +9,9 @@ import (
 )
 
 func TestNetPositions(t *testing.T) {
+	if TestApikey == "" {
+		t.Skip("Coinank API key not configured; skipping integration test")
+	}
 	client := NewCoinankClient(coinank_enum.MainUrl, TestApikey)
 	resp, err := client.NetPositions(context.TODO(), coinank_enum.Binance, "BTCUSDT", coinank_enum.Hour1, time.Now().UnixMilli(), 10)
 	if err != nil {

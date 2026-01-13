@@ -10,6 +10,9 @@ import (
 )
 
 func TestKline(t *testing.T) {
+	if TestApikey == "" {
+		t.Skip("Coinank API key not configured; skipping integration test")
+	}
 	client := NewCoinankClient(coinank_enum.MainUrl, TestApikey)
 	resp, err := client.Kline(context.TODO(), "BTCUSDT", coinank_enum.Binance, 0, time.Now().UnixMilli(), 10, coinank_enum.Hour1)
 	if err != nil {
@@ -23,6 +26,9 @@ func TestKline(t *testing.T) {
 }
 
 func TestKlineDaily(t *testing.T) {
+	if TestApikey == "" {
+		t.Skip("Coinank API key not configured; skipping integration test")
+	}
 	client := NewCoinankClient(coinank_enum.MainUrl, TestApikey)
 	resp, err := client.Kline(context.TODO(), "BTCUSDT", coinank_enum.Binance, 0, time.Now().UnixMilli(), 5, coinank_enum.Day1)
 	if err != nil {

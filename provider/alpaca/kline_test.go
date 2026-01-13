@@ -11,6 +11,9 @@ func TestGetBars(t *testing.T) {
 
 	resp, err := client.GetBars(context.TODO(), "AAPL", "1Day", 5)
 	if err != nil {
+		if err.Error() == "alpaca API keys not configured" {
+			t.Skip("Alpaca API keys not configured; skipping integration test")
+		}
 		t.Fatal(err)
 	}
 
