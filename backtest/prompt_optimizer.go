@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"nofx/logger"
+	"nofx/store"
 	"os"
 	"path/filepath"
 	"sort"
@@ -42,6 +43,7 @@ type PromptVariant struct {
 
 // PromptOptimizer manages prompt evolution and A/B testing
 type PromptOptimizer struct {
+	RunID          string // Backtest run ID for database persistence
 	BasePrompt     string
 	Variants       []*PromptVariant
 	CurrentVariant *PromptVariant
@@ -60,6 +62,9 @@ type PromptOptimizer struct {
 	AIClient interface {
 		CallWithMessages(systemPrompt, userPrompt string) (string, error)
 	}
+
+	// Storage for persistence
+	Storage *store.BacktestStore
 }
 
 // PromptOptimizerConfig controls prompt optimization behavior
@@ -86,18 +91,19 @@ func DefaultPromptOptimizerConfig() *PromptOptimizerConfig {
 
 // NewPromptOptimizer creates a new prompt optimizer
 func NewPromptOptimizer(basePrompt string, config *PromptOptimizerConfig) *PromptOptimizer {
-	return NewPromptOptimizerWithAI(basePrompt, config, nil)
+	return NewPromptOptimizerWithAI(basePrompt, config, nil, "", nil)
 }
 
 // NewPromptOptimizerWithAI creates a new prompt optimizer with AI client for LLM-based evolution
 func NewPromptOptimizerWithAI(basePrompt string, config *PromptOptimizerConfig, aiClient interface {
 	CallWithMessages(systemPrompt, userPrompt string) (string, error)
-}) *PromptOptimizer {
+}, runID string, storage *store.BacktestStore) *PromptOptimizer {
 	if config == nil {
 		config = DefaultPromptOptimizerConfig()
 	}
 
 	po := &PromptOptimizer{
+		RunID:           runID,
 		BasePrompt:      basePrompt,
 		Variants:        make([]*PromptVariant, 0),
 		Generation:      1,
@@ -107,6 +113,7 @@ func NewPromptOptimizerWithAI(basePrompt string, config *PromptOptimizerConfig, 
 		DecisionCounts:  make(map[string]int),
 		PerformanceData: make(map[string]*Metrics),
 		AIClient:        aiClient,
+		Storage:         storage,
 	}
 
 	// Create initial variant (base prompt) with consistent naming: gen1-v1
@@ -122,6 +129,9 @@ func NewPromptOptimizerWithAI(basePrompt string, config *PromptOptimizerConfig, 
 
 	po.Variants = append(po.Variants, baseVariant)
 	po.CurrentVariant = baseVariant
+
+	// Save initial variant to database
+	po.SaveVariantToDB(baseVariant)
 
 	logger.Infof("[PromptOptimizer] Initialized with base prompt: gen1-v1 (generation: 1)")
 
@@ -148,6 +158,52 @@ func (po *PromptOptimizer) GetCurrentVariant() *PromptVariant {
 	return po.CurrentVariant
 }
 
+// SaveVariantToDB persists a prompt variant to the database
+func (po *PromptOptimizer) SaveVariantToDB(variant *PromptVariant) error {
+	if po.Storage == nil || po.RunID == "" {
+		return nil // Skip if storage not configured
+	}
+
+	metrics := po.PerformanceData[variant.ID]
+	if metrics == nil {
+		metrics = &Metrics{}
+	}
+
+	variantData := &store.PromptVariantData{
+		ID:             variant.ID,
+		RunID:          po.RunID,
+		VariantID:      variant.ID,
+		Generation:     variant.Generation,
+		IsActive:       variant.IsActive,
+		Prompt:         variant.SystemPromptText,
+		TotalDecisions: po.DecisionCounts[variant.ID],
+		TotalReturn:    metrics.TotalReturnPct,
+		WinRate:        metrics.WinRate,
+		ProfitFactor:   metrics.ProfitFactor,
+		SharpeRatio:    metrics.SharpeRatio,
+		MaxDrawdown:    metrics.MaxDrawdownPct,
+		FitnessScore:   variant.FitnessScore,
+		CreatedAt:      variant.CreatedAt.Format(time.RFC3339),
+	}
+
+	return po.Storage.SavePromptVariant(variantData)
+}
+
+// SaveAllVariantsToDB persists all variants to the database
+func (po *PromptOptimizer) SaveAllVariantsToDB() error {
+	if po.Storage == nil || po.RunID == "" {
+		return nil
+	}
+
+	for _, variant := range po.Variants {
+		if err := po.SaveVariantToDB(variant); err != nil {
+			logger.Errorf("[PromptOptimizer] Failed to save variant %s: %v", variant.ID, err)
+			return err
+		}
+	}
+	return nil
+}
+
 // GetGeneration returns the current generation number
 func (po *PromptOptimizer) GetGeneration() int {
 	return po.Generation
@@ -165,6 +221,8 @@ func (po *PromptOptimizer) ActivateVariant(variantID string) error {
 					other.IsActive = false
 				}
 			}
+			// Persist the activation state change to database
+			po.SaveAllVariantsToDB()
 			return nil
 		}
 	}
@@ -190,6 +248,11 @@ func (po *PromptOptimizer) RecordDecisionOutcome(variantID string, metrics *Metr
 			variant.SharpeRatio = metrics.SharpeRatio
 			variant.MaxDrawdown = metrics.MaxDrawdownPct
 			variant.FitnessScore = po.calculateFitness(metrics)
+
+			// Save updated variant to database periodically (every 5 decisions)
+			if po.DecisionCounts[variantID]%5 == 0 {
+				po.SaveVariantToDB(variant)
+			}
 			break
 		}
 	}
@@ -320,6 +383,9 @@ func (po *PromptOptimizer) evolvePromptsWithLLM() error {
 	po.Generation++
 	po.Variants = []*PromptVariant{evolvedVariant}
 	po.CurrentVariant = evolvedVariant
+
+	// Save new variant to database
+	po.SaveVariantToDB(evolvedVariant)
 
 	// Reset tracking
 	po.DecisionCounts = make(map[string]int)

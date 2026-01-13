@@ -62,6 +62,9 @@ type BacktestConfig struct {
 
 	// Internal: loaded strategy config (set by Manager when StrategyID is provided)
 	loadedStrategy *store.StrategyConfig `json:"-"`
+
+	// Internal: storage reference for prompt variant persistence (set by Manager)
+	Storage *store.BacktestStore `json:"-"`
 }
 
 // Validate performs validity checks on the configuration and fills in default values.

@@ -168,9 +168,3 @@ func (pb *PositionBuilder) handleClose(
 		)
 	}
 }
-
-// quantitiesMatch checks if two quantities are close enough (within tolerance)
-func quantitiesMatch(a, b float64) bool {
-	const QUANTITY_TOLERANCE = 0.0001
-	return math.Abs(a-b) < QUANTITY_TOLERANCE
-}

@@ -1061,7 +1061,7 @@ func (s *PositionStore) calculateStreaks(traderID string, summary *HistorySummar
 
 	for rows.Next() {
 		var pnl float64
-		rows.Scan(&pnl)
+		_ = rows.Scan(&pnl)
 		isWin := pnl > 0
 
 		if isFirst {

@@ -216,7 +216,9 @@ func (s *EquityStore) GetCount(traderID string) (int, error) {
 func (s *EquityStore) MigrateFromDecision() (int64, error) {
 	// Check if migration is needed (whether new table is empty)
 	var count int
-	s.db.QueryRow(`SELECT COUNT(*) FROM trader_equity_snapshots`).Scan(&count)
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM trader_equity_snapshots`).Scan(&count); err != nil {
+		return 0, fmt.Errorf("failed to check equity snapshots count: %w", err)
+	}
 	if count > 0 {
 		return 0, nil // Already has data, skip migration
 	}

@@ -23,16 +23,18 @@ type Manager struct {
 	mcpClient            mcp.AIClient
 	aiResolver           AIConfigResolver
 	calibrationScheduler *CalibrationScheduler
+	backtestStore        *store.BacktestStore
 }
 
 type AIConfigResolver func(*BacktestConfig) error
 
-func NewManager(defaultClient mcp.AIClient) *Manager {
+func NewManager(defaultClient mcp.AIClient, backtestStore *store.BacktestStore) *Manager {
 	m := &Manager{
-		runners:   make(map[string]*Runner),
-		metadata:  make(map[string]*RunMetadata),
-		cancels:   make(map[string]context.CancelFunc),
-		mcpClient: defaultClient,
+		runners:       make(map[string]*Runner),
+		metadata:      make(map[string]*RunMetadata),
+		cancels:       make(map[string]context.CancelFunc),
+		mcpClient:     defaultClient,
+		backtestStore: backtestStore,
 	}
 
 	// Initialize and start calibration scheduler (monthly recalibration)
@@ -74,6 +76,9 @@ func (m *Manager) Start(ctx context.Context, cfg BacktestConfig) (*Runner, error
 	if err := SaveConfig(cfg.RunID, &persistCfg); err != nil {
 		return nil, err
 	}
+
+	// Set storage reference for prompt variant persistence
+	cfg.Storage = m.backtestStore
 
 	runner, err := NewRunner(cfg, m.client())
 	if err != nil {

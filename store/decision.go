@@ -115,10 +115,10 @@ func (s *DecisionStore) initTables() error {
 	}
 
 	// Migration: add raw_response column if not exists
-	s.db.Exec(`ALTER TABLE decision_records ADD COLUMN raw_response TEXT DEFAULT ''`)
+	_, _ = s.db.Exec(`ALTER TABLE decision_records ADD COLUMN raw_response TEXT DEFAULT ''`)
 
 	// Migration: add decisions column if not exists
-	s.db.Exec(`ALTER TABLE decision_records ADD COLUMN decisions TEXT DEFAULT '[]'`)
+	_, _ = s.db.Exec(`ALTER TABLE decision_records ADD COLUMN decisions TEXT DEFAULT '[]'`)
 
 	return nil
 }
@@ -296,12 +296,12 @@ func (s *DecisionStore) GetStatistics(traderID string) (*Statistics, error) {
 	stats.FailedCycles = stats.TotalCycles - stats.SuccessfulCycles
 
 	// Count from trader_positions table
-	s.db.QueryRow(`
+	_ = s.db.QueryRow(`
 		SELECT COUNT(*) FROM trader_positions
 		WHERE trader_id = ?
 	`, traderID).Scan(&stats.TotalOpenPositions)
 
-	s.db.QueryRow(`
+	_ = s.db.QueryRow(`
 		SELECT COUNT(*) FROM trader_positions
 		WHERE trader_id = ? AND status = 'CLOSED'
 	`, traderID).Scan(&stats.TotalClosePositions)
@@ -313,19 +313,23 @@ func (s *DecisionStore) GetStatistics(traderID string) (*Statistics, error) {
 func (s *DecisionStore) GetAllStatistics() (*Statistics, error) {
 	stats := &Statistics{}
 
-	s.db.QueryRow(`SELECT COUNT(*) FROM decision_records`).Scan(&stats.TotalCycles)
-	s.db.QueryRow(`SELECT COUNT(*) FROM decision_records WHERE success = 1`).Scan(&stats.SuccessfulCycles)
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM decision_records`).Scan(&stats.TotalCycles)
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM decision_records WHERE success = 1`).Scan(&stats.SuccessfulCycles)
 	stats.FailedCycles = stats.TotalCycles - stats.SuccessfulCycles
 
 	// Count from trader_positions table
-	s.db.QueryRow(`
+	if err := s.db.QueryRow(`
 		SELECT COUNT(*) FROM trader_positions
-	`).Scan(&stats.TotalOpenPositions)
+	`).Scan(&stats.TotalOpenPositions); err != nil {
+		return nil, fmt.Errorf("failed to count open positions: %w", err)
+	}
 
-	s.db.QueryRow(`
+	if err := s.db.QueryRow(`
 		SELECT COUNT(*) FROM trader_positions
 		WHERE status = 'CLOSED'
-	`).Scan(&stats.TotalClosePositions)
+	`).Scan(&stats.TotalClosePositions); err != nil {
+		return nil, fmt.Errorf("failed to count closed positions: %w", err)
+	}
 
 	return stats, nil
 }

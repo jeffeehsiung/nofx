@@ -115,6 +115,7 @@ func (s *TraderStore) initTables() error {
 	if err := s.migrateTradersRemoveFK(); err != nil {
 		// Log but don't fail - this is a best-effort migration
 		// The constraint may not exist in older databases
+		logger.Infof("Trader FK migration skipped (likely already migrated): %v", err)
 	}
 
 	return nil

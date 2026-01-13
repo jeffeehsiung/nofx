@@ -182,11 +182,32 @@ func (s *BacktestStore) initTables() error {
 			FOREIGN KEY (run_id) REFERENCES backtest_runs(run_id) ON DELETE CASCADE
 		)`,
 
+		// Prompt variants (prompt optimization)
+		`CREATE TABLE IF NOT EXISTS backtest_prompt_variants (
+			id TEXT PRIMARY KEY,
+			run_id TEXT NOT NULL,
+			variant_id TEXT NOT NULL,
+			generation INTEGER NOT NULL DEFAULT 0,
+			is_active BOOLEAN DEFAULT 0,
+			prompt TEXT NOT NULL,
+			total_decisions INTEGER DEFAULT 0,
+			total_return REAL DEFAULT 0,
+			win_rate REAL DEFAULT 0,
+			profit_factor REAL DEFAULT 0,
+			sharpe_ratio REAL DEFAULT 0,
+			max_drawdown REAL DEFAULT 0,
+			fitness_score REAL DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (run_id) REFERENCES backtest_runs(run_id) ON DELETE CASCADE
+		)`,
+
 		// Indexes
 		`CREATE INDEX IF NOT EXISTS idx_backtest_runs_state ON backtest_runs(state, updated_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_backtest_equity_run_ts ON backtest_equity(run_id, ts)`,
 		`CREATE INDEX IF NOT EXISTS idx_backtest_trades_run_ts ON backtest_trades(run_id, ts)`,
 		`CREATE INDEX IF NOT EXISTS idx_backtest_decisions_run_cycle ON backtest_decisions(run_id, cycle)`,
+		`CREATE INDEX IF NOT EXISTS idx_backtest_prompt_variants_run ON backtest_prompt_variants(run_id, generation)`,
 	}
 
 	for _, query := range queries {
@@ -582,4 +603,85 @@ func (s *BacktestStore) LoadConfig(runID string) ([]byte, error) {
 	var payload []byte
 	err := s.db.QueryRow(`SELECT config_json FROM backtest_runs WHERE run_id = ?`, runID).Scan(&payload)
 	return payload, err
+}
+
+// PromptVariantData represents a prompt variant stored in database
+type PromptVariantData struct {
+	ID             string  `json:"id"`
+	RunID          string  `json:"run_id"`
+	VariantID      string  `json:"variant_id"`
+	Generation     int     `json:"generation"`
+	IsActive       bool    `json:"is_active"`
+	Prompt         string  `json:"prompt"`
+	TotalDecisions int     `json:"total_decisions"`
+	TotalReturn    float64 `json:"total_return"`
+	WinRate        float64 `json:"win_rate"`
+	ProfitFactor   float64 `json:"profit_factor"`
+	SharpeRatio    float64 `json:"sharpe_ratio"`
+	MaxDrawdown    float64 `json:"max_drawdown"`
+	FitnessScore   float64 `json:"fitness_score"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
+}
+
+// SavePromptVariant saves a prompt variant to the database
+func (s *BacktestStore) SavePromptVariant(variant *PromptVariantData) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	if variant.CreatedAt == "" {
+		variant.CreatedAt = now
+	}
+	variant.UpdatedAt = now
+
+	_, err := s.db.Exec(`
+		INSERT INTO backtest_prompt_variants (
+			id, run_id, variant_id, generation, is_active, prompt,
+			total_decisions, total_return, win_rate, profit_factor,
+			sharpe_ratio, max_drawdown, fitness_score, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			is_active = excluded.is_active,
+			total_decisions = excluded.total_decisions,
+			total_return = excluded.total_return,
+			win_rate = excluded.win_rate,
+			profit_factor = excluded.profit_factor,
+			sharpe_ratio = excluded.sharpe_ratio,
+			max_drawdown = excluded.max_drawdown,
+			fitness_score = excluded.fitness_score,
+			updated_at = excluded.updated_at
+	`, variant.ID, variant.RunID, variant.VariantID, variant.Generation, variant.IsActive,
+		variant.Prompt, variant.TotalDecisions, variant.TotalReturn, variant.WinRate,
+		variant.ProfitFactor, variant.SharpeRatio, variant.MaxDrawdown, variant.FitnessScore,
+		variant.CreatedAt, variant.UpdatedAt)
+	return err
+}
+
+// LoadPromptVariants loads all prompt variants for a backtest run
+func (s *BacktestStore) LoadPromptVariants(runID string) ([]*PromptVariantData, error) {
+	rows, err := s.db.Query(`
+		SELECT id, run_id, variant_id, generation, is_active, prompt,
+		       total_decisions, total_return, win_rate, profit_factor,
+		       sharpe_ratio, max_drawdown, fitness_score, created_at, updated_at
+		FROM backtest_prompt_variants
+		WHERE run_id = ?
+		ORDER BY generation ASC, created_at ASC
+	`, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var variants []*PromptVariantData
+	for rows.Next() {
+		var v PromptVariantData
+		err := rows.Scan(
+			&v.ID, &v.RunID, &v.VariantID, &v.Generation, &v.IsActive, &v.Prompt,
+			&v.TotalDecisions, &v.TotalReturn, &v.WinRate, &v.ProfitFactor,
+			&v.SharpeRatio, &v.MaxDrawdown, &v.FitnessScore, &v.CreatedAt, &v.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		variants = append(variants, &v)
+	}
+	return variants, rows.Err()
 }

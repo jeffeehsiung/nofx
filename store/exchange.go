@@ -74,10 +74,10 @@ func (s *ExchangeStore) initTables() error {
 	}
 
 	// Migration: add new columns if not exists
-	s.db.Exec(`ALTER TABLE exchanges ADD COLUMN passphrase TEXT DEFAULT ''`)
-	s.db.Exec(`ALTER TABLE exchanges ADD COLUMN exchange_type TEXT NOT NULL DEFAULT ''`)
-	s.db.Exec(`ALTER TABLE exchanges ADD COLUMN account_name TEXT NOT NULL DEFAULT ''`)
-	s.db.Exec(`ALTER TABLE exchanges ADD COLUMN lighter_api_key_index INTEGER DEFAULT 0`)
+	_, _ = s.db.Exec(`ALTER TABLE exchanges ADD COLUMN passphrase TEXT DEFAULT ''`)
+	_, _ = s.db.Exec(`ALTER TABLE exchanges ADD COLUMN exchange_type TEXT NOT NULL DEFAULT ''`)
+	_, _ = s.db.Exec(`ALTER TABLE exchanges ADD COLUMN account_name TEXT NOT NULL DEFAULT ''`)
+	_, _ = s.db.Exec(`ALTER TABLE exchanges ADD COLUMN lighter_api_key_index INTEGER DEFAULT 0`)
 
 	// Run migration to multi-account if needed
 	if err := s.migrateToMultiAccount(); err != nil {
@@ -85,10 +85,12 @@ func (s *ExchangeStore) initTables() error {
 	}
 
 	// Fix empty account_name for existing records
-	s.db.Exec(`UPDATE exchanges SET account_name = 'Default' WHERE account_name = '' OR account_name IS NULL`)
+	if _, err := s.db.Exec(`UPDATE exchanges SET account_name = 'Default' WHERE account_name = '' OR account_name IS NULL`); err != nil {
+		logger.Warnf("Failed to fix empty account names: %v", err)
+	}
 
 	// Update trigger for new schema
-	s.db.Exec(`DROP TRIGGER IF EXISTS update_exchanges_updated_at`)
+	_, _ = s.db.Exec(`DROP TRIGGER IF EXISTS update_exchanges_updated_at`)
 	_, err = s.db.Exec(`
 		CREATE TRIGGER IF NOT EXISTS update_exchanges_updated_at
 		AFTER UPDATE ON exchanges

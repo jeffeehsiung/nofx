@@ -62,8 +62,8 @@ func (s *AIModelStore) initTables() error {
 	}
 
 	// Backward compatibility: add potentially missing columns
-	s.db.Exec(`ALTER TABLE ai_models ADD COLUMN custom_api_url TEXT DEFAULT ''`)
-	s.db.Exec(`ALTER TABLE ai_models ADD COLUMN custom_model_name TEXT DEFAULT ''`)
+	_, _ = s.db.Exec(`ALTER TABLE ai_models ADD COLUMN custom_api_url TEXT DEFAULT ''`)
+	_, _ = s.db.Exec(`ALTER TABLE ai_models ADD COLUMN custom_model_name TEXT DEFAULT ''`)
 
 	return nil
 }

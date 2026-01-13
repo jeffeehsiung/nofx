@@ -111,7 +111,7 @@ func main() {
 	// Create TraderManager and BacktestManager
 	traderManager := manager.NewTraderManager()
 	mcpClient := newSharedMCPClient()
-	backtestManager := backtest.NewManager(mcpClient)
+	backtestManager := backtest.NewManager(mcpClient, st.Backtest())
 	if err := backtestManager.RestoreRuns(); err != nil {
 		logger.Warnf("⚠️ Failed to restore backtest history: %v", err)
 	}

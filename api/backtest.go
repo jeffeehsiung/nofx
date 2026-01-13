@@ -933,27 +933,86 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 		return
 	}
 
-	// Get runner to access prompt optimizer
+	// Try to get runner to access prompt optimizer (if backtest is still running)
 	runner, ok := s.backtestManager.GetRunner(runID)
-	if !ok || runner.GetPromptOptimizer() == nil {
+	if ok && runner.GetPromptOptimizer() != nil {
+		// Backtest is still running, get live variants from memory
+		variants := runner.GetPromptOptimizer().GetAllVariants()
 		c.JSON(http.StatusOK, gin.H{
-			"run_id":   runID,
-			"variants": []interface{}{},
-			"total":    0,
-			"message":  "Prompt optimization not enabled for this run",
+			"run_id":     runID,
+			"variants":   variants,
+			"total":      len(variants),
+			"generation": runner.GetPromptOptimizer().GetGeneration(),
+			"active":     runner.GetPromptOptimizer().GetCurrentVariant(),
+			"timestamp":  time.Now(),
 		})
 		return
 	}
 
-	// Get all variants from optimizer
-	variants := runner.GetPromptOptimizer().GetAllVariants()
+	// Backtest is not running or completed, load variants from database
+	variantsData, err := s.store.Backtest().LoadPromptVariants(runID)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"run_id":   runID,
+			"variants": []interface{}{},
+			"total":    0,
+			"message":  "No prompt optimization data found for this run",
+		})
+		return
+	}
+
+	// Convert database format to API format
+	type APIVariant struct {
+		ID             string  `json:"ID"`
+		VariantID      string  `json:"VariantID"`
+		Generation     int     `json:"Generation"`
+		IsActive       bool    `json:"IsActive"`
+		Prompt         string  `json:"Prompt"`
+		CreatedAt      string  `json:"CreatedAt"`
+		TotalDecisions int     `json:"TotalDecisions"`
+		TotalReturn    float64 `json:"TotalReturn"`
+		WinRate        float64 `json:"WinRate"`
+		ProfitFactor   float64 `json:"ProfitFactor"`
+		SharpeRatio    float64 `json:"SharpeRatio"`
+		MaxDrawdown    float64 `json:"MaxDrawdown"`
+		FitnessScore   float64 `json:"FitnessScore"`
+	}
+
+	variants := make([]APIVariant, 0, len(variantsData))
+	var activeVariant *APIVariant
+	maxGeneration := 0
+
+	for _, v := range variantsData {
+		apiV := APIVariant{
+			ID:             v.ID,
+			VariantID:      v.VariantID,
+			Generation:     v.Generation,
+			IsActive:       v.IsActive,
+			Prompt:         v.Prompt,
+			CreatedAt:      v.CreatedAt,
+			TotalDecisions: v.TotalDecisions,
+			TotalReturn:    v.TotalReturn,
+			WinRate:        v.WinRate,
+			ProfitFactor:   v.ProfitFactor,
+			SharpeRatio:    v.SharpeRatio,
+			MaxDrawdown:    v.MaxDrawdown,
+			FitnessScore:   v.FitnessScore,
+		}
+		variants = append(variants, apiV)
+		if v.IsActive {
+			activeVariant = &apiV
+		}
+		if v.Generation > maxGeneration {
+			maxGeneration = v.Generation
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"run_id":     runID,
 		"variants":   variants,
 		"total":      len(variants),
-		"generation": runner.GetPromptOptimizer().GetGeneration(),
-		"active":     runner.GetPromptOptimizer().GetCurrentVariant(),
+		"generation": maxGeneration,
+		"active":     activeVariant,
 		"timestamp":  time.Now(),
 	})
 }

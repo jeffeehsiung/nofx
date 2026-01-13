@@ -167,7 +167,7 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	// Initialize advanced optimization systems
 	// Use a default system prompt (will be overridden by StrategyEngine)
 	defaultPrompt := "You are a professional crypto trader making short-term trading decisions."
-	promptOptimizer := NewPromptOptimizerWithAI(defaultPrompt, DefaultPromptOptimizerConfig(), client)
+	promptOptimizer := NewPromptOptimizerWithAI(defaultPrompt, DefaultPromptOptimizerConfig(), client, cfg.RunID, cfg.Storage)
 	factorOptimizer := NewFactorOptimizer(DefaultFactorOptimizerConfig())
 	complianceTracker := NewComplianceTracker(DefaultComplianceConfig())
 

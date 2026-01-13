@@ -381,13 +381,19 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	// Initialize WebSocket manager with the same EventBus
 	at.orderWebSocketManager = NewOrderWebSocketManager(at.eventBus)
 
-	// Initialize PromptOptimizer for live strategy evolution
+	// Initialize PromptOptimizer for live strategy evolution with persistence
 	basePrompt := config.StrategyConfig.PromptSections.RoleDefinition
 	optimizerConfig := backtest.DefaultPromptOptimizerConfig()
 	optimizerConfig.PopulationSize = 3      // Smaller population for live trading
 	optimizerConfig.EvaluationCycles = 10   // Evolve every 10 trades
 	optimizerConfig.MinDecisionsPerTest = 5 // Min 5 trades per variant
-	at.promptOptimizer = backtest.NewPromptOptimizerWithAI(basePrompt, optimizerConfig, mcpClient)
+
+	// Pass trader ID as runID and backtestStore for variant persistence
+	var backtestStore *store.BacktestStore
+	if st != nil {
+		backtestStore = st.Backtest()
+	}
+	at.promptOptimizer = backtest.NewPromptOptimizerWithAI(basePrompt, optimizerConfig, mcpClient, config.ID, backtestStore)
 
 	// Try to load saved optimizer state
 	if st != nil {
