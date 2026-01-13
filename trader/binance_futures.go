@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"nofx/hook"
 	"nofx/logger"
-	"nofx/store"
 	"strconv"
 	"strings"
 	"sync"
@@ -226,41 +225,6 @@ func (t *FuturesTrader) GetPositions() ([]map[string]interface{}, error) {
 	t.positionsCacheMutex.Unlock()
 
 	return result, nil
-}
-
-// syncEntryPriceWithDatabase syncs entry prices with local database for consistency
-// This ensures entry prices are calculated using weighted average when positions are accumulated
-// rather than relying solely on exchange entry prices which may differ during position averaging
-func (t *FuturesTrader) syncEntryPriceWithDatabase(positions []map[string]interface{}, traderID string, positionStore *store.PositionStore) []map[string]interface{} {
-	if positionStore == nil {
-		return positions
-	}
-
-	var result []map[string]interface{}
-	for _, pos := range positions {
-		symbol := pos["symbol"].(string)
-		side := pos["side"].(string)
-		exchangeEntryPrice := pos["entryPrice"].(float64)
-
-		// Try to find corresponding position in local database
-		localPos, err := positionStore.GetOpenPositionBySymbol(traderID, symbol, side)
-		if err == nil && localPos != nil && localPos.EntryPrice > 0 {
-			// Found local position record with valid entry price
-			// Use local entry price (weighted average) instead of exchange price
-			if localPos.EntryPrice != exchangeEntryPrice {
-				priceDiff := ((exchangeEntryPrice - localPos.EntryPrice) / localPos.EntryPrice) * 100
-				logger.Infof(
-					"  📊 Entry price sync: %s %s - exchange: %.2f, local: %.2f (diff: %.2f%%)",
-					symbol, side, exchangeEntryPrice, localPos.EntryPrice, priceDiff,
-				)
-			}
-			pos["entryPrice"] = localPos.EntryPrice
-		}
-
-		result = append(result, pos)
-	}
-
-	return result
 }
 
 // SetMarginMode sets margin mode

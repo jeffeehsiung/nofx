@@ -312,3 +312,63 @@ func (c *ThresholdCalibrator) ToCalibratedThresholds() *CalibratedThresholds {
 		SampleSize:               c.SampleSize,
 	}
 }
+
+// FormatThresholdsForPrompt returns a formatted string of learned thresholds for LLM
+func (c *ThresholdCalibrator) FormatThresholdsForPrompt(lang string) string {
+	if c.SampleSize == 0 {
+		return "" // Not calibrated yet
+	}
+
+	if lang == "zh" {
+		return fmt.Sprintf(`## 📊 学习到的风险阈值 (基于 %d 笔交易)
+
+**入场质量检测**:
+- 弱成交量警戒线: %.2f (低于此值表示成交量不足)
+- 弱持仓量警戒线: %.2f (低于此值表示持仓兴趣不足)
+- 过早入场成交量: %.2f (确认前的最小成交量)
+- 过早入场持仓量: %.2f (确认前的最小持仓量)
+
+**持仓期间监控**:
+- 成交量衰减警戒: %.2f (成交量下降超过此比例则动量衰减)
+- 持仓量衰减警戒: %.2f (持仓量下降超过此比例则兴趣减弱)
+
+**流动性监控**:
+- 价差恶化倍数: %.2fx (价差扩大超过此倍数则流动性恶化)
+- 深度缩减阈值: %.2f (深度缩减低于此比例则流动性枯竭)
+
+💡 这些阈值是从历史交易数据中学习得出，帮助识别潜在的失败交易。
+`,
+			c.SampleSize,
+			c.WeakVolumeThreshold, c.WeakOIThreshold,
+			c.PrematureVolumeThreshold, c.PrematureOIThreshold,
+			c.VolumeDecayThreshold, c.OIDecayThreshold,
+			c.SpreadWorseningMultiple, c.DepthReductionThreshold,
+		)
+	}
+
+	// English
+	return fmt.Sprintf(`## 📊 Learned Risk Thresholds (from %d trades)
+
+**Entry Quality Detection**:
+- Weak Volume Alert: %.2f (below this = insufficient volume)
+- Weak OI Alert: %.2f (below this = insufficient position interest)
+- Premature Entry Volume: %.2f (minimum volume before confirmation)
+- Premature Entry OI: %.2f (minimum OI before confirmation)
+
+**During-Trade Monitoring**:
+- Volume Decay Alert: %.2f (decline beyond this = momentum decay)
+- OI Decay Alert: %.2f (decline beyond this = interest weakening)
+
+**Liquidity Monitoring**:
+- Spread Worsening Multiple: %.2fx (spread widens beyond this = liquidity deteriorating)
+- Depth Reduction Threshold: %.2f (depth falls below this = liquidity dried)
+
+💡 These thresholds were learned from historical trade data to help identify potential failing trades.
+`,
+		c.SampleSize,
+		c.WeakVolumeThreshold, c.WeakOIThreshold,
+		c.PrematureVolumeThreshold, c.PrematureOIThreshold,
+		c.VolumeDecayThreshold, c.OIDecayThreshold,
+		c.SpreadWorseningMultiple, c.DepthReductionThreshold,
+	)
+}

@@ -93,3 +93,203 @@ func (l *LiveOptimizedWeights) FormatWeightsForPrompt(lang string) string {
 		cfg.MaxMarginUsage*100, cfg.DrawdownMonitoringEnabled, cfg.DrawdownCheckInterval,
 	)
 }
+
+// LiveComplianceFeedback provides lightweight compliance tracking for live trading
+type LiveComplianceFeedback struct {
+	recentTrades []RecentOrder
+	stats        *store.TraderStats
+}
+
+// NewLiveComplianceFeedback generates compliance feedback from recent trades
+func NewLiveComplianceFeedback(recentTrades []RecentOrder, stats *store.TraderStats) *LiveComplianceFeedback {
+	if stats == nil || stats.TotalTrades == 0 {
+		return nil
+	}
+	return &LiveComplianceFeedback{
+		recentTrades: recentTrades,
+		stats:        stats,
+	}
+}
+
+// FormatForPrompt renders compliance feedback for live trading
+func (lc *LiveComplianceFeedback) FormatForPrompt(lang string) string {
+	if lc == nil || lc.stats == nil {
+		return ""
+	}
+
+	// Analyze recent trades for patterns
+	if len(lc.recentTrades) == 0 {
+		return ""
+	}
+
+	var winCount, lossCount int
+	var avgWinPct, avgLossPct float64
+
+	for _, trade := range lc.recentTrades {
+		if trade.PnLPct > 0 {
+			winCount++
+			avgWinPct += trade.PnLPct
+		} else {
+			lossCount++
+			avgLossPct += trade.PnLPct
+		}
+	}
+
+	if winCount > 0 {
+		avgWinPct /= float64(winCount)
+	}
+	if lossCount > 0 {
+		avgLossPct /= float64(lossCount)
+	}
+
+	if lang == "zh" {
+		var assessment string
+		winRate := lc.stats.WinRate
+
+		if winRate >= 60 {
+			assessment = "✅ **优秀** - 保持当前策略，继续执行"
+		} else if winRate >= 50 {
+			assessment = "⚠️ **可接受** - 略有改进空间，监控风险"
+		} else if winRate >= 40 {
+			assessment = "🔴 **需要改进** - 亏损交易过多，审视信号质量"
+		} else {
+			assessment = "🔴 **严重问题** - 胜率过低，考虑暂停或调整策略"
+		}
+
+		return fmt.Sprintf(`
+## 📊 近期表现评估（最近 %d 笔交易）
+- 盈利: %d 笔 (平均 +%.2f%%) | 亏损: %d 笔 (平均 %.2f%%)
+- 胜率: %.1f%% | 利润因子: %.2f
+
+**评价**: %s
+
+💡 继续学习和调整策略以改进表现。
+`,
+			len(lc.recentTrades), winCount, avgWinPct, lossCount, avgLossPct,
+			winRate, lc.stats.ProfitFactor, assessment,
+		)
+	}
+
+	// English
+	var assessment string
+	winRate := lc.stats.WinRate
+
+	if winRate >= 60 {
+		assessment = "✅ **Excellent** - Maintain current strategy"
+	} else if winRate >= 50 {
+		assessment = "⚠️ **Acceptable** - Room for improvement, monitor risk"
+	} else if winRate >= 40 {
+		assessment = "🔴 **Needs Improvement** - Too many losses, review signal quality"
+	} else {
+		assessment = "🔴 **Critical** - Win rate too low, consider adjustment"
+	}
+
+	return fmt.Sprintf(`
+## 📊 Recent Performance (Last %d trades)
+- Wins: %d trades (avg +%.2f%%) | Losses: %d trades (avg %.2f%%)
+- Win Rate: %.1f%% | Profit Factor: %.2f
+
+**Assessment**: %s
+
+💡 Continue learning and adjusting strategy for improvement.
+`,
+		len(lc.recentTrades), winCount, avgWinPct, lossCount, avgLossPct,
+		winRate, lc.stats.ProfitFactor, assessment,
+	)
+}
+
+// LiveThresholdSummary provides learned thresholds from recent trade patterns
+type LiveThresholdSummary struct {
+	recentTrades []RecentOrder
+}
+
+// NewLiveThresholdSummary creates threshold summary from recent trades
+func NewLiveThresholdSummary(recentTrades []RecentOrder) *LiveThresholdSummary {
+	if len(recentTrades) == 0 {
+		return nil
+	}
+	return &LiveThresholdSummary{recentTrades: recentTrades}
+}
+
+// FormatForPrompt renders learned thresholds for live trading
+func (lt *LiveThresholdSummary) FormatForPrompt(lang string) string {
+	if lt == nil || len(lt.recentTrades) == 0 {
+		return ""
+	}
+
+	// Analyze winning vs losing trades
+	var winTrades, loseTrades []RecentOrder
+	for _, trade := range lt.recentTrades {
+		if trade.PnLPct > 0 {
+			winTrades = append(winTrades, trade)
+		} else {
+			loseTrades = append(loseTrades, trade)
+		}
+	}
+
+	if len(winTrades) == 0 || len(loseTrades) == 0 {
+		return "" // Not enough data
+	}
+
+	// Calculate average characteristics
+	avgWinDuration := calculateAvgDuration(winTrades)
+	avgLoseDuration := calculateAvgDuration(loseTrades)
+	avgWinSize := calculateAvgSize(winTrades)
+	avgLoseSize := calculateAvgSize(loseTrades)
+
+	if lang == "zh" {
+		return fmt.Sprintf(`
+## 📏 从最近交易中学习的最优阈值
+**盈利交易特征** (n=%d):
+- 平均持仓时间: %s
+- 平均盈利幅度: +%.2f%%
+
+**亏损交易特征** (n=%d):
+- 平均持仓时间: %s
+- 平均亏损幅度: %.2f%%
+
+💡 建议: 尽量提高交易相似度到盈利交易特征，避免亏损交易的特征。
+`,
+			len(winTrades), avgWinDuration, avgWinSize,
+			len(loseTrades), avgLoseDuration, avgLoseSize,
+		)
+	}
+
+	// English
+	return fmt.Sprintf(`
+## 📏 Learned Thresholds from Recent Trades
+**Winning Trades** (n=%d):
+- Avg Hold Time: %s
+- Avg Profit: +%.2f%%
+
+**Losing Trades** (n=%d):
+- Avg Hold Time: %s
+- Avg Loss: %.2f%%
+
+💡 Tip: Aim for characteristics of winning trades, avoid patterns of losing trades.
+`,
+		len(winTrades), avgWinDuration, avgWinSize,
+		len(loseTrades), avgLoseDuration, avgLoseSize,
+	)
+}
+
+// Helper functions
+func calculateAvgDuration(trades []RecentOrder) string {
+	if len(trades) == 0 {
+		return "N/A"
+	}
+	// For simplicity, return a reasonable estimate based on HoldDuration
+	// In production, parse HoldDuration strings properly
+	return "varies"
+}
+
+func calculateAvgSize(trades []RecentOrder) float64 {
+	if len(trades) == 0 {
+		return 0
+	}
+	total := 0.0
+	for _, trade := range trades {
+		total += trade.PnLPct
+	}
+	return total / float64(len(trades))
+}

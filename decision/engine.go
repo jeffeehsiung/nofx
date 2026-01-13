@@ -166,26 +166,30 @@ type RecentOrder struct {
 
 // Context trading context (complete information passed to AI)
 type Context struct {
-	CurrentTime           string                                  `json:"current_time"`
-	RuntimeMinutes        int                                     `json:"runtime_minutes"`
-	CallCount             int                                     `json:"call_count"`
-	Account               AccountInfo                             `json:"account"`
-	Positions             []PositionInfo                          `json:"positions"`
-	CandidateCoins        []CandidateCoin                         `json:"candidate_coins"`
-	PromptVariant         string                                  `json:"prompt_variant,omitempty"`
-	TradingStats          *TradingStats                           `json:"trading_stats,omitempty"`
-	RecentOrders          []RecentOrder                           `json:"recent_orders,omitempty"`
-	PerformanceFeedback   interface{}                             `json:"-"` // *backtest.FeedbackAnalysis - avoiding circular dependency
-	OptimizedWeights      interface{}                             `json:"-"` // *store.RiskControlConfig - optimized parameters
-	MarketDataMap         map[string]*market.Data                 `json:"-"`
-	MultiTFMarket         map[string]map[string]*market.Data      `json:"-"`
-	OITopDataMap          map[string]*OITopData                   `json:"-"`
-	QuantDataMap          map[string]*QuantData                   `json:"-"`
-	OIRankingData         *provider.OIRankingData                 `json:"-"` // Market-wide OI ranking data
-	MicrostructureDataMap map[string]*market.MarketMicrostructure `json:"-"` // Market microstructure data per symbol
-	BTCETHLeverage        int                                     `json:"-"`
-	AltcoinLeverage       int                                     `json:"-"`
-	Timeframes            []string                                `json:"-"`
+	CurrentTime            string                                  `json:"current_time"`
+	RuntimeMinutes         int                                     `json:"runtime_minutes"`
+	CallCount              int                                     `json:"call_count"`
+	Account                AccountInfo                             `json:"account"`
+	Positions              []PositionInfo                          `json:"positions"`
+	CandidateCoins         []CandidateCoin                         `json:"candidate_coins"`
+	PromptVariant          string                                  `json:"prompt_variant,omitempty"`
+	TradingStats           *TradingStats                           `json:"trading_stats,omitempty"`
+	RecentOrders           []RecentOrder                           `json:"recent_orders,omitempty"`
+	PerformanceFeedback    interface{}                             `json:"-"` // *backtest.FeedbackAnalysis - avoiding circular dependency
+	OptimizedWeights       interface{}                             `json:"-"` // *store.RiskControlConfig - optimized parameters
+	ComplianceFeedback     string                                  `json:"-"` // Reinforcement learning: compliance with recommendations
+	PromptEvolutionSummary string                                  `json:"-"` // Prompt optimizer evolution history and learnings
+	EvolvedRoleDefinition  string                                  `json:"-"` // Evolved role definition based on performance
+	CalibratedThresholds   string                                  `json:"-"` // Learned thresholds for failure detection
+	MarketDataMap          map[string]*market.Data                 `json:"-"`
+	MultiTFMarket          map[string]map[string]*market.Data      `json:"-"`
+	OITopDataMap           map[string]*OITopData                   `json:"-"`
+	QuantDataMap           map[string]*QuantData                   `json:"-"`
+	OIRankingData          *provider.OIRankingData                 `json:"-"` // Market-wide OI ranking data
+	MicrostructureDataMap  map[string]*market.MarketMicrostructure `json:"-"` // Market microstructure data per symbol
+	BTCETHLeverage         int                                     `json:"-"`
+	AltcoinLeverage        int                                     `json:"-"`
+	Timeframes             []string                                `json:"-"`
 }
 
 // Decision AI trading decision
@@ -323,7 +327,7 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 
 	// 2. Build System Prompt using strategy engine
 	riskConfig := engine.GetRiskControlConfig()
-	systemPrompt := engine.BuildSystemPrompt(ctx.Account.TotalEquity, variant)
+	systemPrompt := engine.BuildSystemPromptWithContext(ctx.Account.TotalEquity, variant, ctx)
 
 	// 3. Build User Prompt using strategy engine
 	userPrompt := engine.BuildUserPrompt(ctx)
@@ -392,7 +396,7 @@ func BuildPromptsForContext(ctx *Context, engine *StrategyEngine, variant string
 		}
 	}
 
-	systemPrompt := engine.BuildSystemPrompt(ctx.Account.TotalEquity, variant)
+	systemPrompt := engine.BuildSystemPromptWithContext(ctx.Account.TotalEquity, variant, ctx)
 	userPrompt := engine.BuildUserPrompt(ctx)
 
 	return systemPrompt, userPrompt, nil
@@ -881,6 +885,11 @@ func (e *StrategyEngine) FetchOIRankingData() *provider.OIRankingData {
 
 // BuildSystemPrompt builds System Prompt according to strategy configuration
 func (e *StrategyEngine) BuildSystemPrompt(accountEquity float64, variant string) string {
+	return e.BuildSystemPromptWithContext(accountEquity, variant, nil)
+}
+
+// BuildSystemPromptWithContext builds System Prompt with optional context for evolved role
+func (e *StrategyEngine) BuildSystemPromptWithContext(accountEquity float64, variant string, ctx *Context) string {
 	var sb strings.Builder
 	riskControl := e.config.RiskControl
 	promptSections := e.config.PromptSections
@@ -892,9 +901,14 @@ func (e *StrategyEngine) BuildSystemPrompt(accountEquity float64, variant string
 	sb.WriteString("\n\n")
 	sb.WriteString("---\n\n")
 
-	// 1. Role definition (editable)
-	if promptSections.RoleDefinition != "" {
-		sb.WriteString(promptSections.RoleDefinition)
+	// 1. Role definition (editable) - USE EVOLVED ROLE IF AVAILABLE
+	roleToUse := promptSections.RoleDefinition
+	if ctx != nil && ctx.EvolvedRoleDefinition != "" {
+		roleToUse = ctx.EvolvedRoleDefinition
+	}
+
+	if roleToUse != "" {
+		sb.WriteString(roleToUse)
 		sb.WriteString("\n\n")
 	} else {
 		sb.WriteString("# You are a professional cryptocurrency trading AI with a strong mathematical and digital signal processing background\n\n")
@@ -1129,6 +1143,84 @@ func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 				order.EntryTime, order.ExitTime, order.HoldDuration))
 		}
 		sb.WriteString("\n")
+	}
+
+	// Performance Feedback (CRITICAL: includes patterns, few-shot examples, and recommendations)
+	if ctx.PerformanceFeedback != nil {
+		// Detect language from strategy config
+		lang := detectLanguage(e.config.PromptSections.RoleDefinition)
+
+		// Format comprehensive feedback using the existing formatter
+		if lang == LangChinese {
+			if formatter, ok := ctx.PerformanceFeedback.(interface{ FormatForPrompt(lang string) string }); ok {
+				feedbackText := formatter.FormatForPrompt("zh")
+				if feedbackText != "" {
+					sb.WriteString(feedbackText)
+					sb.WriteString("\n")
+				}
+			}
+		} else {
+			if formatter, ok := ctx.PerformanceFeedback.(interface{ FormatForPrompt(lang string) string }); ok {
+				feedbackText := formatter.FormatForPrompt("en")
+				if feedbackText != "" {
+					sb.WriteString(feedbackText)
+					sb.WriteString("\n")
+				}
+			}
+		}
+	}
+
+	// Optimized Trading Parameters (learned risk control settings)
+	if ctx.OptimizedWeights != nil {
+		// Detect language from strategy config
+		lang := detectLanguage(e.config.PromptSections.RoleDefinition)
+
+		// Format optimized weights/parameters
+		if lang == LangChinese {
+			if formatter, ok := ctx.OptimizedWeights.(interface{ FormatWeightsForPrompt(lang string) string }); ok {
+				weightsText := formatter.FormatWeightsForPrompt("zh")
+				if weightsText != "" {
+					sb.WriteString(weightsText)
+					sb.WriteString("\n")
+				}
+			}
+		} else {
+			if formatter, ok := ctx.OptimizedWeights.(interface{ FormatWeightsForPrompt(lang string) string }); ok {
+				weightsText := formatter.FormatWeightsForPrompt("en")
+				if weightsText != "" {
+					sb.WriteString(weightsText)
+					sb.WriteString("\n")
+				}
+			}
+		}
+	}
+
+	// Compliance Feedback (Reinforcement Learning: show LLM how well it follows recommendations)
+	if ctx.ComplianceFeedback != "" {
+		sb.WriteString(ctx.ComplianceFeedback)
+		sb.WriteString("\n")
+	}
+
+	// Prompt Evolution Summary (show LLM what prompt strategies have worked best)
+	if ctx.PromptEvolutionSummary != "" {
+		sb.WriteString(ctx.PromptEvolutionSummary)
+		sb.WriteString("\n")
+	}
+
+	// Calibrated Thresholds (show LLM the learned optimal thresholds for risk detection)
+	if ctx.CalibratedThresholds != "" {
+		sb.WriteString(ctx.CalibratedThresholds)
+		sb.WriteString("\n")
+	}
+
+	// ============================================================================
+	// HOLISTIC CONTINUOUS LEARNING SYSTEM
+	// This section enables true continuous learning - every decision improves the next
+	// The LLM sees all performance feedback and can self-correct in real-time
+	// ============================================================================
+	if ctx.TradingStats != nil && ctx.TradingStats.TotalTrades >= 3 {
+		lang := detectLanguage(e.config.PromptSections.RoleDefinition)
+		e.buildContinuousLearningFeedback(&sb, ctx, lang)
 	}
 
 	// Historical trading statistics (helps AI understand past performance)
@@ -1979,4 +2071,115 @@ func detectLanguage(text string) Language {
 		}
 	}
 	return LangEnglish
+}
+
+// buildMetaPromptEnglish builds a meta-prompt for LLM self-improvement in English
+func buildMetaPromptEnglish(stats interface{}, wins, losses []interface{}) string {
+	type StatsLike struct {
+		WinRate        float64
+		ProfitFactor   float64
+		SharpeRatio    float64
+		AvgWin         float64
+		AvgLoss        float64
+		MaxDrawdownPct float64
+	}
+	type TradeLike interface {
+		GetTradeInfo() (symbol, side string, entryPrice, exitPrice, realizedPnL, pnlPct float64, holdDuration string)
+	}
+
+	stat := stats.(StatsLike)
+
+	var sb strings.Builder
+	sb.WriteString("## 📊 Strategy Self-Improvement Opportunity\n\n")
+	sb.WriteString("Based on recent performance, consider these improvements to your strategy:\n\n")
+
+	sb.WriteString("**Current Performance:**\n")
+	sb.WriteString(fmt.Sprintf("- Win Rate: %.1f%% | Profit Factor: %.2f | Sharpe: %.2f\n", stat.WinRate, stat.ProfitFactor, stat.SharpeRatio))
+	sb.WriteString(fmt.Sprintf("- Avg Win: $%.2f | Avg Loss: $%.2f | Max Drawdown: %.1f%%\n\n", stat.AvgWin, stat.AvgLoss, stat.MaxDrawdownPct))
+
+	sb.WriteString(fmt.Sprintf("**Recent Winning Trades (%d):**\n", len(wins)))
+	for i, trade := range wins {
+		if i >= 3 {
+			break
+		}
+		// Use type assertion to get trade fields
+		if ro, ok := trade.(RecentOrder); ok {
+			sb.WriteString(fmt.Sprintf("- %s %s: Entry $%.2f → Exit $%.2f, +$%.2f (%.1f%%) in %s\n",
+				ro.Symbol, ro.Side, ro.EntryPrice, ro.ExitPrice, ro.RealizedPnL, ro.PnLPct, ro.HoldDuration))
+		}
+	}
+
+	sb.WriteString(fmt.Sprintf("\n**Recent Losing Trades (%d):**\n", len(losses)))
+	for i, trade := range losses {
+		if i >= 3 {
+			break
+		}
+		// Use type assertion to get trade fields
+		if ro, ok := trade.(RecentOrder); ok {
+			sb.WriteString(fmt.Sprintf("- %s %s: Entry $%.2f → Exit $%.2f, -$%.2f (%.1f%%) in %s\n",
+				ro.Symbol, ro.Side, ro.EntryPrice, ro.ExitPrice, ro.RealizedPnL, ro.PnLPct, ro.HoldDuration))
+		}
+	}
+
+	sb.WriteString("\n**Questions for Self-Improvement:**\n")
+	sb.WriteString("1. What patterns differentiate the winning trades from the losing ones?\n")
+	sb.WriteString("2. Can you identify specific entry/exit rules that would eliminate the recent losses?\n")
+	sb.WriteString("3. Are there conditions (market regime, time, volatility) where your approach breaks down?\n")
+	sb.WriteString("4. How could you adjust your strategy to maintain wins while reducing losses?\n\n")
+
+	return sb.String()
+}
+
+// buildMetaPromptChinese builds a meta-prompt for LLM self-improvement in Chinese
+func buildMetaPromptChinese(stats interface{}, wins, losses []interface{}) string {
+	type StatsLike struct {
+		WinRate        float64
+		ProfitFactor   float64
+		SharpeRatio    float64
+		AvgWin         float64
+		AvgLoss        float64
+		MaxDrawdownPct float64
+	}
+
+	stat := stats.(StatsLike)
+
+	var sb strings.Builder
+	sb.WriteString("## 📊 策略自我改进机会\n\n")
+	sb.WriteString("基于最近的表现，考虑对你的策略进行以下改进：\n\n")
+
+	sb.WriteString("**当前表现：**\n")
+	sb.WriteString(fmt.Sprintf("- 胜率: %.1f%% | 利润因子: %.2f | 夏普比: %.2f\n", stat.WinRate, stat.ProfitFactor, stat.SharpeRatio))
+	sb.WriteString(fmt.Sprintf("- 平均赢: $%.2f | 平均亏: $%.2f | 最大回撤: %.1f%%\n\n", stat.AvgWin, stat.AvgLoss, stat.MaxDrawdownPct))
+
+	sb.WriteString(fmt.Sprintf("**最近的盈利交易 (%d)：**\n", len(wins)))
+	for i, trade := range wins {
+		if i >= 3 {
+			break
+		}
+		// Use type assertion to get trade fields
+		if ro, ok := trade.(RecentOrder); ok {
+			sb.WriteString(fmt.Sprintf("- %s %s: 入场 $%.2f → 出场 $%.2f, +$%.2f (%.1f%%) 持仓 %s\n",
+				ro.Symbol, ro.Side, ro.EntryPrice, ro.ExitPrice, ro.RealizedPnL, ro.PnLPct, ro.HoldDuration))
+		}
+	}
+
+	sb.WriteString(fmt.Sprintf("\n**最近的亏损交易 (%d)：**\n", len(losses)))
+	for i, trade := range losses {
+		if i >= 3 {
+			break
+		}
+		// Use type assertion to get trade fields
+		if ro, ok := trade.(RecentOrder); ok {
+			sb.WriteString(fmt.Sprintf("- %s %s: 入场 $%.2f → 出场 $%.2f, -$%.2f (%.1f%%) 持仓 %s\n",
+				ro.Symbol, ro.Side, ro.EntryPrice, ro.ExitPrice, ro.RealizedPnL, ro.PnLPct, ro.HoldDuration))
+		}
+	}
+
+	sb.WriteString("\n**自我改进问题：**\n")
+	sb.WriteString("1. 盈利交易和亏损交易之间有什么关键差异？\n")
+	sb.WriteString("2. 你能识别哪些具体的进出场规则可以避免最近的亏损吗？\n")
+	sb.WriteString("3. 有没有某些条件（市场态势、时间、波动率）会导致你的方法失效？\n")
+	sb.WriteString("4. 你如何调整策略来保持赢利同时减少亏损？\n\n")
+
+	return sb.String()
 }

@@ -167,7 +167,7 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	// Initialize advanced optimization systems
 	// Use a default system prompt (will be overridden by StrategyEngine)
 	defaultPrompt := "You are a professional crypto trader making short-term trading decisions."
-	promptOptimizer := NewPromptOptimizer(defaultPrompt, DefaultPromptOptimizerConfig())
+	promptOptimizer := NewPromptOptimizerWithAI(defaultPrompt, DefaultPromptOptimizerConfig(), client)
 	factorOptimizer := NewFactorOptimizer(DefaultFactorOptimizerConfig())
 	complianceTracker := NewComplianceTracker(DefaultComplianceConfig())
 
@@ -955,6 +955,8 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 					}
 					r.promptOptimizer.RecordDecisionOutcome("current", metrics)
 
+					// Use the generic EvolvePrompts method for backtest
+					// (Live trading uses meta-prompting via EvolvePromptsWithMetaLearning)
 					if err := r.promptOptimizer.EvolvePrompts(); err != nil {
 						logger.Infof("Failed to evolve prompts: %v", err)
 					} else {
@@ -981,6 +983,31 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 
 			// Attach optimized factor weights
 			ctx.OptimizedWeights = r.factorOptimizer.GetCurrentWeights()
+
+			// Attach compliance feedback (reinforcement learning)
+			lang := "en"
+			if strings.Contains(strings.ToLower(r.strategyEngine.GetConfig().PromptSections.RoleDefinition), "交易") {
+				lang = "zh"
+			}
+			ctx.ComplianceFeedback = r.complianceTracker.GetComplianceFeedback(lang)
+
+			// Attach prompt evolution summary (show what prompt strategies work best)
+			ctx.PromptEvolutionSummary = r.promptOptimizer.GetEvolutionSummary(lang)
+
+			// Attach calibrated thresholds (learned risk detection thresholds)
+			// Create calibrator from current thresholds
+			calibrator := decision.NewThresholdCalibrator()
+			calibrator.WeakVolumeThreshold = r.failureThresholds.WeakVolumeThreshold
+			calibrator.WeakOIThreshold = r.failureThresholds.WeakOIThreshold
+			calibrator.PrematureVolumeThreshold = r.failureThresholds.PrematureVolumeThreshold
+			calibrator.PrematureOIThreshold = r.failureThresholds.PrematureOIThreshold
+			calibrator.VolumeDecayThreshold = r.failureThresholds.VolumeDecayThreshold
+			calibrator.OIDecayThreshold = r.failureThresholds.OIDecayThreshold
+			calibrator.SpreadWorseningMultiple = r.failureThresholds.SpreadWorseningMultiple
+			calibrator.DepthReductionThreshold = r.failureThresholds.DepthReductionThreshold
+			// Use callCount as approximation for number of trades
+			calibrator.SampleSize = callCount
+			ctx.CalibratedThresholds = calibrator.FormatThresholdsForPrompt(lang)
 		}
 	}
 

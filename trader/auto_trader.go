@@ -142,6 +142,9 @@ type AutoTrader struct {
 	// Event-driven architecture (Phase 2)
 	eventBus              *EventBus              // Centralized event bus for trading signals
 	orderWebSocketManager *OrderWebSocketManager // WebSocket manager for real-time order updates (Phase 2.2)
+
+	// Prompt optimization (genetic evolution)
+	promptOptimizer *backtest.PromptOptimizer // Evolves prompt strategies based on performance
 }
 
 // NewAutoTrader creates an automatic trader
@@ -369,6 +372,21 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 
 	// Initialize WebSocket manager with the same EventBus
 	at.orderWebSocketManager = NewOrderWebSocketManager(at.eventBus)
+
+	// Initialize PromptOptimizer for live strategy evolution
+	basePrompt := config.StrategyConfig.PromptSections.RoleDefinition
+	optimizerConfig := backtest.DefaultPromptOptimizerConfig()
+	optimizerConfig.PopulationSize = 3      // Smaller population for live trading
+	optimizerConfig.EvaluationCycles = 10   // Evolve every 10 trades
+	optimizerConfig.MinDecisionsPerTest = 5 // Min 5 trades per variant
+	at.promptOptimizer = backtest.NewPromptOptimizerWithAI(basePrompt, optimizerConfig, mcpClient)
+
+	// Try to load saved optimizer state
+	if st != nil {
+		if err := at.promptOptimizer.LoadState(config.ID); err != nil {
+			logger.Infof("[%s] No saved optimizer state found, starting fresh", config.Name)
+		}
+	}
 
 	return at, nil
 }
@@ -667,6 +685,15 @@ func (at *AutoTrader) Stop() {
 	at.isRunning = false
 	at.isRunningMutex.Unlock()
 
+	// Save prompt optimizer state before stopping
+	if at.promptOptimizer != nil && at.store != nil {
+		if err := at.promptOptimizer.SaveState(at.id); err != nil {
+			logger.Infof("⚠️ Failed to save optimizer state on stop: %v", err)
+		} else {
+			logger.Info("💾 Prompt optimizer state saved")
+		}
+	}
+
 	close(at.stopMonitorCh) // Notify monitoring goroutine to stop
 	at.monitorWg.Wait()     // Wait for monitoring goroutine to finish
 	logger.Info("⏹ Automatic trading system stopped")
@@ -890,6 +917,10 @@ func (at *AutoTrader) runCycle() error {
 		logger.Infof("⚠ Failed to save decision record: %v", err)
 	}
 
+	// 10. Record trade outcomes for prompt meta-learning evolution
+	// Detect strategy language
+	at.recordTradeOutcomeToOptimizer(ctx)
+
 	return nil
 }
 
@@ -1049,6 +1080,12 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 	altcoinLeverage := strategyConfig.RiskControl.AltcoinMaxLeverage
 	logger.Infof("📋 [%s] Strategy leverage config: BTC/ETH=%dx, Altcoin=%dx", at.name, btcEthLeverage, altcoinLeverage)
 
+	// Detect strategy language
+	strategyLang := "en"
+	if strings.Contains(strings.ToLower(strategyConfig.PromptSections.RoleDefinition), "交易") {
+		strategyLang = "zh"
+	}
+
 	// 6. Build context
 	ctx := &decision.Context{
 		CurrentTime:     time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
@@ -1070,8 +1107,8 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 		CandidateCoins: candidateCoins,
 	}
 
-	// Surface current risk-control parameters to the prompt for live runs.
-	ctx.OptimizedWeights = decision.NewLiveOptimizedWeights(strategyConfig.RiskControl)
+	// Surface current risk-control parameters will be populated from stats below
+	// See ctx.OptimizedWeights assignment in the stats block above
 
 	// 7. Add recent closed trades (if store is available)
 	if at.store != nil {
@@ -1124,7 +1161,42 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 				AvgLoss:        stats.AvgLoss,
 				MaxDrawdownPct: stats.MaxDrawdownPct,
 			}
-			ctx.PerformanceFeedback = decision.NewLivePerformanceFeedback(stats)
+
+			// Create formatted performance feedback for LLM (live stats summary)
+			livePerf := decision.NewLivePerformanceFeedback(stats)
+			if livePerf != nil {
+				ctx.PerformanceFeedback = livePerf
+			}
+
+			// Create formatted optimized weights from strategy config risk controls
+			liveWeights := decision.NewLiveOptimizedWeights(strategyConfig.RiskControl)
+			if liveWeights != nil {
+				ctx.OptimizedWeights = liveWeights
+			}
+
+			// Add lightweight compliance feedback from recent trades (live learning)
+			// Show feedback even with just 1 recent trade to help LLM learn early
+			if len(ctx.RecentOrders) > 0 {
+				complianceFeedback := decision.NewLiveComplianceFeedback(ctx.RecentOrders, stats)
+				if complianceFeedback != nil {
+					ctx.ComplianceFeedback = complianceFeedback.FormatForPrompt(strategyLang)
+				}
+			}
+
+			// Add learned thresholds from recent trade patterns (live adaptation)
+			// Start with just 2 trades to build initial patterns
+			if len(ctx.RecentOrders) >= 2 {
+				thresholdSummary := decision.NewLiveThresholdSummary(ctx.RecentOrders)
+				if thresholdSummary != nil {
+					ctx.CalibratedThresholds = thresholdSummary.FormatForPrompt(strategyLang)
+				}
+			}
+
+			// Add prompt evolution summary (show LLM which strategies work best)
+			if at.promptOptimizer != nil {
+				ctx.PromptEvolutionSummary = at.promptOptimizer.GetEvolutionSummary(strategyLang)
+			}
+
 			logger.Infof("📈 [%s] Trading stats: %d trades, %.1f%% win rate, PF=%.2f, Sharpe=%.2f, DD=%.1f%%",
 				at.name, stats.TotalTrades, stats.WinRate, stats.ProfitFactor, stats.SharpeRatio, stats.MaxDrawdownPct)
 		}
@@ -2648,16 +2720,106 @@ func (at *AutoTrader) handleOrderUpdate(order market.OrderUpdate) {
 	logger.Debugf("📊 Order update received: %s %s (status: %s, qty: %.2f, filled: %.2f)",
 		order.Symbol, order.Side, order.Status, order.OriginalQuantity, order.ExecutedQuantity)
 
-	// Update internal state if needed
-	// This could trigger trading logic, update positions, etc.
+	// Persist order status to database so UI/analytics stay in sync
+	if at.store != nil {
+		orderStore := at.store.Order()
+
+		// Find existing order by exchange order ID
+		existing, _ := orderStore.GetOrderByExchangeID(at.exchangeID, order.OrderID)
+
+		if existing == nil {
+			// Create minimal order record if we never saw it (e.g., placed manually or from another session)
+			newOrder := &store.TraderOrder{
+				TraderID:        at.id,
+				ExchangeID:      at.exchangeID,
+				ExchangeType:    at.exchange,
+				ExchangeOrderID: order.OrderID,
+				ClientOrderID:   order.ClientOrderID,
+				Symbol:          order.Symbol,
+				Side:            strings.ToUpper(order.Side),
+				PositionSide:    strings.ToUpper(order.PositionSide),
+				Type:            strings.ToUpper(order.OrderType),
+				TimeInForce:     strings.ToUpper(order.TimeInForce),
+				Quantity:        order.OriginalQuantity,
+				Price:           order.OrderPrice,
+				Status:          strings.ToUpper(order.Status),
+				FilledQuantity:  order.ExecutedQuantity,
+				AvgFillPrice:    order.AveragePrice,
+			}
+			if err := orderStore.CreateOrder(newOrder); err != nil {
+				logger.Infof("[%s] ⚠️ Failed to create order record for %s: %v", at.name, order.OrderID, err)
+			}
+		} else {
+			// Update status/fills on existing order
+			if err := orderStore.UpdateOrderStatus(existing.ID, strings.ToUpper(order.Status), order.ExecutedQuantity, order.AveragePrice, existing.Commission); err != nil {
+				logger.Infof("[%s] ⚠️ Failed to update order status for %s: %v", at.name, order.OrderID, err)
+			}
+		}
+	}
 
 	// Event publishing is already handled by OrderWebSocketManager
-	// It publishes to the EventBus automatically
-
-	// Call any registered handlers here if needed
+	// (WebSocket manager broadcasts order events on the shared EventBus)
 }
 
 // GetOrderWebSocketManager returns the order WebSocket manager
 func (at *AutoTrader) GetOrderWebSocketManager() *OrderWebSocketManager {
 	return at.orderWebSocketManager
+}
+
+// recordTradeOutcomeToOptimizer records completed trade metrics to the prompt optimizer
+// The meta-prompting (LLM self-improvement) happens during BuildUserPrompt() in engine.go
+// This method just tracks metrics for the optimizer to reference
+func (at *AutoTrader) recordTradeOutcomeToOptimizer(ctx *decision.Context) {
+	if at.promptOptimizer == nil || at.store == nil || ctx == nil {
+		return
+	}
+
+	// Get overall trading stats for metrics
+	stats, err := at.store.Position().GetFullStats(at.id)
+	if err != nil || stats == nil || stats.TotalTrades == 0 {
+		return
+	}
+
+	// Create metrics snapshot for prompt optimizer using correct Metrics struct
+	metrics := &backtest.Metrics{
+		TotalReturnPct: (stats.TotalPnL / at.initialBalance) * 100,
+		MaxDrawdownPct: stats.MaxDrawdownPct,
+		SharpeRatio:    stats.SharpeRatio,
+		ProfitFactor:   stats.ProfitFactor,
+		WinRate:        stats.WinRate,
+		Trades:         stats.TotalTrades,
+		AvgWin:         stats.AvgWin,
+		AvgLoss:        stats.AvgLoss,
+		BestSymbol:     "",    // Not tracked in live stats
+		WorstSymbol:    "",    // Not tracked in live stats
+		SymbolStats:    nil,   // Not tracked in live stats
+		Liquidated:     false, // Live trading doesn't liquidate backtest
+	}
+
+	// Record outcome to current variant
+	currentVariant := at.promptOptimizer.GetCurrentVariant()
+	if currentVariant != nil {
+		at.promptOptimizer.RecordDecisionOutcome(currentVariant.ID, metrics)
+	}
+
+	// Check if it's time to evolve prompts based on performance
+	// Use total trades as cycle counter for live trading
+	if at.promptOptimizer.ShouldEvolve(stats.TotalTrades) {
+		logger.Infof("[%s] 🧬 Starting prompt evolution (total trades: %d)", at.config.Name, stats.TotalTrades)
+
+		// Evolve prompts using LLM-based evolution
+		if err := at.promptOptimizer.EvolvePrompts(); err != nil {
+			logger.Infof("[%s] ❌ Failed to evolve prompts: %v", at.config.Name, err)
+		} else {
+			// Save optimizer state
+			if err := at.promptOptimizer.SaveState(at.id); err != nil {
+				logger.Infof("[%s] ⚠️  Failed to save prompt optimizer state: %v", at.config.Name, err)
+			}
+
+			// CRITICAL: Update strategy engine with the evolved prompt
+			evolvedPrompt := at.promptOptimizer.GetCurrentPrompt()
+			at.strategyEngine.SetCustomPrompt(evolvedPrompt)
+			logger.Infof("[%s] ✅ Applied evolved prompt to live trading (gen %d)", at.config.Name, at.promptOptimizer.GetGeneration())
+		}
+	}
 }

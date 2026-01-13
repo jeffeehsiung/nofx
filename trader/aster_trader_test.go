@@ -80,7 +80,7 @@ func NewAsterTraderTestSuite(t *testing.T) *AsterTraderTestSuite {
 			case "INVALIDUSDT":
 				// Return error response
 				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"code": -1121,
 					"msg":  "Invalid symbol",
 				})

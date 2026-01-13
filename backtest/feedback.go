@@ -7,6 +7,7 @@ import (
 	"nofx/decision"
 	"nofx/logger"
 	"nofx/market"
+	"nofx/store"
 	"os"
 	"path/filepath"
 	"sort"
@@ -474,6 +475,9 @@ func extractOIDelta(data *market.Data) float64 {
 func (fg *FeedbackGenerator) createDecisionOutcomes(closedPositions []ClosedPosition) []DecisionOutcome {
 	outcomes := make([]DecisionOutcome, 0, len(closedPositions))
 
+	// Load decision records to fetch original reasoning and confidence
+	decisionMap := fg.loadDecisionRecordsMap()
+
 	for _, pos := range closedPositions {
 		pnlPct := 0.0
 		if pos.EntryPrice > 0 {
@@ -486,12 +490,20 @@ func (fg *FeedbackGenerator) createDecisionOutcomes(closedPositions []ClosedPosi
 
 		holdDuration := pos.ExitTime.Sub(pos.EntryTime)
 
+		// Try to find the original decision record for this trade
+		reasoning := ""
+		confidence := 0
+		if decRecord := fg.findDecisionForTrade(decisionMap, pos); decRecord != nil {
+			reasoning = fg.extractReasoningFromDecision(decRecord, pos.Symbol, pos.Side)
+			confidence = fg.extractConfidenceFromDecision(decRecord, pos.Symbol)
+		}
+
 		outcome := DecisionOutcome{
 			Timestamp:      pos.EntryTime,
 			Symbol:         pos.Symbol,
 			Action:         fmt.Sprintf("open_%s", pos.Side),
-			Reasoning:      "", // Could be populated from decision logs if available
-			Confidence:     0,  // Could be populated from decision logs
+			Reasoning:      reasoning,
+			Confidence:     confidence,
 			EntryPrice:     pos.EntryPrice,
 			PositionSize:   pos.EntryPrice * pos.Quantity,
 			Leverage:       pos.Leverage,
@@ -508,6 +520,99 @@ func (fg *FeedbackGenerator) createDecisionOutcomes(closedPositions []ClosedPosi
 	}
 
 	return outcomes
+}
+
+// loadDecisionRecordsMap loads all decision records into a map keyed by timestamp
+func (fg *FeedbackGenerator) loadDecisionRecordsMap() map[int64]*store.DecisionRecord {
+	records, err := LoadDecisionRecords(fg.runID, 0, 0) // Load all records (limit=0 means no limit)
+	if err != nil {
+		logger.Infof("Warning: could not load decision records for feedback: %v", err)
+		return make(map[int64]*store.DecisionRecord)
+	}
+
+	recordMap := make(map[int64]*store.DecisionRecord)
+	for i := range records {
+		ts := records[i].Timestamp.UnixMilli()
+		recordMap[ts] = records[i] // records[i] is already a pointer
+	}
+	return recordMap
+}
+
+// findDecisionForTrade finds the decision record that led to opening this position
+func (fg *FeedbackGenerator) findDecisionForTrade(decisionMap map[int64]*store.DecisionRecord, pos ClosedPosition) *store.DecisionRecord {
+	entryTs := pos.EntryTime.UnixMilli()
+
+	// Try exact match first
+	if record, ok := decisionMap[entryTs]; ok {
+		return record
+	}
+
+	// Try within 5 minutes window (decisions might be slightly before trade execution)
+	for ts, record := range decisionMap {
+		if math.Abs(float64(ts-entryTs)) < 5*60*1000 { // 5 minutes in milliseconds
+			return record
+		}
+	}
+
+	return nil
+}
+
+// extractReasoningFromDecision extracts the reasoning for a specific symbol/side from decision record
+func (fg *FeedbackGenerator) extractReasoningFromDecision(record *store.DecisionRecord, symbol, side string) string {
+	if record == nil {
+		return ""
+	}
+
+	// Check if there's a decision for this symbol and side
+	for _, decision := range record.Decisions {
+		if decision.Symbol == symbol {
+			// Check if the action matches the side (e.g., "long" matches "open_long" or "close_long")
+			actionMatchesSide := false
+			if side == "long" && (strings.Contains(strings.ToLower(decision.Action), "long")) {
+				actionMatchesSide = true
+			} else if side == "short" && (strings.Contains(strings.ToLower(decision.Action), "short")) {
+				actionMatchesSide = true
+			} else if side == "" {
+				actionMatchesSide = true // If no side specified, match any
+			}
+
+			if actionMatchesSide && decision.Reasoning != "" {
+				return decision.Reasoning
+			}
+		}
+	}
+
+	// Fallback: try to extract from CoT trace
+	if record.CoTTrace != "" {
+		// Look for reasoning related to this symbol in the CoT trace
+		lines := strings.Split(record.CoTTrace, "\n")
+		for _, line := range lines {
+			if strings.Contains(strings.ToUpper(line), symbol) {
+				// Found a line mentioning this symbol, return it (truncated)
+				if len(line) > 200 {
+					return line[:200] + "..."
+				}
+				return line
+			}
+		}
+	}
+
+	return ""
+}
+
+// extractConfidenceFromDecision extracts the confidence level for a specific symbol from decision record
+func (fg *FeedbackGenerator) extractConfidenceFromDecision(record *store.DecisionRecord, symbol string) int {
+	if record == nil {
+		return 0
+	}
+
+	for _, decision := range record.Decisions {
+		if decision.Symbol == symbol && decision.Confidence > 0 {
+			return decision.Confidence
+		}
+	}
+
+	return 0
 }
 
 func formatDuration(d time.Duration) string {
@@ -1525,6 +1630,75 @@ func (analysis *FeedbackAnalysis) FormatForPrompt(lang string) string {
 			sb.WriteString("\n")
 		}
 
+		// ============================================================================
+		// FEW-SHOT LEARNING: Concrete Trade Examples
+		// ============================================================================
+		if len(analysis.TopWinningTrades) > 0 || len(analysis.TopLosingTrades) > 0 {
+			sb.WriteString("### 📚 从过去的交易中学习 (Few-Shot Examples)\n\n")
+			sb.WriteString("**研究这些具体案例来理解什么有效，什么无效：**\n\n")
+
+			// Show top winning trades as positive examples
+			if len(analysis.TopWinningTrades) > 0 {
+				sb.WriteString("#### ✅ 成功案例 (模仿这些交易):\n\n")
+				for i, trade := range analysis.TopWinningTrades {
+					if i >= 3 { // Limit to top 3
+						break
+					}
+					sb.WriteString(fmt.Sprintf("**案例 %d: %s %s**\n", i+1, trade.Symbol, trade.Action))
+					sb.WriteString(fmt.Sprintf("- 时间: %s | 持仓: %s\n", trade.Timestamp.Format("01-02 15:04"), trade.HoldDuration))
+					sb.WriteString(fmt.Sprintf("- 入场: %.4f | 出场: %.4f | 杠杆: %dx\n", trade.EntryPrice, trade.ExitPrice, trade.Leverage))
+					sb.WriteString(fmt.Sprintf("- **结果**: +%.2f%% (%.2f USDT)\n", trade.RealizedPnLPct, trade.RealizedPnL))
+					if trade.Analysis != "" {
+						sb.WriteString(fmt.Sprintf("- 分析: %s\n", trade.Analysis))
+					}
+					if trade.Reasoning != "" {
+						sb.WriteString(fmt.Sprintf("- 原始理由: %s\n", trade.Reasoning))
+					}
+					sb.WriteString("\n")
+				}
+			}
+
+			// Show top losing trades as negative examples
+			if len(analysis.TopLosingTrades) > 0 {
+				sb.WriteString("#### ❌ 失败案例 (避免重复这些错误):\n\n")
+				for i, trade := range analysis.TopLosingTrades {
+					if i >= 3 { // Limit to top 3
+						break
+					}
+					sb.WriteString(fmt.Sprintf("**案例 %d: %s %s**\n", i+1, trade.Symbol, trade.Action))
+					sb.WriteString(fmt.Sprintf("- 时间: %s | 持仓: %s\n", trade.Timestamp.Format("01-02 15:04"), trade.HoldDuration))
+					sb.WriteString(fmt.Sprintf("- 入场: %.4f | 出场: %.4f | 杠杆: %dx\n", trade.EntryPrice, trade.ExitPrice, trade.Leverage))
+					sb.WriteString(fmt.Sprintf("- **结果**: %.2f%% (%.2f USDT)\n", trade.RealizedPnLPct, trade.RealizedPnL))
+
+					// Add Trade Failure V2 execution-level diagnosis
+					if trade.RecentOrder != nil {
+						failureAnalysis := decision.AnalyzeFailedTrade(trade.RecentOrder)
+						if failureAnalysis != nil {
+							sb.WriteString(fmt.Sprintf("- **执行诊断**: %s (置信度: %.0f%%)\n",
+								humanizeV2Reason(failureAnalysis.PrimaryReason),
+								failureAnalysis.ConfidenceScore*100))
+							if failureAnalysis.DetailedNotes != "" {
+								sb.WriteString(fmt.Sprintf("- 详细说明: %s\n", failureAnalysis.DetailedNotes))
+							}
+							if failureAnalysis.Recommendation != "" {
+								sb.WriteString(fmt.Sprintf("- ⚠️ 如何避免: %s\n", failureAnalysis.Recommendation))
+							}
+						}
+					}
+
+					if trade.Analysis != "" {
+						sb.WriteString(fmt.Sprintf("- 分析: %s\n", trade.Analysis))
+					}
+					if trade.Reasoning != "" {
+						sb.WriteString(fmt.Sprintf("- 原始理由: %s\n", trade.Reasoning))
+					}
+					sb.WriteString("\n")
+				}
+			}
+
+			sb.WriteString("**💡 学习要点**: 分析这些真实案例，理解决策背景和结果之间的因果关系\n\n")
+		}
+
 		sb.WriteString(fmt.Sprintf("**市场条件评估**: %s\n\n", analysis.MarketConditions))
 
 		sb.WriteString("---\n\n")
@@ -1634,6 +1808,75 @@ func (analysis *FeedbackAnalysis) FormatForPrompt(lang string) string {
 				}
 			}
 			sb.WriteString("\n")
+		}
+
+		// ============================================================================
+		// FEW-SHOT LEARNING: Concrete Trade Examples
+		// ============================================================================
+		if len(analysis.TopWinningTrades) > 0 || len(analysis.TopLosingTrades) > 0 {
+			sb.WriteString("### 📚 Learn from Past Trades (Few-Shot Examples)\n\n")
+			sb.WriteString("**Study these concrete examples to understand what works and what doesn't:**\n\n")
+
+			// Show top winning trades as positive examples
+			if len(analysis.TopWinningTrades) > 0 {
+				sb.WriteString("#### ✅ Success Examples (Replicate These Trades):\n\n")
+				for i, trade := range analysis.TopWinningTrades {
+					if i >= 3 { // Limit to top 3
+						break
+					}
+					sb.WriteString(fmt.Sprintf("**Example %d: %s %s**\n", i+1, trade.Symbol, trade.Action))
+					sb.WriteString(fmt.Sprintf("- Time: %s | Duration: %s\n", trade.Timestamp.Format("01-02 15:04"), trade.HoldDuration))
+					sb.WriteString(fmt.Sprintf("- Entry: %.4f | Exit: %.4f | Leverage: %dx\n", trade.EntryPrice, trade.ExitPrice, trade.Leverage))
+					sb.WriteString(fmt.Sprintf("- **Outcome**: +%.2f%% (%.2f USDT)\n", trade.RealizedPnLPct, trade.RealizedPnL))
+					if trade.Analysis != "" {
+						sb.WriteString(fmt.Sprintf("- Analysis: %s\n", trade.Analysis))
+					}
+					if trade.Reasoning != "" {
+						sb.WriteString(fmt.Sprintf("- Original Reasoning: %s\n", trade.Reasoning))
+					}
+					sb.WriteString("\n")
+				}
+			}
+
+			// Show top losing trades as negative examples
+			if len(analysis.TopLosingTrades) > 0 {
+				sb.WriteString("#### ❌ Failure Examples (Avoid Repeating These Mistakes):\n\n")
+				for i, trade := range analysis.TopLosingTrades {
+					if i >= 3 { // Limit to top 3
+						break
+					}
+					sb.WriteString(fmt.Sprintf("**Example %d: %s %s**\n", i+1, trade.Symbol, trade.Action))
+					sb.WriteString(fmt.Sprintf("- Time: %s | Duration: %s\n", trade.Timestamp.Format("01-02 15:04"), trade.HoldDuration))
+					sb.WriteString(fmt.Sprintf("- Entry: %.4f | Exit: %.4f | Leverage: %dx\n", trade.EntryPrice, trade.ExitPrice, trade.Leverage))
+					sb.WriteString(fmt.Sprintf("- **Outcome**: %.2f%% (%.2f USDT)\n", trade.RealizedPnLPct, trade.RealizedPnL))
+
+					// Add Trade Failure V2 execution-level diagnosis
+					if trade.RecentOrder != nil {
+						failureAnalysis := decision.AnalyzeFailedTrade(trade.RecentOrder)
+						if failureAnalysis != nil {
+							sb.WriteString(fmt.Sprintf("- **Execution Diagnosis**: %s (confidence: %.0f%%)\n",
+								humanizeV2Reason(failureAnalysis.PrimaryReason),
+								failureAnalysis.ConfidenceScore*100))
+							if failureAnalysis.DetailedNotes != "" {
+								sb.WriteString(fmt.Sprintf("- Root Cause: %s\n", failureAnalysis.DetailedNotes))
+							}
+							if failureAnalysis.Recommendation != "" {
+								sb.WriteString(fmt.Sprintf("- ⚠️ How to Avoid: %s\n", failureAnalysis.Recommendation))
+							}
+						}
+					}
+
+					if trade.Analysis != "" {
+						sb.WriteString(fmt.Sprintf("- Analysis: %s\n", trade.Analysis))
+					}
+					if trade.Reasoning != "" {
+						sb.WriteString(fmt.Sprintf("- Original Reasoning: %s\n", trade.Reasoning))
+					}
+					sb.WriteString("\n")
+				}
+			}
+
+			sb.WriteString("**💡 Learning Point**: Analyze these real examples to understand the causal relationship between decision context and outcomes\n\n")
 		}
 
 		sb.WriteString(fmt.Sprintf("**Market Conditions Assessment**: %s\n\n", analysis.MarketConditions))
