@@ -162,7 +162,9 @@ func (s *ExchangeStore) migrateToMultiAccount() error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
 	// Migrate each record
 	for _, r := range records {

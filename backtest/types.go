@@ -174,6 +174,11 @@ type StatusPayload struct {
 	Note           string           `json:"note,omitempty"`
 	LastError      string           `json:"last_error,omitempty"`
 	LastUpdatedIso string           `json:"last_updated_iso"`
+	// Analysis systems status
+	PromptOptimizationActive   bool `json:"prompt_optimization_active"`
+	FeedbackAnalysisActive     bool `json:"feedback_analysis_active"`
+	TradeFailureAnalysisActive bool `json:"trade_failure_analysis_active"`
+	ComplianceTrackingActive   bool `json:"compliance_tracking_active"`
 }
 
 // PositionStatus represents a position with unrealized P&L for status display.

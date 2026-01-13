@@ -343,7 +343,9 @@ func (s *Store) Transaction(fn func(tx *sql.Tx) error) error {
 	}
 
 	if err := fn(tx); err != nil {
-		tx.Rollback()
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return fmt.Errorf("failed to rollback transaction: %w (original error: %v)", rollbackErr, err)
+		}
 		return err
 	}
 

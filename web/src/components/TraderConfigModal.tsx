@@ -31,6 +31,7 @@ interface FormState {
   ai_model: string
   exchange_id: string
   strategy_id: string
+  trading_mode: string
   is_cross_margin: boolean
   show_in_competition: boolean
   scan_interval_minutes: number
@@ -62,6 +63,7 @@ export function TraderConfigModal({
     ai_model: '',
     exchange_id: '',
     strategy_id: '',
+    trading_mode: '',
     is_cross_margin: true,
     show_in_competition: true,
     scan_interval_minutes: 3,
@@ -103,6 +105,7 @@ export function TraderConfigModal({
       setFormData({
         ...traderData,
         strategy_id: traderData.strategy_id || '',
+        trading_mode: traderData.trading_mode || '',
       })
     } else if (!isEditMode) {
       setFormData({
@@ -110,6 +113,7 @@ export function TraderConfigModal({
         ai_model: availableModels[0]?.id || '',
         exchange_id: availableExchanges[0]?.id || '',
         strategy_id: '',
+        trading_mode: '',
         is_cross_margin: true,
         show_in_competition: true,
         scan_interval_minutes: 3,
@@ -164,6 +168,7 @@ export function TraderConfigModal({
         ai_model_id: formData.ai_model,
         exchange_id: formData.exchange_id,
         strategy_id: formData.strategy_id,
+        trading_mode: formData.trading_mode || '',
         is_cross_margin: formData.is_cross_margin,
         show_in_competition: formData.show_in_competition,
         scan_interval_minutes: formData.scan_interval_minutes,
@@ -439,6 +444,34 @@ export function TraderConfigModal({
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     {t('scanIntervalRecommend', language)}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm text-[#EAECEF] block mb-2">
+                    {language === 'zh' ? '交易模式' : 'Trading Mode'}
+                  </label>
+                  <select
+                    value={formData.trading_mode}
+                    onChange={(e) =>
+                      handleInputChange('trading_mode', e.target.value)
+                    }
+                    className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
+                  >
+                    <option value="">
+                      {language === 'zh' ? '默认 (Balanced)' : 'Default (Balanced)'}
+                    </option>
+                    <option value="balanced">Balanced</option>
+                    <option value="aggressive">
+                      {language === 'zh' ? '激进 (Aggressive)' : 'Aggressive'}
+                    </option>
+                    <option value="conservative">
+                      {language === 'zh' ? '保守 (Conservative)' : 'Conservative'}
+                    </option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {language === 'zh'
+                      ? '选择AI的交易风格。默认为平衡模式。'
+                      : 'Select AI trading style. Default is balanced mode.'}
                   </p>
                 </div>
               </div>

@@ -93,6 +93,9 @@ type AutoTraderConfig struct {
 	// Competition visibility
 	ShowInCompetition bool // Whether to show in competition page
 
+	// Trading mode / prompt variant
+	TradingMode string // Trading mode: "" (default/balanced), "aggressive", "conservative", or prompt variant ID
+
 	// Strategy configuration (use complete strategy config)
 	StrategyConfig *store.StrategyConfig // Strategy configuration (includes coin sources, indicators, risk control, prompts, etc.)
 }
@@ -145,6 +148,11 @@ type AutoTrader struct {
 
 	// Prompt optimization (genetic evolution)
 	promptOptimizer *backtest.PromptOptimizer // Evolves prompt strategies based on performance
+
+	// Analysis systems (same as backtests)
+	feedbackGenerator *backtest.FeedbackGenerator // Analyzes trading feedback
+	factorOptimizer   *backtest.FactorOptimizer   // Analyzes performance factors
+	complianceTracker *backtest.ComplianceTracker // Tracks compliance metrics
 }
 
 // NewAutoTrader creates an automatic trader
@@ -387,6 +395,12 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 			logger.Infof("[%s] No saved optimizer state found, starting fresh", config.Name)
 		}
 	}
+
+	// Initialize analysis systems (feedback, factor, compliance) for live trading
+	at.feedbackGenerator = backtest.NewFeedbackGenerator(config.ID, backtest.DefaultFeedbackConfig())
+	at.factorOptimizer = backtest.NewFactorOptimizer(backtest.DefaultFactorOptimizerConfig())
+	at.complianceTracker = backtest.NewComplianceTracker(backtest.DefaultComplianceConfig())
+	logger.Infof("✓ [%s] Analysis systems initialized: Feedback, Factor Optimizer, Compliance Tracker", config.Name)
 
 	return at, nil
 }
@@ -774,7 +788,11 @@ func (at *AutoTrader) runCycle() error {
 
 	// 5. Use strategy engine to call AI for decision
 	logger.Infof("🤖 Requesting AI analysis and decision... [Strategy Engine]")
-	aiDecision, err := decision.GetFullDecisionWithStrategy(ctx, at.mcpClient, at.strategyEngine, "balanced")
+	tradingMode := at.config.TradingMode
+	if tradingMode == "" {
+		tradingMode = "balanced" // Default to balanced if not specified
+	}
+	aiDecision, err := decision.GetFullDecisionWithStrategy(ctx, at.mcpClient, at.strategyEngine, tradingMode)
 
 	if aiDecision != nil && aiDecision.AIRequestDurationMs > 0 {
 		record.AIRequestDurationMs = aiDecision.AIRequestDurationMs
@@ -1810,19 +1828,23 @@ func (at *AutoTrader) GetStatus() map[string]interface{} {
 	at.isRunningMutex.RUnlock()
 
 	return map[string]interface{}{
-		"trader_id":       at.id,
-		"trader_name":     at.name,
-		"ai_model":        at.aiModel,
-		"exchange":        at.exchange,
-		"is_running":      isRunning,
-		"start_time":      at.startTime.Format(time.RFC3339),
-		"runtime_minutes": int(time.Since(at.startTime).Minutes()),
-		"call_count":      at.callCount,
-		"initial_balance": at.initialBalance,
-		"scan_interval":   at.config.ScanInterval.String(),
-		"stop_until":      at.stopUntil.Format(time.RFC3339),
-		"last_reset_time": at.lastResetTime.Format(time.RFC3339),
-		"ai_provider":     aiProvider,
+		"trader_id":                     at.id,
+		"trader_name":                   at.name,
+		"ai_model":                      at.aiModel,
+		"exchange":                      at.exchange,
+		"is_running":                    isRunning,
+		"start_time":                    at.startTime.Format(time.RFC3339),
+		"runtime_minutes":               int(time.Since(at.startTime).Minutes()),
+		"call_count":                    at.callCount,
+		"initial_balance":               at.initialBalance,
+		"scan_interval":                 at.config.ScanInterval.String(),
+		"stop_until":                    at.stopUntil.Format(time.RFC3339),
+		"last_reset_time":               at.lastResetTime.Format(time.RFC3339),
+		"ai_provider":                   aiProvider,
+		"prompt_optimization_active":    at.promptOptimizer != nil,
+		"feedback_analysis_active":      at.feedbackGenerator != nil,
+		"trade_failure_analysis_active": at.factorOptimizer != nil,
+		"compliance_tracking_active":    at.complianceTracker != nil,
 	}
 }
 

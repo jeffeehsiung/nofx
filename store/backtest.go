@@ -223,7 +223,9 @@ func (s *BacktestStore) addColumnIfNotExists(table, column, definition string) {
 		}
 	}
 
-	s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition))
+	if _, err := s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition)); err != nil {
+		return
+	}
 }
 
 // SaveCheckpoint saves checkpoint

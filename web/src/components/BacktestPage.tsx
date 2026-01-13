@@ -1808,6 +1808,38 @@ export function BacktestPage() {
                 {status?.positions && status.positions.length > 0 && (
                   <PositionsDisplay positions={status.positions} language={language} />
                 )}
+
+                {/* Analysis Systems Status */}
+                {selectedRunId && (
+                  <div className="mt-3 p-3 rounded-lg" style={{ background: 'rgba(43, 49, 57, 0.5)' }}>
+                    <div className="text-xs font-semibold mb-2" style={{ color: '#848E9C' }}>
+                      {language === 'zh' ? '分析系统' : 'Analysis Systems'}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {[
+                        { key: 'prompt_optimization_active', label: language === 'zh' ? '提示优化' : 'Prompt Optimization' },
+                        { key: 'feedback_analysis_active', label: language === 'zh' ? '反馈分析' : 'Feedback Analysis' },
+                        { key: 'trade_failure_analysis_active', label: language === 'zh' ? '交易失败分析' : 'Trade Failure Analysis' },
+                        { key: 'compliance_tracking_active', label: language === 'zh' ? '合规跟踪' : 'Compliance Tracking' },
+                      ].map((system) => (
+                        <div
+                          key={system.key}
+                          className="flex items-center gap-2 px-2 py-1 rounded text-xs"
+                          style={{
+                            background: status?.[system.key as keyof BacktestStatusPayload] ? 'rgba(14, 203, 129, 0.1)' : 'rgba(248, 113, 113, 0.1)',
+                            color: status?.[system.key as keyof BacktestStatusPayload] ? '#0ECB81' : '#F87171',
+                          }}
+                        >
+                          <div
+                            className="w-1.5 h-1.5 rounded-full"
+                            style={{ background: status?.[system.key as keyof BacktestStatusPayload] ? '#0ECB81' : '#F87171' }}
+                          />
+                          <span>{system.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Stats Grid */}

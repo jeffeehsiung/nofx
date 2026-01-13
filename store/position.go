@@ -1022,7 +1022,9 @@ func (s *PositionStore) GetHistorySummary(traderID string) (*HistorySummary, err
 		defer rows.Close()
 		for rows.Next() {
 			var pnl float64
-			rows.Scan(&pnl)
+			if err := rows.Scan(&pnl); err != nil {
+				continue
+			}
 			recentTotal++
 			recentPnL += pnl
 			if pnl > 0 {

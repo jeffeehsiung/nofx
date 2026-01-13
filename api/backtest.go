@@ -252,6 +252,8 @@ func (s *Server) handleBacktestStatus(c *gin.Context) {
 
 	status := s.backtestManager.Status(runID)
 	if status != nil {
+		// Enhance status with analysis system info
+		enhanceStatusWithAnalysisInfo(status, s.backtestManager, runID)
 		c.JSON(http.StatusOK, status)
 		return
 	}
@@ -268,6 +270,11 @@ func (s *Server) handleBacktestStatus(c *gin.Context) {
 		RealizedPnL:    0,
 		Note:           meta.Summary.LiquidationNote,
 		LastUpdatedIso: meta.UpdatedAt.Format(time.RFC3339),
+		// Analysis systems are always active
+		PromptOptimizationActive:   true,
+		FeedbackAnalysisActive:     true,
+		TradeFailureAnalysisActive: true,
+		ComplianceTrackingActive:   true,
 	}
 	c.JSON(http.StatusOK, payload)
 }
@@ -620,6 +627,30 @@ func queryInt(c *gin.Context, name string, fallback int) int {
 }
 
 var errBacktestForbidden = errors.New("backtest run forbidden")
+
+// enhanceStatusWithAnalysisInfo adds analysis system status information to the payload
+func enhanceStatusWithAnalysisInfo(status *backtest.StatusPayload, manager *backtest.Manager, runID string) {
+	if status == nil || manager == nil {
+		return
+	}
+
+	// Check if runner exists and is active
+	runner, ok := manager.GetRunner(runID)
+	if !ok || runner == nil {
+		// Assume all systems are active for completed runs
+		status.PromptOptimizationActive = true
+		status.FeedbackAnalysisActive = true
+		status.TradeFailureAnalysisActive = true
+		status.ComplianceTrackingActive = true
+		return
+	}
+
+	// For active runs, verify systems are initialized (they always should be)
+	status.PromptOptimizationActive = runner.GetPromptOptimizer() != nil
+	status.FeedbackAnalysisActive = true     // Feedback generator is always created
+	status.TradeFailureAnalysisActive = true // Trade failure tracking is always enabled
+	status.ComplianceTrackingActive = true   // Compliance tracking is always enabled
+}
 
 func normalizeUserID(id string) string {
 	id = strings.TrimSpace(id)

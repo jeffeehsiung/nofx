@@ -98,6 +98,7 @@ export interface TraderInfo {
   show_in_competition?: boolean
   strategy_id?: string
   strategy_name?: string
+  trading_mode?: string // 交易模式: "" (默认/balanced), "aggressive", "conservative", 或 prompt variant ID
   custom_prompt?: string
   use_coin_pool?: boolean
   use_oi_top?: boolean
@@ -163,6 +164,7 @@ export interface CreateTraderRequest {
   strategy_id?: string // 策略ID（新版，使用保存的策略配置）
   initial_balance?: number // 可选：创建时由后端自动获取，编辑时可手动更新
   scan_interval_minutes?: number
+  trading_mode?: string // 交易模式: "" (默认/balanced), "aggressive", "conservative", 或 prompt variant ID
   is_cross_margin?: boolean
   show_in_competition?: boolean // 是否在竞技场显示
   // 以下字段为向后兼容保留，新版使用策略配置
@@ -237,6 +239,7 @@ export interface TraderConfigData {
   exchange_id: string
   strategy_id?: string  // 策略ID
   strategy_name?: string  // 策略名称
+  trading_mode?: string  // 交易模式: "" (默认/balanced), "aggressive", "conservative"
   is_cross_margin: boolean
   show_in_competition: boolean  // 是否在竞技场显示
   scan_interval_minutes: number

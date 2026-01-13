@@ -359,9 +359,9 @@ func (s *DecisionStore) scanDecisionRecord(rows *sql.Rows) (*DecisionRecord, err
 	}
 
 	record.Timestamp, _ = time.Parse(time.RFC3339, timestampStr)
-	json.Unmarshal([]byte(candidateCoinsJSON), &record.CandidateCoins)
-	json.Unmarshal([]byte(executionLogJSON), &record.ExecutionLog)
-	json.Unmarshal([]byte(decisionsJSON), &record.Decisions)
+	_ = json.Unmarshal([]byte(candidateCoinsJSON), &record.CandidateCoins)
+	_ = json.Unmarshal([]byte(executionLogJSON), &record.ExecutionLog)
+	_ = json.Unmarshal([]byte(decisionsJSON), &record.Decisions)
 
 	return &record, nil
 }

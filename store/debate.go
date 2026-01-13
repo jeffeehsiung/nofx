@@ -254,7 +254,7 @@ func (s *DebateStore) InitSchema() error {
 
 	for _, migration := range migrations {
 		// Ignore errors - column may already exist
-		s.db.Exec(migration)
+		_, _ = s.db.Exec(migration)
 	}
 
 	return nil

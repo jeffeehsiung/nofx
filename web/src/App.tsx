@@ -1220,6 +1220,65 @@ function TraderDetailsPage({
         />
       </div>
 
+      {/* Analysis Systems Status */}
+      {status && (
+        <div
+          className="mb-6 p-4 rounded-lg"
+          style={{
+            background: 'rgba(240, 185, 11, 0.05)',
+            border: '1px solid rgba(240, 185, 11, 0.2)',
+          }}
+        >
+          <h3
+            className="text-sm font-semibold mb-3"
+            style={{ color: '#EAECEF' }}
+          >
+            {language === 'zh' ? '📊 分析系统状态' : '📊 Analysis Systems Status'}
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              {
+                key: 'prompt_optimization_active',
+                label: language === 'zh' ? 'Prompt优化' : 'Prompt Optimization',
+              },
+              {
+                key: 'feedback_analysis_active',
+                label: language === 'zh' ? '反馈分析' : 'Feedback Analysis',
+              },
+              {
+                key: 'trade_failure_analysis_active',
+                label: language === 'zh' ? '失败分析' : 'Trade Failure Analysis',
+              },
+              {
+                key: 'compliance_tracking_active',
+                label: language === 'zh' ? '合规追踪' : 'Compliance Tracking',
+              },
+            ].map((system) => (
+              <div
+                key={system.key}
+                className="flex items-center gap-2 px-3 py-2 rounded"
+                style={{
+                  background: '#1E2329',
+                  border: '1px solid #2B3139',
+                }}
+              >
+                <div
+                  className="w-2 h-2 rounded-full"
+                  style={{
+                    background: status[system.key as keyof typeof status]
+                      ? '#0ECB81'
+                      : '#F6465D',
+                  }}
+                ></div>
+                <span className="text-xs" style={{ color: '#EAECEF' }}>
+                  {system.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 主要内容区：左右分屏 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* 左侧：图表 + 持仓 */}

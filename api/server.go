@@ -449,6 +449,7 @@ type CreateTraderRequest struct {
 	StrategyID          string  `json:"strategy_id"` // Strategy ID (new version)
 	InitialBalance      float64 `json:"initial_balance"`
 	ScanIntervalMinutes int     `json:"scan_interval_minutes"`
+	TradingMode         string  `json:"trading_mode"`        // Trading mode: "" (default/balanced), "aggressive", "conservative", or prompt variant ID
 	IsCrossMargin       *bool   `json:"is_cross_margin"`     // Pointer type, nil means use default value true
 	ShowInCompetition   *bool   `json:"show_in_competition"` // Pointer type, nil means use default value true
 	PaperTrading        *bool   `json:"paper_trading"`       // Pointer type, nil means use default value false
@@ -720,6 +721,7 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 		BTCETHLeverage:       btcEthLeverage,
 		AltcoinLeverage:      altcoinLeverage,
 		TradingSymbols:       req.TradingSymbols,
+		TradingMode:          req.TradingMode, // Trading mode/variant
 		UseCoinPool:          req.UseCoinPool,
 		UseOITop:             req.UseOITop,
 		CustomPrompt:         req.CustomPrompt,
@@ -769,6 +771,7 @@ type UpdateTraderRequest struct {
 	StrategyID          string  `json:"strategy_id"` // Strategy ID (new version)
 	InitialBalance      float64 `json:"initial_balance"`
 	ScanIntervalMinutes int     `json:"scan_interval_minutes"`
+	TradingMode         string  `json:"trading_mode"` // Trading mode: "" (default/balanced), "aggressive", "conservative", or prompt variant ID
 	IsCrossMargin       *bool   `json:"is_cross_margin"`
 	ShowInCompetition   *bool   `json:"show_in_competition"`
 	// The following fields are kept for backward compatibility, new version uses strategy config
@@ -864,6 +867,7 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 		BTCETHLeverage:       btcEthLeverage,
 		AltcoinLeverage:      altcoinLeverage,
 		TradingSymbols:       req.TradingSymbols,
+		TradingMode:          req.TradingMode, // Trading mode/variant
 		CustomPrompt:         req.CustomPrompt,
 		OverrideBasePrompt:   req.OverrideBasePrompt,
 		SystemPromptTemplate: systemPromptTemplate,

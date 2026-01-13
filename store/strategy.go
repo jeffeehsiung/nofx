@@ -476,7 +476,9 @@ func (s *StrategyStore) SetActive(userID, strategyID string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
 	// first deactivate all strategies for the user
 	_, err = tx.Exec(`UPDATE strategies SET is_active = 0 WHERE user_id = ?`, userID)

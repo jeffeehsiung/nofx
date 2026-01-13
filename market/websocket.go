@@ -2,9 +2,9 @@ package market
 
 import (
 	"fmt"
+	"nofx/config"
 	"sync"
 	"time"
-	"nofx/config"
 )
 
 // WebSocketClient defines the interface for exchange WebSocket connections

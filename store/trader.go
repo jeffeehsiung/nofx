@@ -23,6 +23,7 @@ type Trader struct {
 	StrategyID          string    `json:"strategy_id"` // Associated strategy ID
 	InitialBalance      float64   `json:"initial_balance"`
 	ScanIntervalMinutes int       `json:"scan_interval_minutes"`
+	TradingMode         string    `json:"trading_mode"` // Trading mode: "" (default/balanced), "aggressive", "conservative", or prompt variant ID
 	IsRunning           bool      `json:"is_running"`
 	IsCrossMargin       bool      `json:"is_cross_margin"`
 	ShowInCompetition   bool      `json:"show_in_competition"` // Whether to show in competition page
@@ -103,6 +104,7 @@ func (s *TraderStore) initTables() error {
 		`ALTER TABLE traders ADD COLUMN strategy_id TEXT DEFAULT ''`,
 		`ALTER TABLE traders ADD COLUMN show_in_competition BOOLEAN DEFAULT 1`,
 		`ALTER TABLE traders ADD COLUMN paper_trading BOOLEAN DEFAULT 0`,
+		`ALTER TABLE traders ADD COLUMN trading_mode TEXT DEFAULT ''`,
 	}
 	for _, q := range alterQueries {
 		s.db.Exec(q)
@@ -201,12 +203,12 @@ func (s *TraderStore) decrypt(encrypted string) string {
 func (s *TraderStore) Create(trader *Trader) error {
 	_, err := s.db.Exec(`
 		INSERT INTO traders (id, user_id, name, ai_model_id, exchange_id, strategy_id, initial_balance,
-		                     scan_interval_minutes, is_running, is_cross_margin, show_in_competition, paper_trading,
+		                     scan_interval_minutes, trading_mode, is_running, is_cross_margin, show_in_competition, paper_trading,
 		                     btc_eth_leverage, altcoin_leverage, trading_symbols, use_coin_pool,
 		                     use_oi_top, custom_prompt, override_base_prompt, system_prompt_template)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, trader.ID, trader.UserID, trader.Name, trader.AIModelID, trader.ExchangeID, trader.StrategyID,
-		trader.InitialBalance, trader.ScanIntervalMinutes, trader.IsRunning, trader.IsCrossMargin, trader.ShowInCompetition, trader.PaperTrading,
+		trader.InitialBalance, trader.ScanIntervalMinutes, trader.TradingMode, trader.IsRunning, trader.IsCrossMargin, trader.ShowInCompetition, trader.PaperTrading,
 		trader.BTCETHLeverage, trader.AltcoinLeverage, trader.TradingSymbols, trader.UseCoinPool,
 		trader.UseOITop, trader.CustomPrompt, trader.OverrideBasePrompt, trader.SystemPromptTemplate)
 	return err
@@ -216,7 +218,7 @@ func (s *TraderStore) Create(trader *Trader) error {
 func (s *TraderStore) List(userID string) ([]*Trader, error) {
 	rows, err := s.db.Query(`
 		SELECT id, user_id, name, ai_model_id, exchange_id, COALESCE(strategy_id, ''),
-		       initial_balance, scan_interval_minutes, is_running, COALESCE(is_cross_margin, 1),
+		       initial_balance, scan_interval_minutes, COALESCE(trading_mode, ''), is_running, COALESCE(is_cross_margin, 1),
 		       COALESCE(show_in_competition, 1), COALESCE(paper_trading, 0),
 		       COALESCE(btc_eth_leverage, 5), COALESCE(altcoin_leverage, 5), COALESCE(trading_symbols, ''),
 		       COALESCE(use_coin_pool, 0), COALESCE(use_oi_top, 0), COALESCE(custom_prompt, ''),
@@ -235,7 +237,7 @@ func (s *TraderStore) List(userID string) ([]*Trader, error) {
 		var createdAt, updatedAt string
 		err := rows.Scan(
 			&t.ID, &t.UserID, &t.Name, &t.AIModelID, &t.ExchangeID, &t.StrategyID,
-			&t.InitialBalance, &t.ScanIntervalMinutes, &t.IsRunning, &t.IsCrossMargin,
+			&t.InitialBalance, &t.ScanIntervalMinutes, &t.TradingMode, &t.IsRunning, &t.IsCrossMargin,
 			&t.ShowInCompetition, &t.PaperTrading,
 			&t.BTCETHLeverage, &t.AltcoinLeverage, &t.TradingSymbols,
 			&t.UseCoinPool, &t.UseOITop, &t.CustomPrompt, &t.OverrideBasePrompt,
@@ -275,6 +277,7 @@ func (s *TraderStore) Update(trader *Trader) error {
 			strategy_id = ?,
 			initial_balance = CASE WHEN ? > 0 THEN ? ELSE initial_balance END,
 			scan_interval_minutes = CASE WHEN ? > 0 THEN ? ELSE scan_interval_minutes END,
+			trading_mode = ?,
 			is_cross_margin = ?,
 			show_in_competition = ?,
 			paper_trading = ?,
@@ -283,6 +286,7 @@ func (s *TraderStore) Update(trader *Trader) error {
 	`, trader.Name, trader.AIModelID, trader.ExchangeID, trader.StrategyID,
 		trader.InitialBalance, trader.InitialBalance,
 		trader.ScanIntervalMinutes, trader.ScanIntervalMinutes,
+		trader.TradingMode,
 		trader.IsCrossMargin, trader.ShowInCompetition, trader.PaperTrading,
 		trader.ID, trader.UserID)
 	return err
