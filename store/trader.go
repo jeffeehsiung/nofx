@@ -90,28 +90,6 @@ func (s *TraderStore) initTables() error {
 		return err
 	}
 
-	// Backward compatibility
-	alterQueries := []string{
-		`ALTER TABLE traders ADD COLUMN custom_prompt TEXT DEFAULT ''`,
-		`ALTER TABLE traders ADD COLUMN override_base_prompt BOOLEAN DEFAULT 0`,
-		`ALTER TABLE traders ADD COLUMN is_cross_margin BOOLEAN DEFAULT 1`,
-		`ALTER TABLE traders ADD COLUMN btc_eth_leverage INTEGER DEFAULT 5`,
-		`ALTER TABLE traders ADD COLUMN altcoin_leverage INTEGER DEFAULT 5`,
-		`ALTER TABLE traders ADD COLUMN trading_symbols TEXT DEFAULT ''`,
-		`ALTER TABLE traders ADD COLUMN use_coin_pool BOOLEAN DEFAULT 0`,
-		`ALTER TABLE traders ADD COLUMN use_oi_top BOOLEAN DEFAULT 0`,
-		`ALTER TABLE traders ADD COLUMN system_prompt_template TEXT DEFAULT 'default'`,
-		`ALTER TABLE traders ADD COLUMN strategy_id TEXT DEFAULT ''`,
-		`ALTER TABLE traders ADD COLUMN show_in_competition BOOLEAN DEFAULT 1`,
-		`ALTER TABLE traders ADD COLUMN paper_trading BOOLEAN DEFAULT 0`,
-		`ALTER TABLE traders ADD COLUMN trading_mode TEXT DEFAULT ''`,
-	}
-	for _, q := range alterQueries {
-		if _, err := s.db.Exec(q); err != nil {
-			logger.Warnf("Failed to execute alter query: %s, error: %v", q, err)
-		}
-	}
-
 	// Migration: Remove FOREIGN KEY constraint from existing traders table
 	// SQLite doesn't support ALTER TABLE DROP CONSTRAINT, so we need to recreate the table
 	if err := s.migrateTradersRemoveFK(); err != nil {

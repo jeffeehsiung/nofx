@@ -117,7 +117,7 @@ func (c *Client) GetKlines(ctx context.Context, symbol string, interval string, 
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("binance API error (status %d): %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("binance API error for symbol '%s' (status %d): %s", symbol, resp.StatusCode, string(body))
 	}
 
 	// Parse response
@@ -356,12 +356,32 @@ func ExtractBaseAsset(symbol string) string {
 // GetKlinesFromBinance is a package-level convenience function to fetch klines from Binance
 // This provides a simple API similar to other providers like coinank_api.Kline()
 func GetKlinesFromBinance(ctx context.Context, symbol, interval string, limit int) ([]Kline, error) {
+	// Validate symbol - no commas, spaces, or special characters
+	if strings.Contains(symbol, ",") || strings.Contains(symbol, " ") {
+		return nil, fmt.Errorf("invalid symbol format '%s': symbol cannot contain commas or spaces (use single symbol like 'BTCUSDT')", symbol)
+	}
+
 	client := NewClient()
-	return client.GetFuturesKlines(ctx, symbol, interval, limit)
+	klines, err := client.GetFuturesKlines(ctx, symbol, interval, limit)
+	if err != nil {
+		// Add symbol to error message for debugging
+		return nil, fmt.Errorf("failed to get klines for symbol '%s': %w", symbol, err)
+	}
+	return klines, nil
 }
 
 // GetKlinesFromBinanceSpot fetches klines from Binance spot market
 func GetKlinesFromBinanceSpot(ctx context.Context, symbol, interval string, limit int) ([]Kline, error) {
+	// Validate symbol - no commas, spaces, or special characters
+	if strings.Contains(symbol, ",") || strings.Contains(symbol, " ") {
+		return nil, fmt.Errorf("invalid symbol format '%s': symbol cannot contain commas or spaces (use single symbol like 'BTCUSDT')", symbol)
+	}
+
 	client := NewClient()
-	return client.GetSpotKlines(ctx, symbol, interval, limit)
+	klines, err := client.GetSpotKlines(ctx, symbol, interval, limit)
+	if err != nil {
+		// Add symbol to error message for debugging
+		return nil, fmt.Errorf("failed to get spot klines for symbol '%s': %w", symbol, err)
+	}
+	return klines, nil
 }

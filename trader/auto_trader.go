@@ -869,6 +869,16 @@ func (at *AutoTrader) runCycle() error {
 
 	// Execute decisions and record results
 	for _, d := range sortedDecisions {
+		// Ensure stop loss and take profit are positive
+		if d.StopLoss < 0 {
+			logger.Warnf("⚠️ Stop loss value %.4f is negative, converting to absolute.", d.StopLoss)
+			d.StopLoss = math.Abs(d.StopLoss)
+		}
+		if d.TakeProfit < 0 {
+			logger.Warnf("⚠️ Take profit value %.4f is negative, converting to absolute.", d.TakeProfit)
+			d.TakeProfit = math.Abs(d.TakeProfit)
+		}
+
 		// Check if trader is stopped before each decision (allow immediate stop during execution)
 		at.isRunningMutex.RLock()
 		running = at.isRunning
