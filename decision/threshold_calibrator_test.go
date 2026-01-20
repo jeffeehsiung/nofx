@@ -72,7 +72,10 @@ func TestThresholdCalibrator_Percentile(t *testing.T) {
 func TestThresholdCalibrator_ApplyToAnalyzer(t *testing.T) {
 	calibrator := NewThresholdCalibrator()
 	trades := generateSyntheticTrades(100)
-	calibrator.CalibrateFromHistory(trades)
+	err := calibrator.CalibrateFromHistory(trades)
+	if err != nil {
+		t.Fatalf("Calibration failed: %v", err)
+	}
 
 	thresholds := calibrator.ApplyToAnalyzer()
 
@@ -162,6 +165,8 @@ func BenchmarkThresholdCalibration(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		calibrator := NewThresholdCalibrator()
-		calibrator.CalibrateFromHistory(trades)
+		if err := calibrator.CalibrateFromHistory(trades); err != nil {
+			b.Fatalf("Calibration failed: %v", err)
+		}
 	}
 }

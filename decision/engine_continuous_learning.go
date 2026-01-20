@@ -57,10 +57,6 @@ func (e *StrategyEngine) buildContinuousLearningFeedback(sb *strings.Builder, ct
 	// Show how optimization systems are learning
 	e.showOptimizationSystemsLearning(sb, ctx, lang)
 
-	// === 5. META-PROMPTING: SELF-REFLECTION QUESTIONS ===
-	// Challenge the LLM to continuously improve its own decision-making approach
-	e.provideMetaPromptingReflection(sb, ctx, lang)
-
 	sb.WriteString("\n")
 }
 
@@ -335,61 +331,4 @@ func (e *StrategyEngine) calculateWinLossRatio(stats *TradingStats) float64 {
 		return 0
 	}
 	return stats.AvgWin / math.Abs(stats.AvgLoss)
-}
-
-// provideMetaPromptingReflection provides self-reflection questions to help LLM improve its own approach
-// This is meta-prompting: asking the LLM to critique and evolve its own decision-making strategy
-func (e *StrategyEngine) provideMetaPromptingReflection(sb *strings.Builder, ctx *Context, lang Language) {
-	// Only show if we have enough trading history
-	if len(ctx.RecentOrders) < 3 {
-		return
-	}
-
-	if lang == LangChinese {
-		sb.WriteString("### 🔄 策略自我反思 (Meta-Prompting)\n\n")
-		sb.WriteString("**在做出当前决策之前，请深度反思以下问题：**\n\n")
-
-		sb.WriteString("1. **模式识别：** 从上述盈利和亏损交易中，你发现了什么关键差异？\n")
-		sb.WriteString("   - 盈利交易：市场条件、入场时机、持仓时长有何共同点？\n")
-		sb.WriteString("   - 亏损交易：哪些信号误导了你？什么规则可以避免这些错误？\n\n")
-
-		sb.WriteString("2. **策略适应：** 基于当前表现指标（胜率、盈亏比、回撤），你的交易方法需要如何调整？\n")
-		sb.WriteString("   - 如果胜率低：是否应该提高准入门槛，只交易最高确定性的设置？\n")
-		sb.WriteString("   - 如果盈亏比低：是否应该让盈利持仓运行更久，或更早止损？\n")
-		sb.WriteString("   - 如果回撤大：是否应该减小仓位或收紧止损？\n\n")
-
-		sb.WriteString("3. **市场态势：** 当前市场环境是否与你的历史成功案例相似？\n")
-		sb.WriteString("   - 如果不同：你的策略是否需要暂时保守，等待更有利的条件？\n")
-		sb.WriteString("   - 如果相似：你能否基于过往成功经验，识别当前的高概率机会？\n\n")
-
-		sb.WriteString("4. **决策框架优化：** 如果你能重写自己的交易规则，你会如何改进？\n")
-		sb.WriteString("   - 哪些指标或信号在实践中最可靠？应该增加权重？\n")
-		sb.WriteString("   - 哪些规则经常导致错误决策？应该弱化或移除？\n")
-		sb.WriteString("   - 你是否需要添加新的风险控制规则？\n\n")
-
-		sb.WriteString("**💡 关键：** 每次决策都是优化你策略的机会。基于上述反思，现在做出最优决策。\n\n")
-	} else {
-		sb.WriteString("### 🔄 Strategy Self-Reflection (Meta-Prompting)\n\n")
-		sb.WriteString("**Before making your current decision, deeply reflect on these questions:**\n\n")
-
-		sb.WriteString("1. **Pattern Recognition:** From the winning and losing trades above, what key differences do you observe?\n")
-		sb.WriteString("   - Winning trades: What market conditions, entry timing, or hold duration do they share?\n")
-		sb.WriteString("   - Losing trades: Which signals misled you? What rules could prevent these mistakes?\n\n")
-
-		sb.WriteString("2. **Strategy Adaptation:** Based on current performance metrics (win rate, win/loss ratio, drawdown), how should your approach adjust?\n")
-		sb.WriteString("   - If win rate is low: Should you increase selectivity and only trade highest-confidence setups?\n")
-		sb.WriteString("   - If win/loss ratio is low: Should you let winners run longer or cut losses earlier?\n")
-		sb.WriteString("   - If drawdown is high: Should you reduce position sizes or tighten stops?\n\n")
-
-		sb.WriteString("3. **Market Regime:** Is the current market environment similar to your historical successes?\n")
-		sb.WriteString("   - If different: Should your strategy temporarily be more conservative until favorable conditions return?\n")
-		sb.WriteString("   - If similar: Can you identify high-probability opportunities based on past successful patterns?\n\n")
-
-		sb.WriteString("4. **Decision Framework Optimization:** If you could rewrite your own trading rules, how would you improve?\n")
-		sb.WriteString("   - Which indicators or signals are most reliable in practice? Should they get more weight?\n")
-		sb.WriteString("   - Which rules frequently lead to wrong decisions? Should they be weakened or removed?\n")
-		sb.WriteString("   - Do you need to add new risk control rules?\n\n")
-
-		sb.WriteString("**💡 Key:** Every decision is an opportunity to optimize your strategy. Based on the above reflection, now make the optimal decision.\n\n")
-	}
 }

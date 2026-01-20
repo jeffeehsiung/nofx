@@ -1,3 +1,4 @@
+import {PromptVariantsResponse} from '../components/PromptLabPage'
 import type {
   SystemStatus,
   AccountInfo,
@@ -590,6 +591,33 @@ export const api = {
     return handleJSONResponse<BacktestAnalysis>(res)
   },
 
+  // Prompt Optimization APIs
+  async getPromptVariants(runId: string): Promise<PromptVariantsResponse> {
+    const res = await fetch(`${API_BASE}/backtest/prompt-variants?run_id=${runId}`, {
+      headers: getAuthHeaders(),
+    })
+    return handleJSONResponse<any>(res)
+  },
+
+  async getPromptPerformance(runId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/backtest/prompt-performance?run_id=${runId}`, {
+      headers: getAuthHeaders(),
+    })
+    return handleJSONResponse<any>(res)
+  },
+
+  async activatePromptVariant(runId: string, variantId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/backtest/prompt-activate`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        run_id: runId,
+        variant_id: variantId,
+      }),
+    })
+    return handleJSONResponse<any>(res)
+  },
+
   async getBacktestKlines(
     runId: string,
     symbol: string,
@@ -792,5 +820,37 @@ export const api = {
     )
     if (!result.success) throw new Error('获取历史仓位失败')
     return result.data!
+  },
+
+  // Trader Prompt Optimization APIs
+  async getTraderPromptVariants(traderId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/traders/${traderId}/prompt-variants`, {
+      headers: getAuthHeaders(),
+    })
+    return handleJSONResponse<any>(res)
+  },
+
+  async getTraderPromptPerformance(traderId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/traders/${traderId}/prompt-performance`, {
+      headers: getAuthHeaders(),
+    })
+    return handleJSONResponse<any>(res)
+  },
+
+  async activateTraderPromptVariant(traderId: string, variantId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/traders/${traderId}/prompt-activate`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ variant_id: variantId }),
+    })
+    return handleJSONResponse<any>(res)
+  },
+
+    // Trader Analysis APIs
+  async getTraderAnalysis(traderId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/traders/${traderId}/analysis`, {
+      headers: getAuthHeaders(),
+    })
+    return handleJSONResponse<any>(res)
   },
 }

@@ -366,10 +366,10 @@ func (s *Server) handlePreviewPrompt(c *gin.Context) {
 	engine := decision.NewStrategyEngine(&req.Config)
 
 	// Build system prompt (using built-in method from strategy engine)
-	systemPrompt := engine.BuildSystemPrompt(
+	systemPrompt := engine.BuildSystemPromptWithContext(
 		req.AccountEquity,
 		req.PromptVariant,
-	)
+		&decision.Context{})
 
 	c.JSON(http.StatusOK, gin.H{
 		"system_prompt":  systemPrompt,
@@ -493,7 +493,7 @@ func (s *Server) handleStrategyTestRun(c *gin.Context) {
 	}
 
 	// Build System Prompt
-	systemPrompt := engine.BuildSystemPrompt(1000.0, req.PromptVariant)
+	systemPrompt := engine.BuildSystemPromptWithContext(1000.0, req.PromptVariant, testContext)
 
 	// Build User Prompt (using real market data)
 	userPrompt := engine.BuildUserPrompt(testContext)

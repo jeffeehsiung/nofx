@@ -133,6 +133,13 @@ type AutoTrader struct {
 	userID                  string             // User ID
 	successfulClosesInCycle int                // Track successful close positions in current cycle (for expected net position calculation)
 
+	// Market microstructure analysis (ADD THIS)
+	entryMicrostructure    map[string]*market.MarketMicrostructure // orderID -> full microstructure analysis
+	entryMicrostructureMu  sync.RWMutex
+	microstructureAnalyzer *market.MarketMicrostructureAnalyzer
+	microstructureCache    map[string]*market.MarketMicrostructure
+	microstructureCacheMu  sync.RWMutex
+
 	// Market monitoring for adaptive triggers (Phase 1.3)
 	lastPrices          map[string]float64                  // Last observed prices (symbol -> price)
 	lastPricesMutex     sync.RWMutex                        // Mutex for price map
@@ -153,6 +160,11 @@ type AutoTrader struct {
 	feedbackGenerator *backtest.FeedbackGenerator // Analyzes trading feedback
 	factorOptimizer   *backtest.FactorOptimizer   // Analyzes performance factors
 	complianceTracker *backtest.ComplianceTracker // Tracks compliance metrics
+
+	// Feedback cycle management (avoid regenerating every cycle)
+	lastFeedback      *backtest.FeedbackAnalysis // Last generated feedback analysis
+	feedbackCycle     int                        // Cycle number when feedback was last generated
+	failureThresholds decision.FailureThresholds // Calibrated failure detection thresholds
 }
 
 // NewAutoTrader creates an automatic trader
@@ -344,38 +356,41 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	logger.Infof("✓ [%s] Using strategy engine (strategy configuration loaded)", config.Name)
 
 	at := &AutoTrader{
-		id:                    config.ID,
-		name:                  config.Name,
-		aiModel:               config.AIModel,
-		exchange:              config.Exchange,
-		exchangeID:            config.ExchangeID,
-		showInCompetition:     config.ShowInCompetition,
-		config:                config,
-		trader:                trader,
-		mcpClient:             mcpClient,
-		store:                 st,
-		strategyEngine:        strategyEngine,
-		cycleNumber:           cycleNumber,
-		initialBalance:        config.InitialBalance,
-		lastResetTime:         time.Now(),
-		startTime:             time.Now(),
-		callCount:             0,
-		isRunning:             false,
-		positionFirstSeenTime: make(map[string]int64),
-		stopMonitorCh:         make(chan struct{}),
-		monitorWg:             sync.WaitGroup{},
-		peakPnLCache:          make(map[string]float64),
-		peakPnLCacheMutex:     sync.RWMutex{},
-		lastBalanceSyncTime:   time.Now(),
-		userID:                userID,
-		lastPrices:            make(map[string]float64),
-		lastPricesMutex:       sync.RWMutex{},
-		volumeBaseline:        make(map[string]float64),
-		volumeBaselineMutex:   sync.RWMutex{},
-		lastMarketCheckTime:   time.Now(),
-		orderBookMonitors:     make(map[string]*market.OrderBookMonitor),
-		orderBookMonitorsMu:   sync.RWMutex{},
-		eventBus:              NewEventBus(),
+		id:                     config.ID,
+		name:                   config.Name,
+		aiModel:                config.AIModel,
+		exchange:               config.Exchange,
+		exchangeID:             config.ExchangeID,
+		showInCompetition:      config.ShowInCompetition,
+		config:                 config,
+		trader:                 trader,
+		mcpClient:              mcpClient,
+		store:                  st,
+		strategyEngine:         strategyEngine,
+		cycleNumber:            cycleNumber,
+		initialBalance:         config.InitialBalance,
+		lastResetTime:          time.Now(),
+		startTime:              time.Now(),
+		callCount:              0,
+		isRunning:              false,
+		positionFirstSeenTime:  make(map[string]int64),
+		stopMonitorCh:          make(chan struct{}),
+		monitorWg:              sync.WaitGroup{},
+		peakPnLCache:           make(map[string]float64),
+		peakPnLCacheMutex:      sync.RWMutex{},
+		lastBalanceSyncTime:    time.Now(),
+		userID:                 userID,
+		lastPrices:             make(map[string]float64),
+		lastPricesMutex:        sync.RWMutex{},
+		volumeBaseline:         make(map[string]float64),
+		volumeBaselineMutex:    sync.RWMutex{},
+		lastMarketCheckTime:    time.Now(),
+		microstructureAnalyzer: market.NewMarketMicrostructureAnalyzer(),
+		microstructureCache:    make(map[string]*market.MarketMicrostructure),
+		entryMicrostructure:    make(map[string]*market.MarketMicrostructure), // Use full type
+		orderBookMonitors:      make(map[string]*market.OrderBookMonitor),
+		orderBookMonitorsMu:    sync.RWMutex{},
+		eventBus:               NewEventBus(),
 	}
 
 	// Initialize WebSocket manager with the same EventBus
@@ -406,6 +421,10 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	at.feedbackGenerator = backtest.NewFeedbackGenerator(config.ID, backtest.DefaultFeedbackConfig())
 	at.factorOptimizer = backtest.NewFactorOptimizer(backtest.DefaultFactorOptimizerConfig())
 	at.complianceTracker = backtest.NewComplianceTracker(backtest.DefaultComplianceConfig())
+	at.lastFeedback = nil
+	at.feedbackCycle = 0
+	// Initialize default failure thresholds (will be calibrated over time)
+	at.failureThresholds = decision.DefaultFailureThresholds()
 	logger.Infof("✓ [%s] Analysis systems initialized: Feedback, Factor Optimizer, Compliance Tracker", config.Name)
 
 	return at, nil
@@ -419,6 +438,9 @@ func (at *AutoTrader) Run() error {
 
 	at.stopMonitorCh = make(chan struct{})
 	at.startTime = time.Now()
+
+	// Save live trading config for feedback analysis (backtest-compatible format)
+	at.saveLiveTradingConfig()
 
 	logger.Info("🚀 AI-driven automatic trading system started")
 	logger.Infof("💰 Initial balance: %.2f USDT", at.initialBalance)
@@ -784,6 +806,9 @@ func (at *AutoTrader) runCycle() error {
 	// Save equity snapshot independently (decoupled from AI decision, used for drawing profit curve)
 	at.saveEquitySnapshot(ctx)
 
+	// Save checkpoint for feedback analysis (backtest-compatible format)
+	at.saveCheckpoint()
+
 	logger.Info(strings.Repeat("=", 70))
 	for _, coin := range ctx.CandidateCoins {
 		record.CandidateCoins = append(record.CandidateCoins, coin.Symbol)
@@ -846,35 +871,10 @@ func (at *AutoTrader) runCycle() error {
 		return fmt.Errorf("failed to get AI decision: %w", err)
 	}
 
-	// // 5. Print system prompt
-	// logger.Infof("\n" + strings.Repeat("=", 70))
-	// logger.Infof("📋 System prompt [template: %s]", at.systemPromptTemplate)
-	// logger.Info(strings.Repeat("=", 70))
-	// logger.Info(decision.SystemPrompt)
-	// logger.Infof(strings.Repeat("=", 70) + "\n")
-
-	// 6. Print AI chain of thought
-	// logger.Infof("\n" + strings.Repeat("-", 70))
-	// logger.Info("💭 AI chain of thought analysis:")
-	// logger.Info(strings.Repeat("-", 70))
-	// logger.Info(decision.CoTTrace)
-	// logger.Infof(strings.Repeat("-", 70) + "\n")
-
-	// 7. Print AI decisions
-	// logger.Infof("📋 AI decision list (%d items):\n", len(decision.Decisions))
-	// for i, d := range decision.Decisions {
-	//     logger.Infof("  [%d] %s: %s - %s", i+1, d.Symbol, d.Action, d.Reasoning)
-	//     if d.Action == "open_long" || d.Action == "open_short" {
-	//        logger.Infof("      Leverage: %dx | Position: %.2f USDT | Stop loss: %.4f | Take profit: %.4f",
-	//           d.Leverage, d.PositionSizeUSD, d.StopLoss, d.TakeProfit)
-	//     }
-	// }
 	logger.Info()
 	logger.Info(strings.Repeat("-", 70))
-	// 8. Sort decisions: ensure close positions first, then open positions (prevent position stacking overflow)
-	logger.Info(strings.Repeat("-", 70))
 
-	// 8. Sort decisions: ensure close positions first, then open positions (prevent position stacking overflow)
+	// 6. Sort decisions: ensure close positions first, then open positions (prevent position stacking overflow)
 	sortedDecisions := sortDecisionsByPriority(aiDecision.Decisions)
 
 	logger.Info("🔄 Execution order (optimized): Close positions first → Open positions later")
@@ -883,7 +883,7 @@ func (at *AutoTrader) runCycle() error {
 	}
 	logger.Info()
 
-	// Check if trader is stopped before executing any decisions (prevent trades after Stop())
+	// 7. Check if trader is stopped before executing any decisions (prevent trades after Stop())
 	at.isRunningMutex.RLock()
 	running = at.isRunning
 	at.isRunningMutex.RUnlock()
@@ -940,10 +940,6 @@ func (at *AutoTrader) runCycle() error {
 	if err := at.saveDecision(record); err != nil {
 		logger.Infof("⚠ Failed to save decision record: %v", err)
 	}
-
-	// 10. Record trade outcomes for prompt meta-learning evolution
-	// Detect strategy language
-	at.recordTradeOutcomeToOptimizer(ctx)
 
 	return nil
 }
@@ -1186,37 +1182,140 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 				MaxDrawdownPct: stats.MaxDrawdownPct,
 			}
 
-			// Create formatted performance feedback for LLM (live stats summary)
-			livePerf := decision.NewLivePerformanceFeedback(stats)
-			if livePerf != nil {
-				ctx.PerformanceFeedback = livePerf
-			}
+			// Generate feedback if enabled and enough trades have been made
+			// Regenerate feedback every 5 cycles to avoid constant recalculation
+			if at.feedbackGenerator != nil && stats.TotalTrades >= 3 {
+				if at.lastFeedback == nil || (stats.TotalTrades-at.feedbackCycle) >= 5 {
+					feedback, err := at.feedbackGenerator.GenerateFeedback()
+					if err != nil {
+						logger.Warnf("⚠️ [%s] Failed to generate feedback analysis: %v", at.name, err)
+					} else if feedback != nil {
+						at.lastFeedback = feedback
+						at.feedbackCycle = stats.TotalTrades
+						// Save feedback analysis for later reference and analytics
+						if err := at.feedbackGenerator.SaveFeedbackAnalysis(feedback); err != nil {
+							logger.Infof("⚠️ [%s] Failed to save feedback analysis: %v", at.name, err)
+						}
+						logger.Infof("✅ [%s] Generated feedback analysis at cycle %d: Total Return %.2f%%, Win Rate %.1f%%",
+							at.name, stats.TotalTrades, feedback.TotalReturnPct, feedback.WinRate)
 
-			// Create formatted optimized weights from strategy config risk controls
-			liveWeights := decision.NewLiveOptimizedWeights(strategyConfig.RiskControl)
-			if liveWeights != nil {
-				ctx.OptimizedWeights = liveWeights
-			}
+						// Calibrate failure thresholds from trading history (every 5 trades)
+						if stats.TotalTrades >= 10 {
+							if recentTrades, err := at.store.Position().GetRecentTrades(at.id, 500); err == nil && len(recentTrades) > 0 {
+								calibrator := decision.NewThresholdCalibrator()
+								outcomes := make([]decision.TradeOutcome, 0, len(recentTrades))
+								for _, trade := range recentTrades {
+									holdingMinutes := 0
+									if trade.ExitTime > 0 && trade.EntryTime > 0 && trade.ExitTime > trade.EntryTime {
+										holdingMinutes = int(time.Unix(trade.ExitTime, 0).Sub(time.Unix(trade.EntryTime, 0)).Minutes())
+									}
+									outcomes = append(outcomes, decision.TradeOutcome{
+										Symbol:            trade.Symbol,
+										Profitable:        trade.RealizedPnL > 0,
+										VolumeAtEntry:     1.0,
+										OIAtEntry:         0.0,
+										VolumeDuringTrade: 0.0,
+										OIDuringTrade:     0.0,
+										EntrySpread:       0.0,
+										ExitSpread:        0.0,
+										EntryDepth:        0.0,
+										ExitDepth:         0.0,
+										HoldingMinutes:    holdingMinutes,
+										PnLPct:            trade.PnLPct,
+									})
+								}
+								if err := calibrator.CalibrateFromHistory(outcomes); err == nil {
+									at.failureThresholds = calibrator.ApplyToAnalyzer()
+									logger.Infof("📊 [%s] Calibrated failure thresholds from %d trades: %s",
+										at.name, len(outcomes), calibrator.GetCalibrationSummary())
+								}
+							}
+						}
 
-			// Add lightweight compliance feedback from recent trades (live learning)
-			// Show feedback even with just 1 recent trade to help LLM learn early
-			if len(ctx.RecentOrders) > 0 {
-				complianceFeedback := decision.NewLiveComplianceFeedback(ctx.RecentOrders, stats)
-				if complianceFeedback != nil {
-					ctx.ComplianceFeedback = complianceFeedback.FormatForPrompt(strategyLang)
+						// Optimize factor weights based on feedback
+						if at.factorOptimizer != nil && at.factorOptimizer.ShouldOptimize(stats.TotalTrades, len(positionInfos)) {
+							if err := at.factorOptimizer.OptimizeWeights(feedback, stats.TotalTrades); err != nil {
+								logger.Infof("⚠️ [%s] Failed to optimize factor weights: %v", at.name, err)
+							} else {
+								// Save optimizer state
+								if err := at.factorOptimizer.SaveState(at.id); err != nil {
+									logger.Infof("⚠️ [%s] Failed to save factor optimizer state: %v", at.name, err)
+								}
+							}
+						}
+
+						// Evolve prompts based on performance
+						if at.promptOptimizer != nil && at.promptOptimizer.ShouldEvolve(stats.TotalTrades) {
+							metrics := &backtest.Metrics{
+								TotalReturnPct: feedback.TotalReturnPct,
+								WinRate:        feedback.WinRate,
+								ProfitFactor:   feedback.ProfitFactor,
+								SharpeRatio:    feedback.SharpeRatio,
+								MaxDrawdownPct: feedback.MaxDrawdown,
+							}
+							at.promptOptimizer.RecordDecisionOutcome("current", metrics)
+
+							if err := at.promptOptimizer.EvolvePrompts(); err != nil {
+								logger.Infof("⚠️ [%s] Failed to evolve prompts: %v", at.name, err)
+							} else {
+								// Save optimizer state
+								if err := at.promptOptimizer.SaveState(at.id); err != nil {
+									logger.Infof("⚠️ [%s] Failed to save prompt optimizer state: %v", at.name, err)
+								}
+
+								// CRITICAL: Update strategy engine with evolved prompt
+								evolvedPrompt := at.promptOptimizer.GetCurrentPrompt()
+								at.strategyEngine.SetCustomPrompt(evolvedPrompt)
+								logger.Infof("✅ [%s] Applied evolved prompt to live trading (gen %d)", at.name, at.promptOptimizer.GetGeneration())
+							}
+						}
+
+						// Update compliance tracker with active recommendations
+						if at.complianceTracker != nil {
+							at.complianceTracker.SetRecommendations(feedback.RecommendedActions)
+						}
+					}
 				}
 			}
 
-			// Add learned thresholds from recent trade patterns (live adaptation)
-			// Start with just 2 trades to build initial patterns
-			if len(ctx.RecentOrders) >= 2 {
-				thresholdSummary := decision.NewLiveThresholdSummary(ctx.RecentOrders)
-				if thresholdSummary != nil {
-					ctx.CalibratedThresholds = thresholdSummary.FormatForPrompt(strategyLang)
+			// Attach feedback to context
+			if at.lastFeedback != nil {
+				ctx.PerformanceFeedback = at.lastFeedback
+
+				// Attach optimized factor weights
+				if at.factorOptimizer != nil {
+					ctx.OptimizedWeights = at.factorOptimizer.GetCurrentWeights()
+				}
+
+				// Attach compliance feedback (reinforcement learning)
+				if at.complianceTracker != nil {
+					at.complianceTracker.SetRecommendations(at.lastFeedback.RecommendedActions)
+					ctx.ComplianceFeedback = at.complianceTracker.GetComplianceFeedback(strategyLang)
+					ctx.ComplianceFeedback = at.complianceTracker.GetComplianceFeedback(strategyLang)
+				}
+
+				// Attach prompt evolution summary (show what prompt strategies work best)
+				if at.promptOptimizer != nil {
+					ctx.PromptEvolutionSummary = at.promptOptimizer.GetEvolutionSummary(strategyLang)
+				}
+
+				// Attach calibrated thresholds (learned risk detection thresholds)
+				if at.failureThresholds != (decision.FailureThresholds{}) {
+					calibrator := decision.NewThresholdCalibrator()
+					calibrator.WeakVolumeThreshold = at.failureThresholds.WeakVolumeThreshold
+					calibrator.WeakOIThreshold = at.failureThresholds.WeakOIThreshold
+					calibrator.PrematureVolumeThreshold = at.failureThresholds.PrematureVolumeThreshold
+					calibrator.PrematureOIThreshold = at.failureThresholds.PrematureOIThreshold
+					calibrator.VolumeDecayThreshold = at.failureThresholds.VolumeDecayThreshold
+					calibrator.OIDecayThreshold = at.failureThresholds.OIDecayThreshold
+					calibrator.SpreadWorseningMultiple = at.failureThresholds.SpreadWorseningMultiple
+					calibrator.DepthReductionThreshold = at.failureThresholds.DepthReductionThreshold
+					calibrator.SampleSize = stats.TotalTrades
+					ctx.CalibratedThresholds = calibrator.FormatThresholdsForPrompt(strategyLang)
 				}
 			}
 
-			// Add prompt evolution summary (show LLM which strategies work best)
+			// Add prompt evolution summary (shared with backtest prompt optimizer)
 			if at.promptOptimizer != nil {
 				ctx.PromptEvolutionSummary = at.promptOptimizer.GetEvolutionSummary(strategyLang)
 			}
@@ -1408,11 +1507,18 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *decision.Decision, act
 	}
 
 	// Record order ID
-	if orderID, ok := order["orderId"].(int64); ok {
-		actionRecord.OrderID = orderID
+	var orderID string
+	if id, ok := order["orderId"].(int64); ok {
+		orderID = fmt.Sprintf("%d", id)
+		actionRecord.OrderID = id
 	}
 
-	logger.Infof("  ✓ Position opened successfully, order ID: %v, quantity: %.4f", order["orderId"], quantity)
+	logger.Infof("  ✓ Position opened successfully, order ID: %s, quantity: %.4f", orderID, quantity)
+
+	// Capture entry microstructure BEFORE recording order (to get clean market snapshot)
+	if orderID != "" {
+		at.recordEntryMicrostructure(orderID, decision.Symbol)
+	}
 
 	// Record order to database and poll for confirmation
 	at.recordAndConfirmOrder(order, decision.Symbol, "open_long", quantity, marketData.CurrentPrice, decision.Leverage)
@@ -1525,11 +1631,18 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *decision.Decision, ac
 	}
 
 	// Record order ID
-	if orderID, ok := order["orderId"].(int64); ok {
-		actionRecord.OrderID = orderID
+	var orderID string
+	if id, ok := order["orderId"].(int64); ok {
+		orderID = fmt.Sprintf("%d", id)
+		actionRecord.OrderID = id
 	}
 
-	logger.Infof("  ✓ Position opened successfully, order ID: %v, quantity: %.4f", order["orderId"], quantity)
+	logger.Infof("  ✓ Position opened successfully, order ID: %s, quantity: %.4f", orderID, quantity)
+
+	// Capture entry microstructure BEFORE recording order (to get clean market snapshot)
+	if orderID != "" {
+		at.recordEntryMicrostructure(orderID, decision.Symbol)
+	}
 
 	// Record order to database and poll for confirmation
 	at.recordAndConfirmOrder(order, decision.Symbol, "open_short", quantity, marketData.CurrentPrice, decision.Leverage)
@@ -1550,6 +1663,7 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *decision.Decision, ac
 }
 
 // executeCloseLongWithRecord executes close long position and records detailed information
+// executeCloseLongWithRecord executes close long position and records detailed information
 func (at *AutoTrader) executeCloseLongWithRecord(decision *decision.Decision, actionRecord *store.DecisionAction) error {
 	logger.Infof("  🔄 Close long: %s", decision.Symbol)
 
@@ -1566,12 +1680,14 @@ func (at *AutoTrader) executeCloseLongWithRecord(decision *decision.Decision, ac
 	// Get entry price and quantity - prioritize local database for accurate quantity
 	var entryPrice float64
 	var quantity float64
+	var entryOrderID string
 
 	// First try to get from local database (more accurate for quantity)
 	if at.store != nil {
 		if openPos, err := at.store.Position().GetOpenPositionBySymbol(at.id, normalizedSymbol, "LONG"); err == nil && openPos != nil {
 			quantity = openPos.Quantity
 			entryPrice = openPos.EntryPrice
+			entryOrderID = openPos.EntryOrderID
 			logger.Infof("  📊 Using local position data: qty=%.8f, entry=%.2f", quantity, entryPrice)
 		}
 	}
@@ -1615,15 +1731,76 @@ func (at *AutoTrader) executeCloseLongWithRecord(decision *decision.Decision, ac
 		if entryPrice > 0 {
 			pnlPct = ((marketData.CurrentPrice - entryPrice) / entryPrice) * 100
 		}
-		// Save trade outcome for failure analysis and calibration
+
+		// Calculate realized PnL in dollars
+		realizedPnL := (marketData.CurrentPrice - entryPrice) * quantity
+
+		// Get entry microstructure if available
+		var entryMicro *market.MarketMicrostructure
+		if entryOrderID != "" {
+			at.entryMicrostructureMu.RLock()
+			entryMicro = at.entryMicrostructure[entryOrderID]
+			at.entryMicrostructureMu.RUnlock()
+		}
+
+		// Get exit microstructure for comparison
+		exitMicro, err := at.GetMicrostructureAnalysis(decision.Symbol)
+		if err != nil {
+			logger.Debugf("⚠️ Failed to get exit microstructure: %v", err)
+		}
+
+		// Save comprehensive trade outcome for failure analysis
 		outcome := &store.TradeOutcome{
 			Symbol:     decision.Symbol,
 			Profitable: pnlPct >= 0,
 			PnLPct:     pnlPct,
 		}
+
+		// Extract entry microstructure metrics (if available)
+		if entryMicro != nil {
+			outcome.EntrySpread = entryMicro.BidAskSpread
+			outcome.EntryDepth = float64(entryMicro.BidDepth + entryMicro.AskDepth)
+			if vol, ok := entryMicro.Details["current_volume"].(float64); ok {
+				outcome.VolumeAtEntry = vol
+			}
+
+			logger.Infof("  📊 Entry: spread=%.2f%%, depth=%.0f, VWAP=%.4f",
+				entryMicro.BidAskSpread, outcome.EntryDepth, entryMicro.VWAP)
+		}
+
+		// Extract exit microstructure metrics (if available)
+		if exitMicro != nil {
+			outcome.ExitSpread = exitMicro.BidAskSpread
+			outcome.ExitDepth = float64(exitMicro.BidDepth + exitMicro.AskDepth)
+			if vol, ok := exitMicro.Details["current_volume"].(float64); ok {
+				outcome.VolumeDuringTrade = vol
+			}
+
+			logger.Infof("  📊 Exit: spread=%.2f%%, depth=%.0f, VWAP=%.4f",
+				exitMicro.BidAskSpread, outcome.ExitDepth, exitMicro.VWAP)
+
+			// Calculate spread worsening
+			if entryMicro != nil && entryMicro.BidAskSpread > 0 {
+				spreadChange := (exitMicro.BidAskSpread - entryMicro.BidAskSpread) / entryMicro.BidAskSpread * 100
+				logger.Infof("  📊 Spread change: %.2f%% (%.4f → %.4f)",
+					spreadChange, entryMicro.BidAskSpread, exitMicro.BidAskSpread)
+			}
+		}
+
+		// Save trade outcome
 		if err := at.store.TradeOutcome().Save(outcome); err != nil {
 			logger.Warnf("⚠️ Failed to save trade outcome: %v", err)
 		}
+
+		// Clean up entry microstructure after closing position
+		if entryOrderID != "" {
+			at.entryMicrostructureMu.Lock()
+			delete(at.entryMicrostructure, entryOrderID)
+			at.entryMicrostructureMu.Unlock()
+		}
+
+		// Log realized PnL for feedback (no separate recordTradeEvent needed)
+		logger.Infof("  💰 Position closed: PnL %.2f%% (%.2f USDT)", pnlPct, realizedPnL)
 	}
 
 	logger.Infof("  ✓ Position closed successfully")
@@ -1647,12 +1824,14 @@ func (at *AutoTrader) executeCloseShortWithRecord(decision *decision.Decision, a
 	// Get entry price and quantity - prioritize local database for accurate quantity
 	var entryPrice float64
 	var quantity float64
+	var entryOrderID string
 
 	// First try to get from local database (more accurate for quantity)
 	if at.store != nil {
 		if openPos, err := at.store.Position().GetOpenPositionBySymbol(at.id, normalizedSymbol, "SHORT"); err == nil && openPos != nil {
 			quantity = openPos.Quantity
 			entryPrice = openPos.EntryPrice
+			entryOrderID = openPos.EntryOrderID
 			logger.Infof("  📊 Using local position data: qty=%.8f, entry=%.2f", quantity, entryPrice)
 		}
 	}
@@ -1697,15 +1876,76 @@ func (at *AutoTrader) executeCloseShortWithRecord(decision *decision.Decision, a
 			// For short positions, profit = (entry - exit) / entry * 100
 			pnlPct = ((entryPrice - marketData.CurrentPrice) / entryPrice) * 100
 		}
-		// Save trade outcome for failure analysis and calibration
+
+		// Calculate realized PnL in dollars (for shorts: positive when price drops)
+		realizedPnL := (entryPrice - marketData.CurrentPrice) * quantity
+
+		// Get entry microstructure if available
+		var entryMicro *market.MarketMicrostructure
+		if entryOrderID != "" {
+			at.entryMicrostructureMu.RLock()
+			entryMicro = at.entryMicrostructure[entryOrderID]
+			at.entryMicrostructureMu.RUnlock()
+		}
+
+		// Get exit microstructure for comparison
+		exitMicro, err := at.GetMicrostructureAnalysis(decision.Symbol)
+		if err != nil {
+			logger.Debugf("⚠️ Failed to get exit microstructure: %v", err)
+		}
+
+		// Save comprehensive trade outcome for failure analysis
 		outcome := &store.TradeOutcome{
 			Symbol:     decision.Symbol,
 			Profitable: pnlPct >= 0,
 			PnLPct:     pnlPct,
 		}
+
+		// Extract entry microstructure metrics (if available)
+		if entryMicro != nil {
+			outcome.EntrySpread = entryMicro.BidAskSpread
+			outcome.EntryDepth = float64(entryMicro.BidDepth + entryMicro.AskDepth)
+			if vol, ok := entryMicro.Details["current_volume"].(float64); ok {
+				outcome.VolumeAtEntry = vol
+			}
+
+			logger.Infof("  📊 Entry: spread=%.2f%%, depth=%.0f, VWAP=%.4f",
+				entryMicro.BidAskSpread, outcome.EntryDepth, entryMicro.VWAP)
+		}
+
+		// Extract exit microstructure metrics (if available)
+		if exitMicro != nil {
+			outcome.ExitSpread = exitMicro.BidAskSpread
+			outcome.ExitDepth = float64(exitMicro.BidDepth + exitMicro.AskDepth)
+			if vol, ok := exitMicro.Details["current_volume"].(float64); ok {
+				outcome.VolumeDuringTrade = vol
+			}
+
+			logger.Infof("  📊 Exit: spread=%.2f%%, depth=%.0f, VWAP=%.4f",
+				exitMicro.BidAskSpread, outcome.ExitDepth, exitMicro.VWAP)
+
+			// Calculate spread worsening
+			if entryMicro != nil && entryMicro.BidAskSpread > 0 {
+				spreadChange := (exitMicro.BidAskSpread - entryMicro.BidAskSpread) / entryMicro.BidAskSpread * 100
+				logger.Infof("  📊 Spread change: %.2f%% (%.4f → %.4f)",
+					spreadChange, entryMicro.BidAskSpread, exitMicro.BidAskSpread)
+			}
+		}
+
+		// Save trade outcome
 		if err := at.store.TradeOutcome().Save(outcome); err != nil {
 			logger.Warnf("⚠️ Failed to save trade outcome: %v", err)
 		}
+
+		// Clean up entry microstructure after closing position
+		if entryOrderID != "" {
+			at.entryMicrostructureMu.Lock()
+			delete(at.entryMicrostructure, entryOrderID)
+			at.entryMicrostructureMu.Unlock()
+		}
+
+		// Log realized PnL for feedback (no separate recordTradeEvent needed)
+		logger.Infof("  💰 Position closed: PnL %.2f%% (%.2f USDT)", pnlPct, realizedPnL)
 	}
 
 	logger.Infof("  ✓ Position closed successfully")
@@ -1820,6 +2060,24 @@ func (at *AutoTrader) saveDecision(record *store.DecisionRecord) error {
 // GetStore gets data store (for external access to decision records, etc.)
 func (at *AutoTrader) GetStore() *store.Store {
 	return at.store
+}
+
+// GetPromptOptimizer gets prompt optimizer for live trading evolution (nil if not initialized)
+func (at *AutoTrader) GetPromptOptimizer() *backtest.PromptOptimizer {
+	return at.promptOptimizer
+}
+
+// GetFeedbackAnalysis gets feedback analysis for live trading evolution (nil if not ready)
+func (at *AutoTrader) GetFeedbackAnalysis() *backtest.FeedbackAnalysis {
+	if at.feedbackGenerator == nil {
+		return nil
+	}
+	analysis, err := at.feedbackGenerator.GenerateFeedback()
+	if err != nil {
+		logger.Warnf("[%s] Error generating feedback analysis: %v", at.config.Name, err)
+		return nil
+	}
+	return analysis
 }
 
 // GetStatus gets system status (for API)
@@ -2001,6 +2259,48 @@ func (at *AutoTrader) GetPositions() ([]map[string]interface{}, error) {
 	}
 
 	return result, nil
+}
+
+// GetMicrostructureAnalysis retrieves cached or fresh microstructure analysis for a symbol
+func (at *AutoTrader) GetMicrostructureAnalysis(symbol string) (*market.MarketMicrostructure, error) {
+	// Check cache first (valid for 5 seconds)
+	at.microstructureCacheMu.RLock()
+	cached, exists := at.microstructureCache[symbol]
+	at.microstructureCacheMu.RUnlock()
+
+	if exists && cached != nil && time.Since(cached.Timestamp) < 5*time.Second {
+		return cached, nil
+	}
+
+	// Fetch fresh data
+	depth, err := at.microstructureAnalyzer.FetchOrderBookDepth(symbol, 100)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch order book: %w", err)
+	}
+
+	// Get klines for VWAP calculation
+	klines, err := market.GetKlinesCoinank(symbol, "1m", at.exchange, 20)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get klines: %w", err)
+	}
+
+	currentPrice := 0.0
+	if len(klines) > 0 {
+		currentPrice = klines[len(klines)-1].Close
+	}
+
+	// Analyze microstructure
+	analysis, err := at.microstructureAnalyzer.AnalyzeMarketMicrostructure(symbol, depth, currentPrice, klines)
+	if err != nil {
+		return nil, fmt.Errorf("failed to analyze microstructure: %w", err)
+	}
+
+	// Update cache
+	at.microstructureCacheMu.Lock()
+	at.microstructureCache[symbol] = analysis
+	at.microstructureCacheMu.Unlock()
+
+	return analysis, nil
 }
 
 // syncEntryPricesWithDatabase syncs entry prices with local database for consistency
@@ -2384,6 +2684,189 @@ func (at *AutoTrader) recordAndConfirmOrder(orderResult map[string]interface{}, 
 		UserID:    at.userID,
 		TraderID:  at.id,
 	})
+}
+
+// recordEntryMicrostructure records entry microstructure data for a position
+func (at *AutoTrader) recordEntryMicrostructure(orderID, symbol string) {
+	// Fetch order book depth (100 levels for comprehensive analysis)
+	depth, err := at.microstructureAnalyzer.FetchOrderBookDepth(symbol, 100)
+	if err != nil {
+		logger.Warnf("⚠️ Failed to fetch order book depth for %s: %v", symbol, err)
+		return
+	}
+
+	// Get recent klines for VWAP and volume analysis
+	klines, err := market.GetKlinesCoinank(symbol, "1m", at.exchange, 20)
+	if err != nil {
+		logger.Warnf("⚠️ Failed to get klines for %s: %v", symbol, err)
+		return
+	}
+
+	if len(klines) == 0 {
+		logger.Warnf("⚠️ No kline data available for %s", symbol)
+		return
+	}
+
+	// Get current price from latest kline
+	currentPrice := klines[len(klines)-1].Close
+
+	// Perform comprehensive microstructure analysis
+	microstructure, err := at.microstructureAnalyzer.AnalyzeMarketMicrostructure(
+		symbol, depth, currentPrice, klines,
+	)
+	if err != nil {
+		logger.Warnf("⚠️ Failed to analyze microstructure for %s: %v", symbol, err)
+		return
+	}
+
+	// Store comprehensive analysis in memory for later use during position close
+	at.entryMicrostructureMu.Lock()
+	at.entryMicrostructure[orderID] = microstructure
+	at.entryMicrostructureMu.Unlock()
+
+	// Log key metrics
+	logger.Infof("  📊 Entry microstructure recorded for order %s:", orderID)
+	logger.Infof("      Bid: %.4f | Ask: %.4f | Spread: %.2f bps",
+		microstructure.Details["best_bid"],
+		microstructure.Details["best_ask"],
+		microstructure.BidAskSpreadBps)
+	logger.Infof("      VWAP: %.4f | Deviation: %.2f%% | Imbalance: %.2f",
+		microstructure.VWAP,
+		microstructure.VWAPDeviation,
+		microstructure.OrderBookImbalance)
+	logger.Infof("      Bid Depth: %.2f | Ask Depth: %.2f | Large Orders: %d",
+		microstructure.BidDepth,
+		microstructure.AskDepth,
+		microstructure.LargeOrderCount)
+}
+
+// saveCheckpoint saves current trading state as checkpoint for feedback analysis
+func (at *AutoTrader) saveCheckpoint() {
+	if at.store == nil || at.store.Backtest() == nil {
+		return
+	}
+
+	// Get current account balance
+	account, err := at.trader.GetBalance()
+	if err != nil {
+		logger.Warnf("⚠️ Failed to get balance for checkpoint: %v", err)
+		return
+	}
+
+	var equity, available, unrealizedPnL float64
+
+	// Try to extract equity from account info
+	if val, ok := account["total_equity"].(float64); ok {
+		equity = val
+	} else if val, ok := account["totalWalletBalance"].(float64); ok {
+		equity = val
+	}
+
+	if val, ok := account["available_balance"].(float64); ok {
+		available = val
+	} else if val, ok := account["availableBalance"].(float64); ok {
+		available = val
+	}
+
+	if val, ok := account["total_unrealized_profit"].(float64); ok {
+		unrealizedPnL = val
+	} else if val, ok := account["totalUnrealizedProfit"].(float64); ok {
+		unrealizedPnL = val
+	}
+
+	checkpoint := map[string]interface{}{
+		"equity":         equity,
+		"available":      available,
+		"unrealized_pnl": unrealizedPnL,
+		"realized_pnl":   equity - at.initialBalance,
+		"timestamp":      time.Now().UnixMilli(),
+		"cycle":          at.cycleNumber,
+	}
+
+	checkpointJSON, err := json.Marshal(checkpoint)
+	if err != nil {
+		logger.Warnf("⚠️ Failed to marshal checkpoint: %v", err)
+		return
+	}
+
+	if err := at.store.Backtest().SaveCheckpoint(at.id, checkpointJSON); err != nil {
+		logger.Warnf("⚠️ Failed to save checkpoint: %v", err)
+	}
+}
+
+// saveLiveTradingConfig saves live trader configuration for feedback analysis compatibility
+func (at *AutoTrader) saveLiveTradingConfig() {
+	if at.store == nil || at.store.Backtest() == nil {
+		return
+	}
+
+	// Create minimal config matching BacktestConfig structure for metrics calculation
+	// Key fields: InitialBalance (required for return% calculation), UserID, AIModel
+	configData := map[string]interface{}{
+		"run_id":          at.id,
+		"user_id":         at.userID,
+		"initial_balance": at.initialBalance,
+		"symbols":         []string{}, // Will be populated from actual trades
+		"ai_provider":     extractProviderFromModel(at.aiModel),
+		"ai_model":        at.aiModel,
+		"exchange":        at.exchange,
+		"is_live_trading": true,
+		"start_time":      time.Now().Unix(),
+	}
+
+	configJSON, err := json.Marshal(configData)
+	if err != nil {
+		logger.Warnf("⚠️ Failed to marshal live trading config: %v", err)
+		return
+	}
+
+	// Get strategy prompt if available
+	promptTemplate := "default"
+	customPrompt := ""
+	overridePrompt := false
+	if at.strategyEngine != nil {
+		strategyConfig := at.strategyEngine.GetConfig()
+		if strategyConfig != nil && strategyConfig.PromptSections.RoleDefinition != "" {
+			promptTemplate = "live_strategy"
+			customPrompt = strategyConfig.PromptSections.RoleDefinition
+		}
+	}
+
+	provider := extractProviderFromModel(at.aiModel)
+
+	// Save to backtest_runs table (using trader ID as runID)
+	if err := at.store.Backtest().SaveConfig(
+		at.id,          // runID = trader ID for live trading
+		at.userID,      // userID
+		promptTemplate, // template
+		customPrompt,   // custom prompt
+		provider,       // AI provider
+		at.aiModel,     // AI model
+		overridePrompt, // override flag
+		configJSON,     // config JSON
+	); err != nil {
+		logger.Warnf("⚠️ Failed to save live trading config: %v", err)
+	} else {
+		logger.Infof("✓ Live trading config saved for feedback analysis")
+	}
+}
+
+// extractProviderFromModel extracts provider name from model string
+func extractProviderFromModel(model string) string {
+	if strings.Contains(model, "qwen") {
+		return "qwen"
+	} else if strings.Contains(model, "deepseek") {
+		return "deepseek"
+	} else if strings.Contains(model, "grok") {
+		return "grok"
+	} else if strings.Contains(model, "gpt") || strings.Contains(model, "openai") {
+		return "openai"
+	} else if strings.Contains(model, "claude") {
+		return "claude"
+	} else if strings.Contains(model, "gemini") {
+		return "gemini"
+	}
+	return "unknown"
 }
 
 // recordPositionChange records position change (create record on open, update record on close)
@@ -2792,62 +3275,4 @@ func (at *AutoTrader) handleOrderUpdate(order market.OrderUpdate) {
 // GetOrderWebSocketManager returns the order WebSocket manager
 func (at *AutoTrader) GetOrderWebSocketManager() *OrderWebSocketManager {
 	return at.orderWebSocketManager
-}
-
-// recordTradeOutcomeToOptimizer records completed trade metrics to the prompt optimizer
-// The meta-prompting (LLM self-improvement) happens during BuildUserPrompt() in engine.go
-// This method just tracks metrics for the optimizer to reference
-func (at *AutoTrader) recordTradeOutcomeToOptimizer(ctx *decision.Context) {
-	if at.promptOptimizer == nil || at.store == nil || ctx == nil {
-		return
-	}
-
-	// Get overall trading stats for metrics
-	stats, err := at.store.Position().GetFullStats(at.id)
-	if err != nil || stats == nil || stats.TotalTrades == 0 {
-		return
-	}
-
-	// Create metrics snapshot for prompt optimizer using correct Metrics struct
-	metrics := &backtest.Metrics{
-		TotalReturnPct: (stats.TotalPnL / at.initialBalance) * 100,
-		MaxDrawdownPct: stats.MaxDrawdownPct,
-		SharpeRatio:    stats.SharpeRatio,
-		ProfitFactor:   stats.ProfitFactor,
-		WinRate:        stats.WinRate,
-		Trades:         stats.TotalTrades,
-		AvgWin:         stats.AvgWin,
-		AvgLoss:        stats.AvgLoss,
-		BestSymbol:     "",    // Not tracked in live stats
-		WorstSymbol:    "",    // Not tracked in live stats
-		SymbolStats:    nil,   // Not tracked in live stats
-		Liquidated:     false, // Live trading doesn't liquidate backtest
-	}
-
-	// Record outcome to current variant
-	currentVariant := at.promptOptimizer.GetCurrentVariant()
-	if currentVariant != nil {
-		at.promptOptimizer.RecordDecisionOutcome(currentVariant.ID, metrics)
-	}
-
-	// Check if it's time to evolve prompts based on performance
-	// Use total trades as cycle counter for live trading
-	if at.promptOptimizer.ShouldEvolve(stats.TotalTrades) {
-		logger.Infof("[%s] 🧬 Starting prompt evolution (total trades: %d)", at.config.Name, stats.TotalTrades)
-
-		// Evolve prompts using LLM-based evolution
-		if err := at.promptOptimizer.EvolvePrompts(); err != nil {
-			logger.Infof("[%s] ❌ Failed to evolve prompts: %v", at.config.Name, err)
-		} else {
-			// Save optimizer state
-			if err := at.promptOptimizer.SaveState(at.id); err != nil {
-				logger.Infof("[%s] ⚠️  Failed to save prompt optimizer state: %v", at.config.Name, err)
-			}
-
-			// CRITICAL: Update strategy engine with the evolved prompt
-			evolvedPrompt := at.promptOptimizer.GetCurrentPrompt()
-			at.strategyEngine.SetCustomPrompt(evolvedPrompt)
-			logger.Infof("[%s] ✅ Applied evolved prompt to live trading (gen %d)", at.config.Name, at.promptOptimizer.GetGeneration())
-		}
-	}
 }

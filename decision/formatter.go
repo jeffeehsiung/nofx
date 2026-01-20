@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"nofx/market"
 	"nofx/provider"
+	"nofx/store"
 	"sort"
 	"strings"
 	"time"
@@ -14,118 +15,6 @@ import (
 // ============================================================================
 // 将交易上下文转换为AI友好的格式，确保AI能够100%理解数据
 // ============================================================================
-
-// FormatContextForAI 将交易上下文格式化为AI可理解的文本（包含Schema）
-func FormatContextForAI(ctx *Context, lang Language) string {
-	var sb strings.Builder
-
-	// 1. 添加Schema说明（让AI理解数据格式）
-	sb.WriteString(GetSchemaPrompt(lang))
-	sb.WriteString("\n---\n\n")
-
-	// 2. 当前状态概览
-	sb.WriteString(formatContextData(ctx, lang))
-
-	return sb.String()
-}
-
-// FormatContextDataOnly 仅格式化上下文数据，不包含Schema（用于已有Schema的场景）
-func FormatContextDataOnly(ctx *Context, lang Language) string {
-	return formatContextData(ctx, lang)
-}
-
-// formatContextData 格式化核心数据部分
-func formatContextData(ctx *Context, lang Language) string {
-	var sb strings.Builder
-
-	// 1. 当前状态概览
-	if lang == LangChinese {
-		sb.WriteString(formatHeaderZH(ctx))
-	} else {
-		sb.WriteString(formatHeaderEN(ctx))
-	}
-
-	// 3. 账户信息
-	if lang == LangChinese {
-		sb.WriteString(formatAccountZH(ctx))
-	} else {
-		sb.WriteString(formatAccountEN(ctx))
-	}
-
-	// 3.5 Performance Feedback (if available)
-	if ctx.PerformanceFeedback != nil {
-		if lang == LangChinese {
-			sb.WriteString(formatPerformanceFeedbackZH(ctx.PerformanceFeedback))
-		} else {
-			sb.WriteString(formatPerformanceFeedbackEN(ctx.PerformanceFeedback))
-		}
-	}
-
-	// 3.6 Optimized Trading Parameters (if available)
-	if ctx.OptimizedWeights != nil {
-		if lang == LangChinese {
-			sb.WriteString(formatOptimizedWeightsZH(ctx.OptimizedWeights))
-		} else {
-			sb.WriteString(formatOptimizedWeightsEN(ctx.OptimizedWeights))
-		}
-	}
-
-	// 4. 历史交易统计
-	if ctx.TradingStats != nil && ctx.TradingStats.TotalTrades > 0 {
-		if lang == LangChinese {
-			sb.WriteString(formatTradingStatsZH(ctx.TradingStats))
-		} else {
-			sb.WriteString(formatTradingStatsEN(ctx.TradingStats))
-		}
-	}
-
-	// 5. 最近交易记录
-	if len(ctx.RecentOrders) > 0 {
-		if lang == LangChinese {
-			sb.WriteString(formatRecentTradesZH(ctx.RecentOrders))
-		} else {
-			sb.WriteString(formatRecentTradesEN(ctx.RecentOrders))
-		}
-	}
-
-	// 5. 当前持仓
-	if len(ctx.Positions) > 0 {
-		if lang == LangChinese {
-			sb.WriteString(formatCurrentPositionsZH(ctx))
-		} else {
-			sb.WriteString(formatCurrentPositionsEN(ctx))
-		}
-	}
-
-	// 6. 候选币种（带市场数据）
-	if len(ctx.CandidateCoins) > 0 {
-		if lang == LangChinese {
-			sb.WriteString(formatCandidateCoinsZH(ctx))
-		} else {
-			sb.WriteString(formatCandidateCoinsEN(ctx))
-		}
-	}
-
-	// 7. OI排名数据（如果有）
-	if ctx.OIRankingData != nil {
-		if lang == LangChinese {
-			sb.WriteString(formatOIRankingZH(ctx.OIRankingData))
-		} else {
-			sb.WriteString(formatOIRankingEN(ctx.OIRankingData))
-		}
-	}
-
-	// 8. Market Microstructure (if available)
-	if len(ctx.MicrostructureDataMap) > 0 {
-		if lang == LangChinese {
-			sb.WriteString(formatMicrostructureZH(ctx.MicrostructureDataMap))
-		} else {
-			sb.WriteString(formatMicrostructureEN(ctx.MicrostructureDataMap))
-		}
-	}
-
-	return sb.String()
-}
 
 // ========== 中文格式化函数 ==========
 
@@ -148,8 +37,8 @@ func formatAccountZH(ctx *Context) string {
 	sb.WriteString(fmt.Sprintf("持仓数: %d\n\n", acc.PositionCount))
 
 	// 添加风险提示
-	if acc.MarginUsedPct > 70 {
-		sb.WriteString("⚠️ **风险警告**: 保证金使用率 > 70%，处于高风险状态！\n\n")
+	if acc.MarginUsedPct > 85 {
+		sb.WriteString("⚠️ **风险警告**: 保证金使用率 > 85%，处于高风险状态！\n\n")
 	} else if acc.MarginUsedPct > 50 {
 		sb.WriteString("⚠️ **风险提示**: 保证金使用率 > 50%，建议谨慎开仓\n\n")
 	}
@@ -230,7 +119,7 @@ func formatRecentTradesZH(orders []RecentOrder) string {
 			profitOrLoss = "亏损"
 		}
 
-		sb.WriteString(fmt.Sprintf("%d. %s %s | 进场 %.4f 出场 %.4f | %s: %+.2f USDT (%+.2f%%) | %s → %s (%s)\n",
+		sb.WriteString(fmt.Sprintf("%d. %s %s | 进场 %.3f 出场 %.3f | %s: %+.2f USDT (%+.2f%%) | %s → %s (%s)\n",
 			i+1,
 			order.Symbol,
 			order.Side,
@@ -250,7 +139,7 @@ func formatRecentTradesZH(orders []RecentOrder) string {
 }
 
 // formatCurrentPositionsZH 格式化当前持仓（中文）
-func formatCurrentPositionsZH(ctx *Context) string {
+func formatCurrentPositionsZH(strategy_config *store.StrategyConfig, ctx *Context) string {
 	var sb strings.Builder
 	sb.WriteString("## 当前持仓\n\n")
 
@@ -259,15 +148,15 @@ func formatCurrentPositionsZH(ctx *Context) string {
 		drawdown := pos.UnrealizedPnLPct - pos.PeakPnLPct
 
 		sb.WriteString(fmt.Sprintf("%d. %s %s | ", i+1, pos.Symbol, strings.ToUpper(pos.Side)))
-		sb.WriteString(fmt.Sprintf("进场 %.4f 当前 %.4f | ", pos.EntryPrice, pos.MarkPrice))
-		sb.WriteString(fmt.Sprintf("数量 %.4f | ", pos.Quantity))
+		sb.WriteString(fmt.Sprintf("进场 %.3f 当前 %.3f | ", pos.EntryPrice, pos.MarkPrice))
+		sb.WriteString(fmt.Sprintf("数量 %.3f | ", pos.Quantity))
 		sb.WriteString(fmt.Sprintf("仓位价值 %.2f USDT | ", pos.Quantity*pos.MarkPrice))
 		sb.WriteString(fmt.Sprintf("盈亏 %+.2f%% | ", pos.UnrealizedPnLPct))
 		sb.WriteString(fmt.Sprintf("盈亏金额 %+.2f USDT | ", pos.UnrealizedPnL))
 		sb.WriteString(fmt.Sprintf("峰值盈亏 %.2f%% | ", pos.PeakPnLPct))
 		sb.WriteString(fmt.Sprintf("杠杆 %dx | ", pos.Leverage))
 		sb.WriteString(fmt.Sprintf("保证金 %.0f USDT | ", pos.MarginUsed))
-		sb.WriteString(fmt.Sprintf("强平价 %.4f\n", pos.LiquidationPrice))
+		sb.WriteString(fmt.Sprintf("强平价 %.3f\n", pos.LiquidationPrice))
 
 		// 添加分析提示
 		if drawdown < -0.30*pos.PeakPnLPct && pos.PeakPnLPct > 0.02 {
@@ -282,7 +171,21 @@ func formatCurrentPositionsZH(ctx *Context) string {
 		// 显示当前价格（如果有市场数据）
 		if ctx.MarketDataMap != nil {
 			if mdata, ok := ctx.MarketDataMap[pos.Symbol]; ok {
-				sb.WriteString(fmt.Sprintf("   📈 当前价格: %.4f\n", mdata.CurrentPrice))
+				sb.WriteString(formatMarketDataZH(strategy_config, mdata))
+			}
+		}
+
+		// 市场微观结构数据（如果有）
+		if ctx.MicrostructureDataMap != nil {
+			if ms, ok := ctx.MicrostructureDataMap[pos.Symbol]; ok {
+				sb.WriteString(formatMicrostructureZH(ms))
+			}
+		}
+
+		// 量化数据分析提示 (如果有)
+		if ctx.QuantDataMap != nil {
+			if qdata, ok := ctx.QuantDataMap[pos.Symbol]; ok {
+				sb.WriteString(formatQuantDataZH(qdata))
 			}
 		}
 
@@ -303,7 +206,7 @@ func formatCandidateCoinsZH(ctx *Context) string {
 		// 当前价格
 		if ctx.MarketDataMap != nil {
 			if mdata, ok := ctx.MarketDataMap[coin.Symbol]; ok {
-				sb.WriteString(fmt.Sprintf("当前价格: %.4f\n\n", mdata.CurrentPrice))
+				sb.WriteString(fmt.Sprintf("当前价格: %.3f\n\n", mdata.CurrentPrice))
 
 				// K线数据（多时间框架）
 				if mdata.TimeframeData != nil {
@@ -336,6 +239,13 @@ func formatCandidateCoinsZH(ctx *Context) string {
 				sb.WriteString(fmt.Sprintf("**市场解读**: %s\n\n", interpretation))
 			}
 		}
+
+		// 量化数据分析提示 (如果有)
+		if ctx.QuantDataMap != nil {
+			if qdata, ok := ctx.QuantDataMap[coin.Symbol]; ok {
+				sb.WriteString(formatQuantDataZH(qdata))
+			}
+		}
 	}
 
 	return sb.String()
@@ -360,7 +270,7 @@ func formatKlineDataZH(symbol string, tfData map[string]*market.TimeframeSeriesD
 			for i := startIdx; i < len(data.Klines); i++ {
 				k := data.Klines[i]
 				t := time.UnixMilli(k.Time).UTC()
-				sb.WriteString(fmt.Sprintf("%s    %.4f    %.4f    %.4f    %.4f    %.2f\n",
+				sb.WriteString(fmt.Sprintf("%s    %.3f    %.3f    %.3f    %.3f    %.2f\n",
 					t.Format("01-02 15:04"),
 					k.Open,
 					k.High,
@@ -399,24 +309,44 @@ func formatOIRankingZH(oiData interface{}) string {
 
 		if len(oiRanking.TopPositions) > 0 {
 			sb.WriteString("### 持仓量TOP (最高杠杆长仓)\n\n")
+			sb.WriteString("市场资金正在流入以下币种，可能表示趋势延续或新仓位建立:\n\n")
+			sb.WriteString("| 排名 | 币种 | 持仓变化值(USDT) | 变化幅度 | 价格变化 |\n")
+			sb.WriteString("|------|------|------------------|----------|----------|\n")
 			for i, pos := range oiRanking.TopPositions {
 				if i >= 5 {
 					break // 只显示前5个
 				}
-				sb.WriteString(fmt.Sprintf("- **%s**: %.2f (持仓变化: %.2f%%)\n", pos.Symbol, pos.CurrentOI, pos.OIDeltaPercent))
+				sb.WriteString(fmt.Sprintf("| #%d | %s | %s | %+.2f%% | %+.2f%% |\n",
+					pos.Rank,
+					pos.Symbol,
+					formatOIValue(pos.OIDeltaValue),
+					pos.OIDeltaPercent,
+					pos.PriceDeltaPercent,
+				))
 			}
 			sb.WriteString("\n")
+			sb.WriteString("**解读**: 持仓增加 + 价格上涨 = 多头主导; 持仓增加 + 价格下跌 = 空头主导\n\n")
 		}
 
 		if len(oiRanking.LowPositions) > 0 {
 			sb.WriteString("### 持仓量LOW (最高杠杆空仓)\n\n")
+			sb.WriteString("市场资金正在流出以下币种，可能表示趋势反转或仓位平仓:\n\n")
+			sb.WriteString("| 排名 | 币种 | 持仓变化值(USDT) | 变化幅度 | 价格变化 |\n")
+			sb.WriteString("|------|------|------------------|----------|----------|\n")
 			for i, pos := range oiRanking.LowPositions {
 				if i >= 5 {
 					break
 				}
-				sb.WriteString(fmt.Sprintf("- **%s**: %.2f (持仓变化: %.2f%%)\n", pos.Symbol, pos.CurrentOI, pos.OIDeltaPercent))
+				sb.WriteString(fmt.Sprintf("| #%d | %s | %s | %+.2f%% | %+.2f%% |\n",
+					pos.Rank,
+					pos.Symbol,
+					formatOIValue(pos.OIDeltaValue),
+					pos.OIDeltaPercent,
+					pos.PriceDeltaPercent,
+				))
 			}
 			sb.WriteString("\n")
+			sb.WriteString("**解读**: 持仓减少 + 价格上涨 = 空头平仓(反弹); 持仓减少 + 价格下跌 = 多头平仓(回调)\n\n")
 		}
 
 		return sb.String()
@@ -436,6 +366,262 @@ func getOIInterpretationZH(oiChange, priceChange string) string {
 	} else {
 		return OIInterpretation.OIDown_PriceDown.ZH
 	}
+}
+
+// formatMarketDataZH 格式化市场数据（中文）
+func formatMarketDataZH(strategy_config *store.StrategyConfig, data *market.Data) string {
+	if data == nil {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## 📈 市场数据概览\n\n")
+	sb.WriteString(fmt.Sprintf("### %s 市场数据\n\n", data.Symbol))
+	sb.WriteString(fmt.Sprintf("   📈 当前价格: %.3f\n", data.CurrentPrice))
+	sb.WriteString(fmt.Sprintf(",  📈 当前EMA20: %.3f\n", data.CurrentEMA20))
+	sb.WriteString(fmt.Sprintf(",  📈 当前MACD: %.3f\n", data.CurrentMACD))
+	sb.WriteString(fmt.Sprintf(",  📈 当前RSI7: %.3f\n", data.CurrentRSI7))
+	sb.WriteString("\n\n")
+	sb.WriteString(fmt.Sprintf(",  📈 当前OI: %.2f & 平均OI: %.2f\n\n", data.OpenInterest.Latest, data.OpenInterest.Average))
+	sb.WriteString(fmt.Sprintf(",  📈 当前资金费率: %.3f%%\n", data.FundingRate))
+	if len(data.TimeframeData) > 0 {
+		timeframeOrder := []string{"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w"}
+		for _, tf := range timeframeOrder {
+			if tfData, ok := data.TimeframeData[tf]; ok {
+				sb.WriteString(fmt.Sprintf("=== %s 时间框架 (从旧到新) ===\n\n", strings.ToUpper(tf)))
+				formatTimeframeSeriesDataZH(&sb, tfData)
+			}
+		}
+	} else {
+		// 兼容旧数据格式
+		if data.IntradaySeries != nil {
+			sb.WriteString(fmt.Sprintf("日内序列 (%s 时间间隔，从旧到新):\n\n", strategy_config.Indicators.Klines.PrimaryTimeframe))
+			if len(data.IntradaySeries.MidPrices) > 0 {
+				sb.WriteString(fmt.Sprintf("中间价: %s\n\n", formatFloatSlice(data.IntradaySeries.MidPrices)))
+			}
+			if len(data.IntradaySeries.EMA20Values) > 0 {
+				sb.WriteString(fmt.Sprintf("EMA指标 (20期): %s\n\n", formatFloatSlice(data.IntradaySeries.EMA20Values)))
+			}
+			if len(data.IntradaySeries.MACDValues) > 0 {
+				sb.WriteString(fmt.Sprintf("MACD指标: %s\n\n", formatFloatSlice(data.IntradaySeries.MACDValues)))
+			}
+			if len(data.IntradaySeries.RSI7Values) > 0 {
+				sb.WriteString(fmt.Sprintf("RSI指标 (7期): %s\n\n", formatFloatSlice(data.IntradaySeries.RSI7Values)))
+			}
+			if len(data.IntradaySeries.RSI14Values) > 0 {
+				sb.WriteString(fmt.Sprintf("RSI指标 (14期): %s\n\n", formatFloatSlice(data.IntradaySeries.RSI14Values)))
+			}
+			if len(data.IntradaySeries.Volume) > 0 {
+				sb.WriteString(fmt.Sprintf("成交量: %s\n\n", formatFloatSlice(data.IntradaySeries.Volume)))
+			}
+			if data.IntradaySeries.ATR14 > 0 {
+				sb.WriteString(fmt.Sprintf("3m ATR (14期): %.3f\n\n", data.IntradaySeries.ATR14))
+			}
+		}
+		if data.LongerTermContext != nil {
+			sb.WriteString("### 📊 更长期市场背景\n\n")
+			sb.WriteString(fmt.Sprintf("更长期时间框架 (%s):\n\n", strategy_config.Indicators.Klines.LongerTimeframe))
+			sb.WriteString((fmt.Sprintf("EMA20 : %3.f vs. EMA50: %3f\n\n", data.LongerTermContext.EMA20, data.LongerTermContext.EMA50)))
+			sb.WriteString((fmt.Sprintf("3期ATR : %3.f vs. 14期ATR: %3f\n\n", data.LongerTermContext.ATR3, data.LongerTermContext.ATR14)))
+			sb.WriteString((fmt.Sprintf("当前成交量 : %3.f vs. 平均成交量: %3f\n\n", data.LongerTermContext.CurrentVolume, data.LongerTermContext.AverageVolume)))
+			if len(data.LongerTermContext.MACDValues) > 0 {
+				sb.WriteString((fmt.Sprintf("MACD指标 : %s\n\n", formatFloatSlice(data.LongerTermContext.MACDValues))))
+			}
+			if len(data.LongerTermContext.RSI14Values) > 0 {
+				sb.WriteString((fmt.Sprintf("RSI指标 (14期) : %s\n\n", formatFloatSlice(data.LongerTermContext.RSI14Values))))
+			}
+		}
+	}
+	return sb.String()
+}
+
+// formatMicrostructureZH 市场微观结构数据格式化（中文）
+func formatMicrostructureZH(ms *market.MarketMicrostructure) string {
+	if ms == nil {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("## 📊 市场微观结构分析\n\n")
+	sb.WriteString("**说明**: 订单簿分析提供支撑/阻力位、流动性深度和买卖压力信息\n\n")
+	sb.WriteString(fmt.Sprintf("### %s 微观结构\n\n", ms.Symbol))
+
+	// Support levels
+	if len(ms.SupportLevels) > 0 {
+		sb.WriteString("**支撑位** (价格下方的买单聚集区):\n")
+		for i, price := range ms.SupportLevels {
+			if i >= 3 {
+				break // Top 3 only
+			}
+			distance := (ms.CurrentPrice - price) / ms.CurrentPrice * 100
+			sb.WriteString(fmt.Sprintf("- %.2f USDT (距离: -%.2f%%)\n", price, distance))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Resistance levels
+	if len(ms.ResistanceLevels) > 0 {
+		sb.WriteString("**阻力位** (价格上方的卖单聚集区):\n")
+		for i, price := range ms.ResistanceLevels {
+			if i >= 3 {
+				break // Top 3 only
+			}
+			distance := (price - ms.CurrentPrice) / ms.CurrentPrice * 100
+			sb.WriteString(fmt.Sprintf("- %.2f USDT (距离: +%.2f%%)\n", price, distance))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Order book metrics
+	sb.WriteString("**订单簿指标**:\n")
+	sb.WriteString(fmt.Sprintf("- 买卖压力: %.2f ", ms.OrderBookImbalance))
+	if ms.OrderBookImbalance > 0.6 {
+		sb.WriteString("(买盘占优 🟢)\n")
+	} else if ms.OrderBookImbalance < 0.4 {
+		sb.WriteString("(卖盘占优 🔴)\n")
+	} else {
+		sb.WriteString("(相对平衡 ⚪)\n")
+	}
+	sb.WriteString(fmt.Sprintf("- 买卖价差: %.3f%% ", ms.BidAskSpread))
+	if ms.BidAskSpread < 0.05 {
+		sb.WriteString("(流动性良好)\n")
+	} else if ms.BidAskSpread > 0.2 {
+		sb.WriteString("(流动性较差)\n")
+	} else {
+		sb.WriteString("(流动性正常)\n")
+	}
+	sb.WriteString(fmt.Sprintf("- 订单簿深度: 买%.0f | 卖%.0f USDT\n", ms.BidDepth, ms.AskDepth))
+	sb.WriteString(fmt.Sprintf("- VWAP偏离: %.2f%%\n\n", ms.VWAPDeviation))
+	sb.WriteString(fmt.Sprintf("- 大宗交易活动: %d 笔大单 (成交量≥ %.2f)\n\n", ms.LargeOrderCount, ms.LargeOrderVolume))
+
+	return sb.String()
+}
+
+// formatTimeframeSeriesDataZH 时间框架序列数据格式化（中文）
+func formatTimeframeSeriesDataZH(sb *strings.Builder, data *market.TimeframeSeriesData) {
+	if len(data.Klines) > 0 {
+		sb.WriteString("时间(UTC)      开盘价     最高价     最低价     收盘价     成交量\n")
+		for i, k := range data.Klines {
+			t := time.Unix(k.Time/1000, 0).UTC()
+			timeStr := t.Format("01-02 15:04")
+			marker := ""
+			if i == len(data.Klines)-1 {
+				marker = "  <- 当前"
+			}
+			sb.WriteString(fmt.Sprintf("%-14s %-9.3f %-9.3f %-9.3f %-9.3f %-12.2f%s\n",
+				timeStr, k.Open, k.High, k.Low, k.Close, k.Volume, marker))
+		}
+		sb.WriteString("\n")
+	} else if len(data.MidPrices) > 0 {
+		sb.WriteString(fmt.Sprintf("中间价: %s\n\n", formatFloatSlice(data.MidPrices)))
+		if len(data.Volume) > 0 {
+			sb.WriteString(fmt.Sprintf("成交量: %s\n\n", formatFloatSlice(data.Volume)))
+		}
+	}
+	if len(data.EMA20Values) > 0 {
+		sb.WriteString(fmt.Sprintf("EMA20: %s\n", formatFloatSlice(data.EMA20Values)))
+	}
+	if len(data.EMA50Values) > 0 {
+		sb.WriteString(fmt.Sprintf("EMA50: %s\n", formatFloatSlice(data.EMA50Values)))
+	}
+	if len(data.MACDValues) > 0 {
+		sb.WriteString(fmt.Sprintf("MACD: %s\n", formatFloatSlice(data.MACDValues)))
+	}
+	if len(data.RSI7Values) > 0 {
+		sb.WriteString(fmt.Sprintf("RSI7: %s\n", formatFloatSlice(data.RSI7Values)))
+	}
+	if len(data.RSI14Values) > 0 {
+		sb.WriteString(fmt.Sprintf("RSI14: %s\n", formatFloatSlice(data.RSI14Values)))
+	}
+	if data.ATR14 > 0 {
+		sb.WriteString(fmt.Sprintf("ATR14: %.3f\n", data.ATR14))
+	}
+	if len(data.BOLLUpper) > 0 {
+		sb.WriteString(fmt.Sprintf("BOLL 上轨: %s\n", formatFloatSlice(data.BOLLUpper)))
+		sb.WriteString(fmt.Sprintf("BOLL 中轨: %s\n", formatFloatSlice(data.BOLLMiddle)))
+		sb.WriteString(fmt.Sprintf("BOLL 下轨: %s\n", formatFloatSlice(data.BOLLLower)))
+	}
+	sb.WriteString("\n")
+}
+
+// formatQuantDataZH 格式化量化数据（中文）
+func formatQuantDataZH(data *QuantData) string {
+	if data == nil {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("📊 %s 量化数据:\n", data.Symbol))
+
+	if len(data.PriceChange) > 0 {
+		sb.WriteString("价格变动: ")
+		timeframes := []string{"5m", "15m", "1h", "4h", "12h", "24h"}
+		parts := []string{}
+		for _, tf := range timeframes {
+			if v, ok := data.PriceChange[tf]; ok {
+				parts = append(parts, fmt.Sprintf("%s: %+.3f%%", tf, v*100))
+			}
+		}
+		sb.WriteString(strings.Join(parts, " | "))
+		sb.WriteString("\n")
+	}
+
+	if data.Netflow != nil {
+		sb.WriteString("资金流向 (Netflow):\n")
+		timeframes := []string{"5m", "15m", "1h", "4h", "12h", "24h"}
+
+		if data.Netflow.Institution != nil {
+			if len(data.Netflow.Institution.Future) > 0 {
+				sb.WriteString("  机构期货:\n")
+				for _, tf := range timeframes {
+					if v, ok := data.Netflow.Institution.Future[tf]; ok {
+						sb.WriteString(fmt.Sprintf("    %s: %s\n", tf, formatFlowValue(v)))
+					}
+				}
+			}
+			if len(data.Netflow.Institution.Spot) > 0 {
+				sb.WriteString("  机构现货:\n")
+				for _, tf := range timeframes {
+					if v, ok := data.Netflow.Institution.Spot[tf]; ok {
+						sb.WriteString(fmt.Sprintf("    %s: %s\n", tf, formatFlowValue(v)))
+					}
+				}
+			}
+		}
+
+		if data.Netflow.Personal != nil {
+			if len(data.Netflow.Personal.Future) > 0 {
+				sb.WriteString("  散户期货:\n")
+				for _, tf := range timeframes {
+					if v, ok := data.Netflow.Personal.Future[tf]; ok {
+						sb.WriteString(fmt.Sprintf("    %s: %s\n", tf, formatFlowValue(v)))
+					}
+				}
+			}
+			if len(data.Netflow.Personal.Spot) > 0 {
+				sb.WriteString("  散户现货:\n")
+				for _, tf := range timeframes {
+					if v, ok := data.Netflow.Personal.Spot[tf]; ok {
+						sb.WriteString(fmt.Sprintf("    %s: %s\n", tf, formatFlowValue(v)))
+					}
+				}
+			}
+		}
+	}
+
+	if len(data.OI) > 0 {
+		for exchange, oiData := range data.OI {
+			if len(oiData.Delta) > 0 {
+				sb.WriteString(fmt.Sprintf("持仓量变化 (%s):\n", exchange))
+				for _, tf := range []string{"5m", "15m", "1h", "4h", "12h", "24h"} {
+					if d, ok := oiData.Delta[tf]; ok {
+						sb.WriteString(fmt.Sprintf("    %s: %+.3f%% (%s)\n", tf, d.OIDeltaPercent, formatFlowValue(d.OIDeltaValue)))
+					}
+				}
+			}
+		}
+	}
+
+	return sb.String()
 }
 
 // ========== 英文格式化函数 ==========
@@ -459,8 +645,8 @@ func formatAccountEN(ctx *Context) string {
 	sb.WriteString(fmt.Sprintf("Positions: %d\n\n", acc.PositionCount))
 
 	// Risk warning
-	if acc.MarginUsedPct > 70 {
-		sb.WriteString("⚠️ **Risk Alert**: Margin usage > 70%, high risk!\n\n")
+	if acc.MarginUsedPct > 85 {
+		sb.WriteString("⚠️ **Risk Alert**: Margin usage > 85%, high risk!\n\n")
 	} else if acc.MarginUsedPct > 50 {
 		sb.WriteString("⚠️ **Risk Notice**: Margin usage > 50%, be cautious with new positions\n\n")
 	}
@@ -540,7 +726,7 @@ func formatRecentTradesEN(orders []RecentOrder) string {
 			profitOrLoss = "Loss"
 		}
 
-		sb.WriteString(fmt.Sprintf("%d. %s %s | Entry %.4f Exit %.4f | %s: %+.2f USDT (%+.2f%%) | %s → %s (%s)\n",
+		sb.WriteString(fmt.Sprintf("%d. %s %s | Entry %.3f Exit %.3f | %s: %+.2f USDT (%+.2f%%) | %s → %s (%s)\n",
 			i+1,
 			order.Symbol,
 			order.Side,
@@ -560,7 +746,7 @@ func formatRecentTradesEN(orders []RecentOrder) string {
 }
 
 // formatCurrentPositionsEN 格式化当前持仓（英文）
-func formatCurrentPositionsEN(ctx *Context) string {
+func formatCurrentPositionsEN(strategy_config *store.StrategyConfig, ctx *Context) string {
 	var sb strings.Builder
 	sb.WriteString("## Current Positions\n\n")
 
@@ -568,15 +754,15 @@ func formatCurrentPositionsEN(ctx *Context) string {
 		drawdown := pos.UnrealizedPnLPct - pos.PeakPnLPct
 
 		sb.WriteString(fmt.Sprintf("%d. %s %s | ", i+1, pos.Symbol, strings.ToUpper(pos.Side)))
-		sb.WriteString(fmt.Sprintf("Entry %.4f Current %.4f | ", pos.EntryPrice, pos.MarkPrice))
-		sb.WriteString(fmt.Sprintf("Qty %.4f | ", pos.Quantity))
+		sb.WriteString(fmt.Sprintf("Entry %.3f Current %.3f | ", pos.EntryPrice, pos.MarkPrice))
+		sb.WriteString(fmt.Sprintf("Qty %.3f | ", pos.Quantity))
 		sb.WriteString(fmt.Sprintf("Value %.2f USDT | ", pos.Quantity*pos.MarkPrice))
 		sb.WriteString(fmt.Sprintf("PnL %+.2f%% | ", pos.UnrealizedPnLPct))
 		sb.WriteString(fmt.Sprintf("PnL Amount %+.2f USDT | ", pos.UnrealizedPnL))
 		sb.WriteString(fmt.Sprintf("Peak PnL %.2f%% | ", pos.PeakPnLPct))
 		sb.WriteString(fmt.Sprintf("Leverage %dx | ", pos.Leverage))
 		sb.WriteString(fmt.Sprintf("Margin %.0f USDT | ", pos.MarginUsed))
-		sb.WriteString(fmt.Sprintf("Liq Price %.4f\n", pos.LiquidationPrice))
+		sb.WriteString(fmt.Sprintf("Liq Price %.3f\n", pos.LiquidationPrice))
 
 		// Analysis hints
 		if drawdown < -0.30*pos.PeakPnLPct && pos.PeakPnLPct > 0.02 {
@@ -590,11 +776,19 @@ func formatCurrentPositionsEN(ctx *Context) string {
 
 		if ctx.MarketDataMap != nil {
 			if mdata, ok := ctx.MarketDataMap[pos.Symbol]; ok {
-				sb.WriteString(fmt.Sprintf("   📈 Current Price: %.4f\n", mdata.CurrentPrice))
+				sb.WriteString(formatMarketDataEN(strategy_config, mdata))
 			}
 		}
-
-		sb.WriteString("\n")
+		if ctx.MicrostructureDataMap != nil {
+			if ms, ok := ctx.MicrostructureDataMap[pos.Symbol]; ok {
+				sb.WriteString(formatMicrostructureEN(ms))
+			}
+		}
+		if ctx.QuantDataMap != nil {
+			if qdata, ok := ctx.QuantDataMap[pos.Symbol]; ok {
+				sb.WriteString(formatQuantDataEN(qdata))
+			}
+		}
 	}
 
 	return sb.String()
@@ -610,7 +804,7 @@ func formatCandidateCoinsEN(ctx *Context) string {
 
 		if ctx.MarketDataMap != nil {
 			if mdata, ok := ctx.MarketDataMap[coin.Symbol]; ok {
-				sb.WriteString(fmt.Sprintf("Current Price: %.4f\n\n", mdata.CurrentPrice))
+				sb.WriteString(fmt.Sprintf("Current Price: %.3f\n\n", mdata.CurrentPrice))
 
 				if mdata.TimeframeData != nil {
 					sb.WriteString(formatKlineDataEN(coin.Symbol, mdata.TimeframeData, ctx.Timeframes))
@@ -638,6 +832,12 @@ func formatCandidateCoinsEN(ctx *Context) string {
 
 				interpretation := getOIInterpretationEN(oiChange, priceChange)
 				sb.WriteString(fmt.Sprintf("**Market Interpretation**: %s\n\n", interpretation))
+			}
+		}
+
+		if ctx.QuantDataMap != nil {
+			if qdata, ok := ctx.QuantDataMap[coin.Symbol]; ok {
+				sb.WriteString(formatQuantDataEN(qdata))
 			}
 		}
 	}
@@ -668,7 +868,7 @@ func formatKlineDataEN(symbol string, tfData map[string]*market.TimeframeSeriesD
 			for i := startIdx; i < len(data.Klines); i++ {
 				k := data.Klines[i]
 				t := time.UnixMilli(k.Time).UTC()
-				sb.WriteString(fmt.Sprintf("%s    %.4f    %.4f    %.4f    %.4f    %.2f\n",
+				sb.WriteString(fmt.Sprintf("%s    %.3f    %.3f    %.3f    %.3f    %.2f\n",
 					t.Format("01-02 15:04"),
 					k.Open,
 					k.High,
@@ -706,24 +906,44 @@ func formatOIRankingEN(oiData interface{}) string {
 
 		if len(oiRanking.TopPositions) > 0 {
 			sb.WriteString("### Top OI Positions (Highest Leverage Long)\n\n")
+			sb.WriteString("Market funds are flowing into the following coins, possibly indicating trend continuation or new position building:\n\n")
+			sb.WriteString("| Rank | Symbol | OI Change Value (USDT) | Change Percent | Price Change |\n")
+			sb.WriteString("|------|--------|------------------------|----------------|--------------|\n")
 			for i, pos := range oiRanking.TopPositions {
 				if i >= 5 {
 					break // Show only top 5
 				}
-				sb.WriteString(fmt.Sprintf("- **%s**: %.2f (OI Change: %.2f%%)\n", pos.Symbol, pos.CurrentOI, pos.OIDeltaPercent))
+				sb.WriteString(fmt.Sprintf("| #%d | %s | %s | %+.2f%% | %+.2f%% |\n",
+					pos.Rank,
+					pos.Symbol,
+					formatOIValue(pos.OIDeltaValue),
+					pos.OIDeltaPercent,
+					pos.PriceDeltaPercent,
+				))
 			}
 			sb.WriteString("\n")
+			sb.WriteString("**Interpretion**: OI Increase + Price Up = Bullish Dominance; OI Increase + Price Down = Bearish Dominance\n\n")
 		}
 
 		if len(oiRanking.LowPositions) > 0 {
 			sb.WriteString("### Low OI Positions (Highest Leverage Short)\n\n")
+			sb.WriteString("Market funds are flowing out of the following coins, possibly indicating trend reversal or position liquidation:\n\n")
+			sb.WriteString("| Rank | Symbol | OI Change Value (USDT) | Change Percent | Price Change |\n")
+			sb.WriteString("|------|--------|------------------------|----------------|--------------|\n")
 			for i, pos := range oiRanking.LowPositions {
 				if i >= 5 {
 					break
 				}
-				sb.WriteString(fmt.Sprintf("- **%s**: %.2f (OI Change: %.2f%%)\n", pos.Symbol, pos.CurrentOI, pos.OIDeltaPercent))
+				sb.WriteString(fmt.Sprintf("| #%d | %s | %s | %+.2f%% | %+.2f%% |\n",
+					pos.Rank,
+					pos.Symbol,
+					formatOIValue(pos.OIDeltaValue),
+					pos.OIDeltaPercent,
+					pos.PriceDeltaPercent,
+				))
 			}
 			sb.WriteString("\n")
+			sb.WriteString("**Interpretion**: OI Decrease + Price Up = Short Covering (Rebound); OI Decrease + Price Down = Long Liquidation (Pullback)\n\n")
 		}
 
 		return sb.String()
@@ -801,138 +1021,313 @@ func formatOptimizedWeightsEN(weights interface{}) string {
 	return ""
 }
 
-// formatMicrostructureZH formats market microstructure data (Chinese)
-func formatMicrostructureZH(microstructureMap map[string]*market.MarketMicrostructure) string {
-	if len(microstructureMap) == 0 {
+// formatMarketDataEN formats market data (English)
+func formatMarketDataEN(strategy_config *store.StrategyConfig, data *market.Data) string {
+	if data == nil {
 		return ""
 	}
 
 	var sb strings.Builder
-	sb.WriteString("## 📊 市场微观结构分析\n\n")
-	sb.WriteString("**说明**: 订单簿分析提供支撑/阻力位、流动性深度和买卖压力信息\n\n")
-
-	for symbol, ms := range microstructureMap {
-		if ms == nil {
-			continue
-		}
-
-		sb.WriteString(fmt.Sprintf("### %s 微观结构\n\n", symbol))
-
-		// Support levels
-		if len(ms.SupportLevels) > 0 {
-			sb.WriteString("**支撑位** (价格下方的买单聚集区):\n")
-			for i, price := range ms.SupportLevels {
-				if i >= 3 {
-					break // Top 3 only
-				}
-				distance := (ms.CurrentPrice - price) / ms.CurrentPrice * 100
-				sb.WriteString(fmt.Sprintf("- %.2f USDT (距离: -%.2f%%)\n", price, distance))
+	sb.WriteString("## 📈 Market Data Overview\n\n")
+	sb.WriteString(fmt.Sprintf("### %s Market Data\n\n", data.Symbol))
+	sb.WriteString(fmt.Sprintf("current_price = %.3f", data.CurrentPrice))
+	sb.WriteString(fmt.Sprintf(", current_ema20 = %.3f", data.CurrentEMA20))
+	sb.WriteString(fmt.Sprintf(", current_macd = %.3f", data.CurrentMACD))
+	sb.WriteString(fmt.Sprintf(", current_rsi7 = %.3f", data.CurrentRSI7))
+	sb.WriteString(fmt.Sprintf("Open Interest: Latest: %.2f Average: %.2f\n\n", data.OpenInterest.Latest, data.OpenInterest.Average))
+	sb.WriteString(fmt.Sprintf("Funding Rate: %.2e\n\n", data.FundingRate))
+	if len(data.TimeframeData) > 0 {
+		timeframeOrder := []string{"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w"}
+		for _, tf := range timeframeOrder {
+			if tfData, ok := data.TimeframeData[tf]; ok {
+				sb.WriteString(fmt.Sprintf("=== %s Timeframe (oldest → latest) ===\n\n", strings.ToUpper(tf)))
+				formatTimeframeSeriesDataEN(&sb, tfData)
 			}
-			sb.WriteString("\n")
 		}
-
-		// Resistance levels
-		if len(ms.ResistanceLevels) > 0 {
-			sb.WriteString("**阻力位** (价格上方的卖单聚集区):\n")
-			for i, price := range ms.ResistanceLevels {
-				if i >= 3 {
-					break // Top 3 only
-				}
-				distance := (price - ms.CurrentPrice) / ms.CurrentPrice * 100
-				sb.WriteString(fmt.Sprintf("- %.2f USDT (距离: +%.2f%%)\n", price, distance))
+	} else {
+		// Compatible with old data format
+		if data.IntradaySeries != nil {
+			sb.WriteString(fmt.Sprintf("Intraday series (%s intervals, oldest → latest):\n\n", strategy_config.Indicators.Klines.PrimaryTimeframe))
+			if len(data.IntradaySeries.MidPrices) > 0 {
+				sb.WriteString(fmt.Sprintf("Mid prices: %s\n\n", formatFloatSlice(data.IntradaySeries.MidPrices)))
 			}
-			sb.WriteString("\n")
+			if len(data.IntradaySeries.EMA20Values) > 0 {
+				sb.WriteString(fmt.Sprintf("EMA indicators (20-period): %s\n\n", formatFloatSlice(data.IntradaySeries.EMA20Values)))
+			}
+			if len(data.IntradaySeries.MACDValues) > 0 {
+				sb.WriteString(fmt.Sprintf("MACD indicators: %s\n\n", formatFloatSlice(data.IntradaySeries.MACDValues)))
+			}
+
+			if len(data.IntradaySeries.RSI7Values) > 0 {
+				sb.WriteString(fmt.Sprintf("RSI indicators (7-Period): %s\n\n", formatFloatSlice(data.IntradaySeries.RSI7Values)))
+			}
+			if len(data.IntradaySeries.RSI14Values) > 0 {
+				sb.WriteString(fmt.Sprintf("RSI indicators (14-Period): %s\n\n", formatFloatSlice(data.IntradaySeries.RSI14Values)))
+			}
+			if len(data.IntradaySeries.Volume) > 0 {
+				sb.WriteString(fmt.Sprintf("Volume: %s\n\n", formatFloatSlice(data.IntradaySeries.Volume)))
+			}
+			if data.IntradaySeries.ATR14 > 0 {
+				sb.WriteString(fmt.Sprintf("3m ATR (14-period): %.3f\n\n", data.IntradaySeries.ATR14))
+			}
+		}
+		if data.LongerTermContext != nil {
+			sb.WriteString(fmt.Sprintf("Longer-term context (%s timeframe):\n\n", strategy_config.Indicators.Klines.LongerTimeframe))
+			sb.WriteString(fmt.Sprintf("20-Period EMA: %.3f vs. 50-Period EMA: %.3f\n\n",
+				data.LongerTermContext.EMA20, data.LongerTermContext.EMA50))
+			sb.WriteString(fmt.Sprintf("3-Period ATR: %.3f vs. 14-Period ATR: %.3f\n\n",
+				data.LongerTermContext.ATR3, data.LongerTermContext.ATR14))
+
+			sb.WriteString(fmt.Sprintf("Current Volume: %.3f vs. Average Volume: %.3f\n\n",
+				data.LongerTermContext.CurrentVolume, data.LongerTermContext.AverageVolume))
+			if len(data.LongerTermContext.MACDValues) > 0 {
+				sb.WriteString(fmt.Sprintf("MACD indicators: %s\n\n", formatFloatSlice(data.LongerTermContext.MACDValues)))
+			}
+			if len(data.LongerTermContext.RSI14Values) > 0 {
+				sb.WriteString(fmt.Sprintf("RSI indicators (14-Period): %s\n\n", formatFloatSlice(data.LongerTermContext.RSI14Values)))
+			}
+		}
+	}
+	return sb.String()
+}
+
+// formatMicrostructureEN formats market microstructure data (English)
+func formatMicrostructureEN(ms *market.MarketMicrostructure) string {
+	if ms == nil {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("## 📊 Market Microstructure Analysis\n\n")
+	sb.WriteString("**Note**: Order book analysis provides support/resistance levels, liquidity depth, and buy/sell pressure\n\n")
+	sb.WriteString(fmt.Sprintf("### %s Microstructure\n\n", ms.Symbol))
+
+	// Support levels
+	if len(ms.SupportLevels) > 0 {
+		sb.WriteString("**Support Levels** (bid order clusters below price):\n")
+		for i, price := range ms.SupportLevels {
+			if i >= 3 {
+				break // Top 3 only
+			}
+			distance := (ms.CurrentPrice - price) / ms.CurrentPrice * 100
+			sb.WriteString(fmt.Sprintf("- $%.2f (distance: -%.2f%%)\n", price, distance))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Resistance levels
+	if len(ms.ResistanceLevels) > 0 {
+		sb.WriteString("**Resistance Levels** (ask order clusters above price):\n")
+		for i, price := range ms.ResistanceLevels {
+			if i >= 3 {
+				break // Top 3 only
+			}
+			distance := (price - ms.CurrentPrice) / ms.CurrentPrice * 100
+			sb.WriteString(fmt.Sprintf("- $%.2f (distance: +%.2f%%)\n", price, distance))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Order book metrics
+	sb.WriteString("**Order Book Metrics**:\n")
+	sb.WriteString(fmt.Sprintf("- Order Book Imbalance: %.2f ", ms.OrderBookImbalance))
+	if ms.OrderBookImbalance > 0.6 {
+		sb.WriteString("(buy pressure 🟢)\n")
+	} else if ms.OrderBookImbalance < 0.4 {
+		sb.WriteString("(sell pressure 🔴)\n")
+	} else {
+		sb.WriteString("(balanced ⚪)\n")
+	}
+	sb.WriteString(fmt.Sprintf("- Spread: %.3f%% ", ms.BidAskSpread))
+	if ms.BidAskSpread < 0.05 {
+		sb.WriteString("(good liquidity)\n")
+	} else if ms.BidAskSpread > 0.2 {
+		sb.WriteString("(poor liquidity)\n")
+	} else {
+		sb.WriteString("(normal liquidity)\n")
+	}
+	sb.WriteString(fmt.Sprintf("- Order Book Depth: Bid $%.0f | Ask $%.0f\n", ms.BidDepth, ms.AskDepth))
+	sb.WriteString(fmt.Sprintf("- VWAP Deviation: %.2f%%\n\n", ms.VWAPDeviation))
+	sb.WriteString(fmt.Sprintf("- Large Trade Activity: %d large trades (volume ≥ $%.2f)\n\n", ms.LargeOrderCount, ms.LargeOrderVolume))
+	return sb.String()
+}
+
+// formatTimeframeSeriesDataEN formats timeframe series data (English)
+func formatTimeframeSeriesDataEN(sb *strings.Builder, data *market.TimeframeSeriesData) {
+	if len(data.Klines) > 0 {
+		sb.WriteString("Time(UTC)      Open      High      Low       Close     Volume\n")
+		for i, k := range data.Klines {
+			t := time.Unix(k.Time/1000, 0).UTC()
+			timeStr := t.Format("01-02 15:04")
+			marker := ""
+			if i == len(data.Klines)-1 {
+				marker = "  <- current"
+			}
+			sb.WriteString(fmt.Sprintf("%-14s %-9.3f %-9.3f %-9.3f %-9.3f %-12.2f%s\n",
+				timeStr, k.Open, k.High, k.Low, k.Close, k.Volume, marker))
+		}
+		sb.WriteString("\n")
+	} else if len(data.MidPrices) > 0 {
+		sb.WriteString(fmt.Sprintf("Mid prices: %s\n\n", formatFloatSlice(data.MidPrices)))
+		if len(data.Volume) > 0 {
+			sb.WriteString(fmt.Sprintf("Volume: %s\n\n", formatFloatSlice(data.Volume)))
+		}
+	}
+	if len(data.EMA20Values) > 0 {
+		sb.WriteString(fmt.Sprintf("EMA20: %s\n", formatFloatSlice(data.EMA20Values)))
+	}
+	if len(data.EMA50Values) > 0 {
+		sb.WriteString(fmt.Sprintf("EMA50: %s\n", formatFloatSlice(data.EMA50Values)))
+	}
+	if len(data.MACDValues) > 0 {
+		sb.WriteString(fmt.Sprintf("MACD: %s\n", formatFloatSlice(data.MACDValues)))
+	}
+	if len(data.RSI7Values) > 0 {
+		sb.WriteString(fmt.Sprintf("RSI7: %s\n", formatFloatSlice(data.RSI7Values)))
+	}
+	if len(data.RSI14Values) > 0 {
+		sb.WriteString(fmt.Sprintf("RSI14: %s\n", formatFloatSlice(data.RSI14Values)))
+	}
+	if data.ATR14 > 0 {
+		sb.WriteString(fmt.Sprintf("ATR14: %.3f\n", data.ATR14))
+	}
+	if len(data.BOLLUpper) > 0 {
+		sb.WriteString(fmt.Sprintf("BOLL Upper: %s\n", formatFloatSlice(data.BOLLUpper)))
+		sb.WriteString(fmt.Sprintf("BOLL Middle: %s\n", formatFloatSlice(data.BOLLMiddle)))
+		sb.WriteString(fmt.Sprintf("BOLL Lower: %s\n", formatFloatSlice(data.BOLLLower)))
+	}
+	sb.WriteString("\n")
+}
+
+// formatQuantDataEN 格式化量化数据（英文）
+func formatQuantDataEN(data *QuantData) string {
+	if data == nil {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("📊 %s Quantitative Data:\n", data.Symbol))
+
+	if len(data.PriceChange) > 0 {
+		sb.WriteString("Price Change: ")
+		timeframes := []string{"5m", "15m", "1h", "4h", "12h", "24h"}
+		parts := []string{}
+		for _, tf := range timeframes {
+			if v, ok := data.PriceChange[tf]; ok {
+				parts = append(parts, fmt.Sprintf("%s: %+.3f%%", tf, v*100))
+			}
+		}
+		sb.WriteString(strings.Join(parts, " | "))
+		sb.WriteString("\n")
+	}
+
+	if data.Netflow != nil {
+		sb.WriteString("Fund Flow (Netflow):\n")
+		timeframes := []string{"5m", "15m", "1h", "4h", "12h", "24h"}
+
+		if data.Netflow.Institution != nil {
+			if len(data.Netflow.Institution.Future) > 0 {
+				sb.WriteString("  Institutional Futures:\n")
+				for _, tf := range timeframes {
+					if v, ok := data.Netflow.Institution.Future[tf]; ok {
+						sb.WriteString(fmt.Sprintf("    %s: %s\n", tf, formatFlowValue(v)))
+					}
+				}
+			}
+			if len(data.Netflow.Institution.Spot) > 0 {
+				sb.WriteString("  Institutional Spot:\n")
+				for _, tf := range timeframes {
+					if v, ok := data.Netflow.Institution.Spot[tf]; ok {
+						sb.WriteString(fmt.Sprintf("    %s: %s\n", tf, formatFlowValue(v)))
+					}
+				}
+			}
 		}
 
-		// Order book metrics
-		sb.WriteString("**订单簿指标**:\n")
-		sb.WriteString(fmt.Sprintf("- 买卖压力: %.2f ", ms.OrderBookImbalance))
-		if ms.OrderBookImbalance > 0.6 {
-			sb.WriteString("(买盘占优 🟢)\n")
-		} else if ms.OrderBookImbalance < 0.4 {
-			sb.WriteString("(卖盘占优 🔴)\n")
-		} else {
-			sb.WriteString("(相对平衡 ⚪)\n")
+		if data.Netflow.Personal != nil {
+			if len(data.Netflow.Personal.Future) > 0 {
+				sb.WriteString("  Retail Futures:\n")
+				for _, tf := range timeframes {
+					if v, ok := data.Netflow.Personal.Future[tf]; ok {
+						sb.WriteString(fmt.Sprintf("    %s: %s\n", tf, formatFlowValue(v)))
+					}
+				}
+			}
+			if len(data.Netflow.Personal.Spot) > 0 {
+				sb.WriteString("  Retail Spot:\n")
+				for _, tf := range timeframes {
+					if v, ok := data.Netflow.Personal.Spot[tf]; ok {
+						sb.WriteString(fmt.Sprintf("    %s: %s\n", tf, formatFlowValue(v)))
+					}
+				}
+			}
 		}
-		sb.WriteString(fmt.Sprintf("- 买卖价差: %.4f%% ", ms.BidAskSpread))
-		if ms.BidAskSpread < 0.05 {
-			sb.WriteString("(流动性良好)\n")
-		} else if ms.BidAskSpread > 0.2 {
-			sb.WriteString("(流动性较差)\n")
-		} else {
-			sb.WriteString("(流动性正常)\n")
+	}
+
+	if len(data.OI) > 0 {
+		for exchange, oiData := range data.OI {
+			if len(oiData.Delta) > 0 {
+				sb.WriteString(fmt.Sprintf("Open Interest (%s):\n", exchange))
+				for _, tf := range []string{"5m", "15m", "1h", "4h", "12h", "24h"} {
+					if d, ok := oiData.Delta[tf]; ok {
+						sb.WriteString(fmt.Sprintf("    %s: %+.3f%% (%s)\n", tf, d.OIDeltaPercent, formatFlowValue(d.OIDeltaValue)))
+					}
+				}
+			}
 		}
-		sb.WriteString(fmt.Sprintf("- 订单簿深度: 买%.0f | 卖%.0f USDT\n", ms.BidDepth, ms.AskDepth))
-		sb.WriteString(fmt.Sprintf("- VWAP偏离: %.2f%%\n\n", ms.VWAPDeviation))
 	}
 
 	return sb.String()
 }
 
-// formatMicrostructureEN formats market microstructure data (English)
-func formatMicrostructureEN(microstructureMap map[string]*market.MarketMicrostructure) string {
-	if len(microstructureMap) == 0 {
-		return ""
+// =============================================
+//  辅助格式化函数
+// =============================================
+
+// formatOIValue 格式化持仓量数值，带单位和符号
+func formatOIValue(v float64) string {
+	sign := ""
+	if v >= 0 {
+		sign = "+"
 	}
-
-	var sb strings.Builder
-	sb.WriteString("## 📊 Market Microstructure Analysis\n\n")
-	sb.WriteString("**Note**: Order book analysis provides support/resistance levels, liquidity depth, and buy/sell pressure\n\n")
-
-	for symbol, ms := range microstructureMap {
-		if ms == nil {
-			continue
-		}
-
-		sb.WriteString(fmt.Sprintf("### %s Microstructure\n\n", symbol))
-
-		// Support levels
-		if len(ms.SupportLevels) > 0 {
-			sb.WriteString("**Support Levels** (bid order clusters below price):\n")
-			for i, price := range ms.SupportLevels {
-				if i >= 3 {
-					break // Top 3 only
-				}
-				distance := (ms.CurrentPrice - price) / ms.CurrentPrice * 100
-				sb.WriteString(fmt.Sprintf("- $%.2f (distance: -%.2f%%)\n", price, distance))
-			}
-			sb.WriteString("\n")
-		}
-
-		// Resistance levels
-		if len(ms.ResistanceLevels) > 0 {
-			sb.WriteString("**Resistance Levels** (ask order clusters above price):\n")
-			for i, price := range ms.ResistanceLevels {
-				if i >= 3 {
-					break // Top 3 only
-				}
-				distance := (price - ms.CurrentPrice) / ms.CurrentPrice * 100
-				sb.WriteString(fmt.Sprintf("- $%.2f (distance: +%.2f%%)\n", price, distance))
-			}
-			sb.WriteString("\n")
-		}
-
-		// Order book metrics
-		sb.WriteString("**Order Book Metrics**:\n")
-		sb.WriteString(fmt.Sprintf("- Order Book Imbalance: %.2f ", ms.OrderBookImbalance))
-		if ms.OrderBookImbalance > 0.6 {
-			sb.WriteString("(buy pressure 🟢)\n")
-		} else if ms.OrderBookImbalance < 0.4 {
-			sb.WriteString("(sell pressure 🔴)\n")
-		} else {
-			sb.WriteString("(balanced ⚪)\n")
-		}
-		sb.WriteString(fmt.Sprintf("- Spread: %.4f%% ", ms.BidAskSpread))
-		if ms.BidAskSpread < 0.05 {
-			sb.WriteString("(good liquidity)\n")
-		} else if ms.BidAskSpread > 0.2 {
-			sb.WriteString("(poor liquidity)\n")
-		} else {
-			sb.WriteString("(normal liquidity)\n")
-		}
-		sb.WriteString(fmt.Sprintf("- Order Book Depth: Bid $%.0f | Ask $%.0f\n", ms.BidDepth, ms.AskDepth))
-		sb.WriteString(fmt.Sprintf("- VWAP Deviation: %.2f%%\n\n", ms.VWAPDeviation))
+	absV := v
+	if absV < 0 {
+		absV = -absV
 	}
+	if absV >= 1e9 {
+		return fmt.Sprintf("%s%.2fB", sign, v/1e9)
+	} else if absV >= 1e6 {
+		return fmt.Sprintf("%s%.2fM", sign, v/1e6)
+	} else if absV >= 1e3 {
+		return fmt.Sprintf("%s%.2fK", sign, v/1e3)
+	}
+	return fmt.Sprintf("%s%.2f", sign, v)
+}
 
-	return sb.String()
+// formatFlowValue 格式化资金流向数值，带单位和符号
+func formatFlowValue(v float64) string {
+	sign := ""
+	if v >= 0 {
+		sign = "+"
+	}
+	absV := v
+	if absV < 0 {
+		absV = -absV
+	}
+	if absV >= 1e9 {
+		return fmt.Sprintf("%s%.2fB", sign, v/1e9)
+	} else if absV >= 1e6 {
+		return fmt.Sprintf("%s%.2fM", sign, v/1e6)
+	} else if absV >= 1e3 {
+		return fmt.Sprintf("%s%.2fK", sign, v/1e3)
+	}
+	return fmt.Sprintf("%s%.2f", sign, v)
+}
+
+// formatFloatSlice 格式化浮点数切片为字符串
+func formatFloatSlice(values []float64) string {
+	strValues := make([]string, len(values))
+	for i, v := range values {
+		strValues[i] = fmt.Sprintf("%.3f", v)
+	}
+	return "[" + strings.Join(strValues, ", ") + "]"
 }

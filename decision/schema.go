@@ -87,8 +87,8 @@ var DataDictionary = map[string]map[string]BilingualFieldDef{
 			Unit:      "%",
 			FormulaZH: "(总权益 - 初始资金) / 初始资金 × 100",
 			FormulaEN: "(Total Equity - Initial Capital) / Initial Capital × 100",
-			DescZH:    "自系统启动以来的总收益率，+15.87%表示盈利15.87%",
-			DescEN:    "Total return since inception, +15.87% means 15.87% profit",
+			DescZH:    "自系统启动以来的总收益率，+25.87%表示盈利25.87%",
+			DescEN:    "Total return since inception, +25.87% means 25.87% profit",
 		},
 		"Margin": {
 			NameZH:    "保证金使用率",
@@ -96,8 +96,8 @@ var DataDictionary = map[string]map[string]BilingualFieldDef{
 			Unit:      "%",
 			FormulaZH: "已用保证金合计 / 总权益 × 100",
 			FormulaEN: "Total Used Margin / Total Equity × 100",
-			DescZH:    "该值越高，账户风险越大。安全值<30%，危险值>70%",
-			DescEN:    "Higher value = higher risk. Safe <30%, Dangerous >70%",
+			DescZH:    "该值越高，账户风险越大。安全值<90%<危险值",
+			DescEN:    "Higher value = higher risk. Safe <90%<Dangerous",
 		},
 	},
 
@@ -257,11 +257,11 @@ var TradingRules = struct {
 }{
 	RiskManagement: map[string]BilingualRuleDef{
 		"MaxMarginUsage": {
-			Value:    0.30,
-			DescZH:   "保证金使用率不得超过30%",
-			DescEN:   "Margin usage must not exceed 30%",
-			ReasonZH: "保留70%的资金应对极端行情和追加保证金",
-			ReasonEN: "Reserve 70% capital for extreme market conditions and margin calls",
+			Value:    0.90,
+			DescZH:   "保证金使用率不得超过90%",
+			DescEN:   "Margin usage must not exceed 90%",
+			ReasonZH: "保留10%的资金应对极端行情和追加保证金",
+			ReasonEN: "Reserve 10% capital for extreme market conditions and margin calls",
 		},
 		"MaxPositionLoss": {
 			Value:    -0.05,
@@ -271,16 +271,16 @@ var TradingRules = struct {
 			ReasonEN: "Prevent excessive loss from single trade",
 		},
 		"MaxDailyLoss": {
-			Value:    -0.10,
-			DescZH:   "单日亏损达到-10%时停止交易",
-			DescEN:   "Stop trading when daily loss reaches -10%",
+			Value:    -0.25,
+			DescZH:   "单日亏损达到-25%时停止交易",
+			DescEN:   "Stop trading when daily loss reaches -25%",
 			ReasonZH: "防止情绪化交易导致连续亏损",
 			ReasonEN: "Prevent emotional trading leading to consecutive losses",
 		},
 		"PositionSizeLimit": {
-			Value:    0.15,
-			DescZH:   "单个仓位不得超过总权益的15%",
-			DescEN:   "Single position must not exceed 15% of total equity",
+			Value:    0.25,
+			DescZH:   "单个仓位不得超过总权益的25%",
+			DescEN:   "Single position must not exceed 25% of total equity",
 			ReasonZH: "避免过度集中风险",
 			ReasonEN: "Avoid excessive risk concentration",
 		},
@@ -443,7 +443,6 @@ var CommonMistakes = []CommonMistake{
 }
 
 // ========== Prompt生成函数 ==========
-
 // GetSchemaPrompt 生成Schema说明文本，用于AI Prompt
 func GetSchemaPrompt(lang Language) string {
 	if lang == LangChinese {
