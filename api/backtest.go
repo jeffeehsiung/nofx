@@ -963,22 +963,22 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 
 	// Convert database format to API format
 	type APIVariant struct {
-		ID             string  `json:"ID"`
-		VariantID      string  `json:"VariantID"`
-		Generation     int     `json:"Generation"`
-		IsActive       bool    `json:"IsActive"`
-		PromptRoleDefinition string  `json:"PromptRoleDefinition"`
+		ID                     string  `json:"ID"`
+		VariantID              string  `json:"VariantID"`
+		Generation             int     `json:"Generation"`
+		IsActive               bool    `json:"IsActive"`
+		PromptRoleDefinition   string  `json:"PromptRoleDefinition"`
 		PromptTradingFrequency string  `json:"PromptTradingFrequency"`
 		PromptEntryStandards   string  `json:"PromptEntryStandards"`
-		PromptDecisionProcess string  `json:"PromptDecisionProcess"`
-		CreatedAt      string  `json:"CreatedAt"`
-		TotalDecisions int     `json:"TotalDecisions"`
-		TotalReturn    float64 `json:"TotalReturn"`
-		WinRate        float64 `json:"WinRate"`
-		ProfitFactor   float64 `json:"ProfitFactor"`
-		SharpeRatio    float64 `json:"SharpeRatio"`
-		MaxDrawdown    float64 `json:"MaxDrawdown"`
-		FitnessScore   float64 `json:"FitnessScore"`
+		PromptDecisionProcess  string  `json:"PromptDecisionProcess"`
+		CreatedAt              string  `json:"CreatedAt"`
+		TotalDecisions         int     `json:"TotalDecisions"`
+		TotalReturn            float64 `json:"TotalReturn"`
+		WinRate                float64 `json:"WinRate"`
+		ProfitFactor           float64 `json:"ProfitFactor"`
+		SharpeRatio            float64 `json:"SharpeRatio"`
+		MaxDrawdown            float64 `json:"MaxDrawdown"`
+		FitnessScore           float64 `json:"FitnessScore"`
 	}
 
 	variants := make([]APIVariant, 0, len(variantsData))
@@ -987,22 +987,22 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 
 	for _, v := range variantsData {
 		apiV := APIVariant{
-			ID:             v.ID,
-			VariantID:      v.VariantID,
-			Generation:     v.Generation,
-			IsActive:       v.IsActive,
+			ID:                     v.ID,
+			VariantID:              v.VariantID,
+			Generation:             v.Generation,
+			IsActive:               v.IsActive,
 			PromptRoleDefinition:   v.PromptRoleDefinition,
 			PromptTradingFrequency: v.PromptTradingFrequency,
 			PromptEntryStandards:   v.PromptEntryStandards,
 			PromptDecisionProcess:  v.PromptDecisionProcess,
-			CreatedAt:      v.CreatedAt,
-			TotalDecisions: v.TotalDecisions,
-			TotalReturn:    v.TotalReturn,
-			WinRate:        v.WinRate,
-			ProfitFactor:   v.ProfitFactor,
-			SharpeRatio:    v.SharpeRatio,
-			MaxDrawdown:    v.MaxDrawdown,
-			FitnessScore:   v.FitnessScore,
+			CreatedAt:              v.CreatedAt,
+			TotalDecisions:         v.TotalDecisions,
+			TotalReturn:            v.TotalReturn,
+			WinRate:                v.WinRate,
+			ProfitFactor:           v.ProfitFactor,
+			SharpeRatio:            v.SharpeRatio,
+			MaxDrawdown:            v.MaxDrawdown,
+			FitnessScore:           v.FitnessScore,
 		}
 		variants = append(variants, apiV)
 		if v.IsActive {

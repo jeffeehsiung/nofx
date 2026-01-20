@@ -448,7 +448,6 @@ func fetchOIRanking(url string) ([]OIPosition, string, error) {
 	return response.Data.Positions, response.Data.TimeRange, nil
 }
 
-
 // GetMergedData retrieves merged data (AI500 + OI Top, deduplicated)
 func GetMergedData(ai500Limit int) (*MergedData, error) {
 	ai500TopSymbols, err := GetTopRatedCoins(ai500Limit)
