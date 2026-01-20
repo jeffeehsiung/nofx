@@ -155,7 +155,7 @@ type AutoTrader struct {
 
 	// Prompt optimization (genetic evolution)
 	promptOptimizer *backtest.PromptOptimizer // Evolves prompt strategies based on performance
-
+	promptVariantID string                    // Current prompt variant ID
 	// Analysis systems (same as backtests)
 	feedbackGenerator *backtest.FeedbackGenerator // Analyzes trading feedback
 	factorOptimizer   *backtest.FactorOptimizer   // Analyzes performance factors
@@ -400,7 +400,7 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	basePrompt := config.StrategyConfig.PromptSections
 	optimizerConfig := backtest.DefaultPromptOptimizerConfig()
 	optimizerConfig.PopulationSize = 3      // Smaller population for live trading
-	optimizerConfig.EvaluationCycles = 10   // Evolve every 10 trades
+	optimizerConfig.EvaluationCycles = 5    // Evolve every 5 trades
 	optimizerConfig.MinDecisionsPerTest = 5 // Min 5 trades per variant
 
 	// Pass trader ID as runID and backtestStore for variant persistence
@@ -409,7 +409,7 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		backtestStore = st.Backtest()
 	}
 	at.promptOptimizer = backtest.NewPromptOptimizerWithAI(&basePrompt, optimizerConfig, mcpClient, config.ID, backtestStore)
-
+	at.promptVariantID = at.promptOptimizer.GetCurrentVariant().ID
 	// Try to load saved optimizer state
 	if st != nil {
 		if err := at.promptOptimizer.LoadState(config.ID); err != nil {
@@ -1253,9 +1253,9 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 								SharpeRatio:    feedback.SharpeRatio,
 								MaxDrawdownPct: feedback.MaxDrawdown,
 							}
-							at.promptOptimizer.RecordDecisionOutcome("current", metrics)
+							at.promptOptimizer.RecordDecisionOutcome(at.promptVariantID, metrics)
 
-							if err := at.promptOptimizer.EvolvePrompts(&strategyConfig.PromptSections); err != nil {
+							if err := at.promptOptimizer.EvolvePrompts(at.promptVariantID, &strategyConfig.PromptSections); err != nil {
 								logger.Infof("⚠️ [%s] Failed to evolve prompts: %v", at.name, err)
 							} else {
 								// Save optimizer state
@@ -1266,6 +1266,8 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 								// CRITICAL: Update strategy engine with evolved prompt
 								evolvedPrompt := at.promptOptimizer.GetCurrentPrompt()
 								at.strategyEngine.SetStrategyPrompt(evolvedPrompt)
+								// CRITICAL: Reset prompt variant ID to use new prompt
+								at.promptVariantID = at.promptOptimizer.GetCurrentVariant().ID
 								logger.Infof("✅ [%s] Applied evolved prompt to live trading (gen %d)", at.name, at.promptOptimizer.GetGeneration())
 							}
 						}

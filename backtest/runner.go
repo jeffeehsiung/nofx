@@ -952,11 +952,11 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 						SharpeRatio:    feedback.SharpeRatio,
 						MaxDrawdownPct: feedback.MaxDrawdown,
 					}
-					r.promptOptimizer.RecordDecisionOutcome("current", metrics)
+					r.promptOptimizer.RecordDecisionOutcome(r.cfg.PromptVariant, metrics)
 
 					// Use the generic EvolvePrompts method for backtest
 					// (Live trading uses meta-prompting via EvolvePromptsWithMetaLearning)
-					if err := r.promptOptimizer.EvolvePrompts(&strategyConfig.PromptSections); err != nil {
+					if err := r.promptOptimizer.EvolvePrompts(r.cfg.PromptVariant, &strategyConfig.PromptSections); err != nil {
 						logger.Infof("Failed to evolve prompts: %v", err)
 					} else {
 						// Save optimizer state
@@ -967,6 +967,8 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 						// CRITICAL: Update strategy engine with the evolved prompt
 						evolvedPrompt := r.promptOptimizer.GetCurrentPrompt()
 						r.strategyEngine.SetStrategyPrompt(evolvedPrompt)
+						// CRITICAL: Updtae current prompt variant to evolved one
+						r.cfg.PromptVariant = r.promptOptimizer.GetCurrentVariant().ID
 						logger.Infof("✅ Applied evolved prompt variant to strategy engine (gen %d)", r.promptOptimizer.GetGeneration())
 					}
 				}

@@ -176,6 +176,15 @@ func (po *PromptOptimizer) GetCurrentPrompt() *store.PromptVariantData {
 	return nil
 }
 
+// Get Variant Prompt by ID
+func (po *PromptOptimizer) GetVariantPromptByID(variantID string) *store.PromptVariantData {
+	variant := po.GetVariantByID(variantID)
+	if variant != nil {
+		return variant.toStoreData(po.RunID)
+	}
+	return nil
+}
+
 // GetAllVariants returns a copy of all prompt variants for inspection
 func (po *PromptOptimizer) GetAllVariants() []*PromptVariant {
 	result := make([]*PromptVariant, len(po.Variants))
@@ -186,6 +195,21 @@ func (po *PromptOptimizer) GetAllVariants() []*PromptVariant {
 // GetCurrentVariant returns the currently active variant
 func (po *PromptOptimizer) GetCurrentVariant() *PromptVariant {
 	return po.CurrentVariant
+}
+
+// GetCurrentVariant by ID
+func (po *PromptOptimizer) GetVariantByID(variantID string) *PromptVariant {
+	for _, v := range po.Variants {
+		if v.ID == variantID {
+			return v
+		}
+	}
+	return nil
+}
+
+// Get ID by Variant
+func (po *PromptOptimizer) GetVariantID(variant *PromptVariant) string {
+	return variant.ID
 }
 
 // SaveVariantToDB persists a prompt variant to the database
@@ -312,7 +336,7 @@ func (po *PromptOptimizer) ShouldEvolve(currentCycle int) bool {
 
 // EvolvePrompts creates new generation of prompts using LLM-based evolution
 // The LLM analyzes performance and rewrites the system prompt to address weaknesses
-func (po *PromptOptimizer) EvolvePrompts(strategy_prompt *store.PromptSectionsConfig) error {
+func (po *PromptOptimizer) EvolvePrompts(variantID string, strategy_prompt *store.PromptSectionsConfig) error {
 	if !po.Config.EnableOptimization {
 		return nil
 	}
@@ -338,7 +362,7 @@ func (po *PromptOptimizer) EvolvePrompts(strategy_prompt *store.PromptSectionsCo
 
 	// Use LLM-based evolution if AI client is available
 	if po.AIClient != nil {
-		return po.evolvePromptsWithLLM(strategy_prompt)
+		return po.evolvePromptsWithLLM(variantID, strategy_prompt)
 	}
 
 	// Fallback: Keep top performers only (no genetic algorithm)
@@ -359,9 +383,13 @@ func (po *PromptOptimizer) EvolvePrompts(strategy_prompt *store.PromptSectionsCo
 	return nil
 }
 
-// evolvePro mptsWithLLM uses LLM to evolve system prompts based on performance
-func (po *PromptOptimizer) evolvePromptsWithLLM(strategy_prompt *store.PromptSectionsConfig) error {
-	currentVariant := po.Variants[0] // Best performing variant
+// evolvePromptsWithLLM uses LLM to evolve system prompts based on performance
+func (po *PromptOptimizer) evolvePromptsWithLLM(variantID string, strategy_prompt *store.PromptSectionsConfig) error {
+	currentVariant := po.GetVariantByID(variantID)
+	if currentVariant == nil {
+		logger.Fatal("[PromptOptimizer] Variant not found, skipping LLM evolution")
+		return nil
+	}
 	currentMetrics := po.PerformanceData[currentVariant.ID]
 
 	if currentMetrics == nil {
