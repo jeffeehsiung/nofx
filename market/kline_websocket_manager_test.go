@@ -25,7 +25,9 @@ func (s *KlineWebSocketManagerTestSuite) SetupTest() {
 
 func (s *KlineWebSocketManagerTestSuite) TearDownTest() {
 	if s.manager != nil {
-		s.manager.Stop()
+		if err := s.manager.Stop(); err != nil {
+			s.T().Errorf("failed to stop manager: %v", err)
+		}
 	}
 }
 
@@ -51,12 +53,13 @@ func (s *KlineWebSocketManagerTestSuite) TestStart() {
 
 // TestRegisterActiveSymbols tests symbol registration
 func (s *KlineWebSocketManagerTestSuite) TestRegisterActiveSymbols() {
-	s.manager.Start()
+	err := s.manager.Start()
+	assert.NoError(s.T(), err)
 
 	symbols := []string{"BTCUSDT", "ETHUSDT", "BNBUSDT"}
 	timeframes := []string{"1m", "4h"}
 
-	err := s.manager.RegisterActiveSymbols(symbols, timeframes)
+	err = s.manager.RegisterActiveSymbols(symbols, timeframes)
 	assert.NoError(s.T(), err)
 
 	// Check active symbols registered
@@ -71,16 +74,18 @@ func (s *KlineWebSocketManagerTestSuite) TestRegisterActiveSymbols() {
 
 // TestUnregisterSymbol tests symbol unregistration
 func (s *KlineWebSocketManagerTestSuite) TestUnregisterSymbol() {
-	s.manager.Start()
+	err := s.manager.Start()
+	assert.NoError(s.T(), err)
 
 	symbols := []string{"BTCUSDT", "ETHUSDT"}
 	timeframes := []string{"1m"}
 
-	s.manager.RegisterActiveSymbols(symbols, timeframes)
+	err = s.manager.RegisterActiveSymbols(symbols, timeframes)
+	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), 2, len(s.manager.activeSymbols))
 
 	// Unregister one symbol
-	err := s.manager.UnregisterSymbol("BTCUSDT")
+	err = s.manager.UnregisterSymbol("BTCUSDT")
 	assert.NoError(s.T(), err)
 
 	assert.Equal(s.T(), 1, len(s.manager.activeSymbols))
@@ -90,7 +95,8 @@ func (s *KlineWebSocketManagerTestSuite) TestUnregisterSymbol() {
 
 // TestConnectionPooling tests that manager creates multiple connections when needed
 func (s *KlineWebSocketManagerTestSuite) TestConnectionPooling() {
-	s.manager.Start()
+	err := s.manager.Start()
+	assert.NoError(s.T(), err)
 
 	// Set low limit for testing
 	s.manager.maxStreamsPerConn = 3
@@ -99,7 +105,7 @@ func (s *KlineWebSocketManagerTestSuite) TestConnectionPooling() {
 	symbols := []string{"BTCUSDT", "ETHUSDT", "BNBUSDT", "ADAUSDT", "DOGEUSDT"}
 	timeframes := []string{"1m", "4h"} // 5 symbols × 2 timeframes = 10 streams
 
-	err := s.manager.RegisterActiveSymbols(symbols, timeframes)
+	err = s.manager.RegisterActiveSymbols(symbols, timeframes)
 	assert.NoError(s.T(), err)
 
 	// Should create multiple connections (10 streams / 3 per conn = 4 connections)
@@ -113,7 +119,8 @@ func (s *KlineWebSocketManagerTestSuite) TestConnectionPooling() {
 
 // TestFindAvailableConnection tests connection selection logic
 func (s *KlineWebSocketManagerTestSuite) TestFindAvailableConnection() {
-	s.manager.Start()
+	err := s.manager.Start()
+	assert.NoError(s.T(), err)
 	s.manager.maxStreamsPerConn = 2
 
 	// Create some subscriptions
@@ -126,7 +133,9 @@ func (s *KlineWebSocketManagerTestSuite) TestFindAvailableConnection() {
 
 	// Create second connection with space
 	conn := NewBinanceWebSocketClient(true)
-	conn.Connect()
+	if err := conn.Connect(); err != nil {
+		s.T().Errorf("failed to connect: %v", err)
+	}
 	s.manager.connections = append(s.manager.connections, conn)
 
 	// Now should return connection 1
@@ -136,20 +145,26 @@ func (s *KlineWebSocketManagerTestSuite) TestFindAvailableConnection() {
 
 // TestResubscribeConnection tests reconnection logic
 func (s *KlineWebSocketManagerTestSuite) TestResubscribeConnection() {
-	s.manager.Start()
+	err := s.manager.Start()
+	assert.NoError(s.T(), err)
 
 	// Register some symbols
 	symbols := []string{"BTCUSDT", "ETHUSDT"}
 	timeframes := []string{"1m"}
-	s.manager.RegisterActiveSymbols(symbols, timeframes)
+	err = s.manager.RegisterActiveSymbols(symbols, timeframes)
+	assert.NoError(s.T(), err)
 
 	originalSubCount := len(s.manager.subscriptions)
 	assert.Equal(s.T(), 2, originalSubCount)
 
 	// Simulate disconnect and reconnect
-	s.manager.connections[0].Disconnect()
+	if err := s.manager.connections[0].Disconnect(); err != nil {
+		s.T().Errorf("failed to disconnect: %v", err)
+	}
 	time.Sleep(100 * time.Millisecond)
-	s.manager.connections[0].Connect()
+	if err := s.manager.connections[0].Connect(); err != nil {
+		s.T().Errorf("failed to reconnect: %v", err)
+	}
 
 	// Resubscribe
 	s.manager.resubscribeConnection(0)
@@ -160,11 +175,13 @@ func (s *KlineWebSocketManagerTestSuite) TestResubscribeConnection() {
 
 // TestStaleDataDetection tests staleness detection
 func (s *KlineWebSocketManagerTestSuite) TestStaleDataDetection() {
-	s.manager.Start()
+	err := s.manager.Start()
+	assert.NoError(s.T(), err)
 	s.manager.staleDuration = 1 * time.Second // Short duration for testing
 
 	// Register a symbol
-	s.manager.RegisterActiveSymbols([]string{"BTCUSDT"}, []string{"1m"})
+	err = s.manager.RegisterActiveSymbols([]string{"BTCUSDT"}, []string{"1m"})
+	assert.NoError(s.T(), err)
 
 	subscriptionKey := "BTCUSDT@kline_1m"
 
@@ -183,11 +200,13 @@ func (s *KlineWebSocketManagerTestSuite) TestStaleDataDetection() {
 
 // TestGetStatus tests status reporting
 func (s *KlineWebSocketManagerTestSuite) TestGetStatus() {
-	s.manager.Start()
+	err := s.manager.Start()
+	assert.NoError(s.T(), err)
 
 	symbols := []string{"BTCUSDT", "ETHUSDT"}
 	timeframes := []string{"1m", "4h"}
-	s.manager.RegisterActiveSymbols(symbols, timeframes)
+	err = s.manager.RegisterActiveSymbols(symbols, timeframes)
+	assert.NoError(s.T(), err)
 
 	status := s.manager.GetStatus()
 
@@ -200,7 +219,8 @@ func (s *KlineWebSocketManagerTestSuite) TestGetStatus() {
 
 // TestKlineHandlerRegistration tests handler registration and callback
 func (s *KlineWebSocketManagerTestSuite) TestKlineHandlerRegistration() {
-	s.manager.Start()
+	err := s.manager.Start()
+	assert.NoError(s.T(), err)
 
 	handlerCalled := false
 	var receivedUpdate KlineUpdate
@@ -257,7 +277,8 @@ func TestEqualStringSlices(t *testing.T) {
 
 // TestConnectionCapacityLimit tests that connections respect max stream limit
 func (s *KlineWebSocketManagerTestSuite) TestConnectionCapacityLimit() {
-	s.manager.Start()
+	err := s.manager.Start()
+	assert.NoError(s.T(), err)
 	s.manager.maxStreamsPerConn = 5
 
 	// Register 10 symbols with 1 timeframe each = 10 streams
@@ -266,7 +287,7 @@ func (s *KlineWebSocketManagerTestSuite) TestConnectionCapacityLimit() {
 		symbols[i] = fmt.Sprintf("SYM%dUSDT", i)
 	}
 
-	err := s.manager.RegisterActiveSymbols(symbols, []string{"1m"})
+	err = s.manager.RegisterActiveSymbols(symbols, []string{"1m"})
 	assert.NoError(s.T(), err)
 
 	// Should have created 2 connections (10 streams / 5 per conn)

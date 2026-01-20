@@ -211,7 +211,9 @@ func (c *BinanceWebSocketClient) GetOrderUpdateChannel() <-chan OrderUpdate {
 
 // Reconnect attempts to reconnect the WebSocket
 func (c *BinanceWebSocketClient) Reconnect() error {
-	c.Disconnect()
+	if err := c.Disconnect(); err != nil {
+		return fmt.Errorf("failed to disconnect before reconnect: %w", err)
+	}
 	time.Sleep(c.reconnectDelay)
 	return c.Connect()
 }
@@ -293,27 +295,37 @@ func (c *BinanceWebSocketClient) processKlineData(kline map[string]interface{}) 
 
 	// Open price
 	if o, ok := kline["o"].(string); ok {
-		fmt.Sscanf(o, "%f", &update.Open)
+		if _, err := fmt.Sscanf(o, "%f", &update.Open); err != nil {
+			logger.Warnf("Failed to parse open price: %v", err)
+		}
 	}
 
 	// High price
 	if h, ok := kline["h"].(string); ok {
-		fmt.Sscanf(h, "%f", &update.High)
+		if _, err := fmt.Sscanf(h, "%f", &update.High); err != nil {
+			logger.Warnf("Failed to parse high price: %v", err)
+		}
 	}
 
 	// Low price
 	if l, ok := kline["l"].(string); ok {
-		fmt.Sscanf(l, "%f", &update.Low)
+		if _, err := fmt.Sscanf(l, "%f", &update.Low); err != nil {
+			logger.Warnf("Failed to parse low price: %v", err)
+		}
 	}
 
 	// Close price
-	if c, ok := kline["c"].(string); ok {
-		fmt.Sscanf(c, "%f", &update.Close)
+	if cval, ok := kline["c"].(string); ok {
+		if _, err := fmt.Sscanf(cval, "%f", &update.Close); err != nil {
+			logger.Warnf("Failed to parse close price: %v", err)
+		}
 	}
 
 	// Volume
 	if v, ok := kline["v"].(string); ok {
-		fmt.Sscanf(v, "%f", &update.Volume)
+		if _, err := fmt.Sscanf(v, "%f", &update.Volume); err != nil {
+			logger.Warnf("Failed to parse volume: %v", err)
+		}
 	}
 
 	// Close time

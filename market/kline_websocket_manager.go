@@ -130,7 +130,9 @@ func (m *KlineWebSocketManager) RegisterActiveSymbols(symbols []string, timefram
 			// Unsubscribe from all timeframes
 			if timeframes, ok := m.symbolTimeframes[symbol]; ok {
 				for _, tf := range timeframes {
-					m.unsubscribeInternal(symbol, tf)
+					if err := m.unsubscribeInternal(symbol, tf); err != nil {
+						logger.Warnf("Failed to unsubscribe %s@%s: %v", symbol, tf, err)
+					}
 				}
 			}
 		}
@@ -166,7 +168,9 @@ func (m *KlineWebSocketManager) UnregisterSymbol(symbol string) error {
 	// Unsubscribe from all timeframes
 	if timeframes, ok := m.symbolTimeframes[symbol]; ok {
 		for _, tf := range timeframes {
-			m.unsubscribeInternal(symbol, tf)
+			if err := m.unsubscribeInternal(symbol, tf); err != nil {
+				logger.Warnf("Failed to unsubscribe %s@%s: %v", symbol, tf, err)
+			}
 		}
 	}
 

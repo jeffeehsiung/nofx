@@ -180,7 +180,9 @@ func (bos *BinanceOrderWebSocket) GetOrderUpdateChannel() <-chan OrderUpdate {
 
 // Reconnect attempts to reconnect the WebSocket
 func (bos *BinanceOrderWebSocket) Reconnect() error {
-	bos.Disconnect()
+	if err := bos.Disconnect(); err != nil {
+		return fmt.Errorf("failed to disconnect before reconnecting: %w", err)
+	}
 	time.Sleep(bos.reconnectDelay)
 	return bos.Connect()
 }

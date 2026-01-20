@@ -35,7 +35,10 @@ func TestFetchOrderBookDepth(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+			return
+		}
 	}))
 	defer server.Close()
 
@@ -503,6 +506,9 @@ func BenchmarkAnalyzeMarketMicrostructure(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		analyzer.AnalyzeMarketMicrostructure("BTCUSDT", depth, 50005, klines)
+		_, err := analyzer.AnalyzeMarketMicrostructure("BTCUSDT", depth, 50005, klines)
+		if err != nil {
+			b.Fatalf("AnalyzeMarketMicrostructure failed: %v", err)
+		}
 	}
 }
