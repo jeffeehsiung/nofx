@@ -97,7 +97,7 @@ func TestTradeFailureV2Integration(t *testing.T) {
 	fmt.Println("\n📊 TIER 2: PATTERN AGGREGATION & FEEDBACK GENERATION")
 	fmt.Println(strings.Repeat("-", 80))
 
-	fg := NewFeedbackGenerator("test_run", DefaultFeedbackConfig())
+	fg := NewFeedbackGenerator("test_run", 0.0,DefaultFeedbackConfig())
 	patterns := fg.identifyFailurePatterns(outcomes, &Metrics{})
 
 	fmt.Printf("Identified %d patterns from V2 analysis:\n", len(patterns))
@@ -119,7 +119,7 @@ func TestTradeFailureV2Integration(t *testing.T) {
 		TotalReturnPct:  -2.1,
 	}
 
-	optimizer := NewFactorOptimizer(DefaultFactorOptimizerConfig())
+	optimizer := NewFactorOptimizer(nil, DefaultFactorOptimizerConfig())
 	err := optimizer.OptimizeWeights(feedback, 1)
 	if err != nil {
 		t.Fatalf("OptimizeWeights failed: %v", err)

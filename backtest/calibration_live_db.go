@@ -80,6 +80,6 @@ func CalibrateFromLiveDB(posStore *store.PositionStore, traderID string, maxTrad
 // CalibrateFromOfflineRuns loads historical runs from disk and calibrates
 // This is the standard monthly recalibration path
 func CalibrateFromOfflineRuns(maxTrades int) (decision.FailureThresholds, int, string, error) {
-	fg := NewFeedbackGenerator("", DefaultFeedbackConfig())
+	fg := NewFeedbackGenerator("current_run", 0.0, DefaultFeedbackConfig())
 	return calibrateFailureThresholds("", fg, maxTrades)
 }

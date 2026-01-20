@@ -418,8 +418,8 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	}
 
 	// Initialize analysis systems (feedback, factor, compliance) for live trading
-	at.feedbackGenerator = backtest.NewFeedbackGenerator(config.ID, backtest.DefaultFeedbackConfig())
-	at.factorOptimizer = backtest.NewFactorOptimizer(backtest.DefaultFactorOptimizerConfig())
+	at.feedbackGenerator = backtest.NewFeedbackGenerator(at.id, at.initialBalance, backtest.DefaultFeedbackConfig())
+	at.factorOptimizer = backtest.NewFactorOptimizer(&config.StrategyConfig.RiskControl, backtest.DefaultFactorOptimizerConfig())
 	at.complianceTracker = backtest.NewComplianceTracker(backtest.DefaultComplianceConfig())
 	at.lastFeedback = nil
 	at.feedbackCycle = 0
@@ -1184,8 +1184,8 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 
 			// Generate feedback if enabled and enough trades have been made
 			// Regenerate feedback every 5 cycles to avoid constant recalculation
-			if at.feedbackGenerator != nil && stats.TotalTrades >= 3 {
-				if at.lastFeedback == nil || (stats.TotalTrades-at.feedbackCycle) >= 5 {
+			if at.feedbackGenerator != nil && stats.TotalTrades >= 1 {
+				if at.lastFeedback == nil || (stats.TotalTrades-at.feedbackCycle) >= 1 {
 					feedback, err := at.feedbackGenerator.GenerateFeedback()
 					if err != nil {
 						logger.Warnf("⚠️ [%s] Failed to generate feedback analysis: %v", at.name, err)
@@ -1198,7 +1198,21 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 						}
 						logger.Infof("✅ [%s] Generated feedback analysis at cycle %d: Total Return %.2f%%, Win Rate %.1f%%",
 							at.name, stats.TotalTrades, feedback.TotalReturnPct, feedback.WinRate)
-
+						// Feed the feedback to LLM
+						lang := "en"
+						if strings.Contains(strings.ToLower(at.strategyEngine.GetConfig().PromptSections.RoleDefinition), "交易") {
+							lang = "zh"
+						}
+						userPrompt := at.feedbackGenerator.FormatFeedbackForPrompt(feedback, lang)
+						var systemPrompt string
+						if lang == "zh" {
+							systemPrompt = "你是一个经验丰富的加密货币交易策略顾问。根据以下反馈，帮助改进交易决策。"
+						} else {
+							systemPrompt = "You are an experienced crypto trading strategy advisor. Help improve trading decisions based on the following feedback."
+						}
+						if _, err := at.mcpClient.CallWithMessages(systemPrompt, userPrompt); err != nil {
+							logger.Warnf("⚠️ [%s] Error calling AI feedback advisor: %v", at.name, err)
+						}
 						// Calibrate failure thresholds from trading history (every 5 trades)
 						if stats.TotalTrades >= 10 {
 							if recentTrades, err := at.store.Position().GetRecentTrades(at.id, 500); err == nil && len(recentTrades) > 0 {
@@ -1242,6 +1256,8 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 									logger.Infof("⚠️ [%s] Failed to save factor optimizer state: %v", at.name, err)
 								}
 							}
+							// Update context with optimized weights
+							at.strategyEngine.GetConfig().RiskControl = *at.factorOptimizer.GetRiskControlConfig()
 						}
 
 						// Evolve prompts based on performance
@@ -2755,32 +2771,59 @@ func (at *AutoTrader) saveCheckpoint() {
 		return
 	}
 
-	var equity, available, unrealizedPnL float64
+	var equity, available, unrealizedPnL, realizedPnL float64
 
 	// Try to extract equity from account info
 	if val, ok := account["total_equity"].(float64); ok {
 		equity = val
 	} else if val, ok := account["totalWalletBalance"].(float64); ok {
 		equity = val
+	} else {
+		accountInfo, err := at.GetAccountInfo()
+		if err == nil {
+			if val, ok := accountInfo["total_equity"].(float64); ok {
+				equity = val
+			}
+		}
 	}
 
 	if val, ok := account["available_balance"].(float64); ok {
 		available = val
 	} else if val, ok := account["availableBalance"].(float64); ok {
 		available = val
+	} else {
+		accountInfo, err := at.GetAccountInfo()
+		if err == nil {
+			if val, ok := accountInfo["available_balance"].(float64); ok {
+				available = val
+			}
+		}
 	}
 
 	if val, ok := account["total_unrealized_profit"].(float64); ok {
 		unrealizedPnL = val
 	} else if val, ok := account["totalUnrealizedProfit"].(float64); ok {
 		unrealizedPnL = val
+	} else {
+		accountInfo, err := at.GetAccountInfo()
+		if err == nil {
+			if val, ok := accountInfo["unrealized_profit"].(float64); ok {
+				unrealizedPnL = val
+			}
+		}
+	}
+
+	if val, ok := account["total_pnl"].(float64); ok {
+		realizedPnL = val
+	} else {
+		realizedPnL = equity - at.initialBalance - unrealizedPnL
 	}
 
 	checkpoint := map[string]interface{}{
 		"equity":         equity,
 		"available":      available,
 		"unrealized_pnl": unrealizedPnL,
-		"realized_pnl":   equity - at.initialBalance,
+		"realized_pnl":   realizedPnL,
 		"timestamp":      time.Now().UnixMilli(),
 		"cycle":          at.cycleNumber,
 	}

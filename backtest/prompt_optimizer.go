@@ -137,7 +137,9 @@ func NewPromptOptimizerWithAI(basePrompt *store.PromptSectionsConfig, config *Pr
 	po.CurrentVariant = baseVariant
 
 	// Save initial variant to database
-	po.SaveVariantToDB(baseVariant)
+	if err := po.SaveVariantToDB(baseVariant); err != nil {
+		logger.Errorf("[PromptOptimizer] Failed to save base variant: %v", err)
+	}
 
 	logger.Infof("[PromptOptimizer] Initialized with base prompt: gen1-v1 (generation: 1)")
 
@@ -278,7 +280,9 @@ func (po *PromptOptimizer) ActivateVariant(variantID string) error {
 				}
 			}
 			// Persist the activation state change to database
-			po.SaveAllVariantsToDB()
+			if err := po.SaveAllVariantsToDB(); err != nil {
+				return fmt.Errorf("failed to save all variants to DB: %w", err)
+			}
 			return nil
 		}
 	}
@@ -307,7 +311,9 @@ func (po *PromptOptimizer) RecordDecisionOutcome(variantID string, metrics *Metr
 
 			// Save updated variant to database periodically (every 5 decisions)
 			if po.DecisionCounts[variantID]%5 == 0 {
-				po.SaveVariantToDB(variant)
+				if err := po.SaveVariantToDB(variant); err != nil {
+					logger.Errorf("[PromptOptimizer] Failed to save variant %s: %v", variant.ID, err)
+				}
 			}
 			break
 		}
@@ -471,7 +477,9 @@ func (po *PromptOptimizer) evolvePromptsWithLLM(variantID string, strategy_promp
 	po.CurrentVariant = evolvedVariant
 
 	// Save new variant to database
-	po.SaveVariantToDB(evolvedVariant)
+	if err := po.SaveVariantToDB(evolvedVariant); err != nil {
+		logger.Errorf("[PromptOptimizer] Failed to save evolved variant %s: %v", evolvedVariant.ID, err)
+	}
 
 	// Reset tracking
 	po.DecisionCounts = make(map[string]int)

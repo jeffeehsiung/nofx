@@ -108,8 +108,8 @@ type FeedbackConfig struct {
 func DefaultFeedbackConfig() FeedbackConfig {
 	return FeedbackConfig{
 		EnableFeedback:          true,
-		MinDecisionsForFeedback: 10,
-		FeedbackWindowCycles:    20,
+		MinDecisionsForFeedback: 1,
+		FeedbackWindowCycles:    2,
 		TopTradesCount:          3,
 		MinPatternFrequency:     2,
 	}
@@ -121,14 +121,16 @@ type FeedbackGenerator struct {
 	config FeedbackConfig
 
 	// Calibrated thresholds for Trade Failure V2 (defaults if calibration unavailable)
+	initialBalance    float64
 	failureThresholds decision.FailureThresholds
 }
 
 // NewFeedbackGenerator creates a new feedback generator
-func NewFeedbackGenerator(runID string, config FeedbackConfig) *FeedbackGenerator {
+func NewFeedbackGenerator(runID string, initialBalance float64, config FeedbackConfig) *FeedbackGenerator {
 	return &FeedbackGenerator{
 		runID:             runID,
 		config:            config,
+		initialBalance:    initialBalance,
 		failureThresholds: decision.DefaultFailureThresholds(),
 	}
 }
@@ -152,12 +154,8 @@ func (fg *FeedbackGenerator) GenerateFeedback() (*FeedbackAnalysis, error) {
 	}
 
 	// Get backtest metrics
-	ckpt, err := LoadCheckpoint(fg.runID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load checkpoint: %w", err)
-	}
 	cfg := &BacktestConfig{
-		InitialBalance: ckpt.Equity + ckpt.RealizedPnL - ckpt.UnrealizedPnL,
+		InitialBalance: fg.initialBalance,
 	}
 
 	state, err := fg.getCurrentState()

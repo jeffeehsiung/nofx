@@ -119,9 +119,41 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	dLogDir := decisionLogDir(cfg.RunID)
 	account := NewBacktestAccount(cfg.InitialBalance, cfg.FeeBps, cfg.SlippageBps)
 
+	createdAt := time.Now().UTC()
+	state := &BacktestState{
+		Positions:      make(map[string]PositionSnapshot),
+		Cash:           account.Cash(),
+		Equity:         cfg.InitialBalance,
+		UnrealizedPnL:  0,
+		RealizedPnL:    0,
+		MaxEquity:      cfg.InitialBalance,
+		MinEquity:      cfg.InitialBalance,
+		MaxDrawdownPct: 0,
+		LastUpdate:     createdAt,
+	}
+
+	var (
+		aiCache   *AICache
+		cachePath string
+	)
+	if cfg.CacheAI || cfg.ReplayOnly || cfg.SharedAICachePath != "" {
+		cachePath = cfg.SharedAICachePath
+		if cachePath == "" {
+			cachePath = filepath.Join(runDir(cfg.RunID), "ai_cache.json")
+		}
+		cache, err := LoadAICache(cachePath)
+		if err != nil {
+			return nil, fmt.Errorf("load ai cache: %w", err)
+		}
+		aiCache = cache
+	}
+
+	// Create strategy engine from backtest config for unified prompt generation
+	strategyConfig := cfg.ToStrategyConfig()
+	strategyEngine := decision.NewStrategyEngine(strategyConfig)
 	// Initialize feedback loop
 	feedbackConfig := DefaultFeedbackConfig()
-	feedbackGenerator := NewFeedbackGenerator(cfg.RunID, feedbackConfig)
+	feedbackGenerator := NewFeedbackGenerator(cfg.RunID, cfg.InitialBalance, feedbackConfig)
 
 	failureThresholds := decision.DefaultFailureThresholds()
 
@@ -166,43 +198,11 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 
 	// Initialize advanced optimization systems
 	// Use a default system prompt (will be overridden by StrategyEngine)
-	defaultPrompt := cfg.loadedStrategy.PromptSections
+	defaultPrompt := strategyEngine.GetConfig().PromptSections
+	riskcontrolConfig := strategyEngine.GetConfig().RiskControl
 	promptOptimizer := NewPromptOptimizerWithAI(&defaultPrompt, DefaultPromptOptimizerConfig(), client, cfg.RunID, cfg.Storage)
-	factorOptimizer := NewFactorOptimizer(DefaultFactorOptimizerConfig())
+	factorOptimizer := NewFactorOptimizer(&riskcontrolConfig, DefaultFactorOptimizerConfig())
 	complianceTracker := NewComplianceTracker(DefaultComplianceConfig())
-
-	createdAt := time.Now().UTC()
-	state := &BacktestState{
-		Positions:      make(map[string]PositionSnapshot),
-		Cash:           account.Cash(),
-		Equity:         cfg.InitialBalance,
-		UnrealizedPnL:  0,
-		RealizedPnL:    0,
-		MaxEquity:      cfg.InitialBalance,
-		MinEquity:      cfg.InitialBalance,
-		MaxDrawdownPct: 0,
-		LastUpdate:     createdAt,
-	}
-
-	var (
-		aiCache   *AICache
-		cachePath string
-	)
-	if cfg.CacheAI || cfg.ReplayOnly || cfg.SharedAICachePath != "" {
-		cachePath = cfg.SharedAICachePath
-		if cachePath == "" {
-			cachePath = filepath.Join(runDir(cfg.RunID), "ai_cache.json")
-		}
-		cache, err := LoadAICache(cachePath)
-		if err != nil {
-			return nil, fmt.Errorf("load ai cache: %w", err)
-		}
-		aiCache = cache
-	}
-
-	// Create strategy engine from backtest config for unified prompt generation
-	strategyConfig := cfg.ToStrategyConfig()
-	strategyEngine := decision.NewStrategyEngine(strategyConfig)
 
 	r := &Runner{
 		cfg:               cfg,
@@ -870,6 +870,10 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 
 	// Fetch quantitative data if enabled in strategy (uses current data as approximation)
 	strategyConfig := r.strategyEngine.GetConfig()
+	lang := "en"
+	if strings.Contains(strings.ToLower(strategyConfig.PromptSections.RoleDefinition), "交易") {
+		lang = "zh"
+	}
 	if strategyConfig.Indicators.EnableQuantData && strategyConfig.Indicators.QuantDataAPIURL != "" {
 		// Collect symbols to query (candidate coins + position coins)
 		symbolSet := make(map[string]bool)
@@ -917,7 +921,7 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 	// Generate feedback if enabled and enough decisions have been made
 	if r.feedbackConfig.EnableFeedback && callCount >= r.feedbackConfig.MinDecisionsForFeedback {
 		// Regenerate feedback every 5 cycles
-		if r.lastFeedback == nil || (callCount-r.feedbackCycle) >= 5 {
+		if r.lastFeedback == nil || (callCount-r.feedbackCycle) >= 1 {
 			feedback, err := r.feedbackGenerator.GenerateFeedback()
 			if err != nil {
 				logger.Infof("Failed to generate feedback: %v", err)
@@ -930,7 +934,17 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 				}
 				logger.Infof("✅ Generated feedback analysis at cycle %d: Total Return %.2f%%, Win Rate %.1f%%",
 					callCount, feedback.TotalReturnPct, feedback.WinRate)
-
+				// Feed feedback to LLM
+				userPrompt := r.feedbackGenerator.FormatFeedbackForPrompt(feedback, lang)
+				var systemPrompt string
+				if lang == "zh" {
+					systemPrompt = "你是一个经验丰富的加密货币交易策略顾问。根据以下反馈，帮助改进交易决策。"
+				} else {
+					systemPrompt = "You are an experienced crypto trading strategy advisor. Help improve trading decisions based on the following feedback."
+				}
+				if _, err := r.mcpClient.CallWithMessages(systemPrompt, userPrompt); err != nil {
+					logger.Warnf("⚠️ [%s] Error calling AI feedback advisor: %v", r.cfg.RunID, err)
+				}
 				// Optimize factor weights based on feedback
 				if r.factorOptimizer.ShouldOptimize(callCount, len(r.account.Positions())) {
 					if err := r.factorOptimizer.OptimizeWeights(feedback, callCount); err != nil {

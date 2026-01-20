@@ -64,26 +64,31 @@ func DefaultFactorOptimizerConfig() *FactorOptimizerConfig {
 }
 
 // NewFactorOptimizer creates a new factor optimizer using store.RiskControlConfig
-func NewFactorOptimizer(config *FactorOptimizerConfig) *FactorOptimizer {
+func NewFactorOptimizer(riskcontrolConfig *store.RiskControlConfig, config *FactorOptimizerConfig) *FactorOptimizer {
 	if config == nil {
 		config = DefaultFactorOptimizerConfig()
 	}
 
 	// Create default RiskControlConfig (matches store defaults)
-	defaultConfig := &store.RiskControlConfig{
-		MaxPositions:                 5,
-		BTCETHMaxLeverage:            5,
-		AltcoinMaxLeverage:           3,
-		BTCETHMaxPositionValueRatio:  5.0,
-		AltcoinMaxPositionValueRatio: 1.0,
-		MaxMarginUsage:               0.9,
-		MinPositionSize:              50.0,
-		MinRiskRewardRatio:           1.5,
-		MinConfidence:                65,
-		DrawdownMonitoringEnabled:    true,
-		DrawdownCheckInterval:        60,
-		MinProfitThreshold:           5.0,
-		DrawdownCloseThreshold:       40.0,
+	var defaultConfig *store.RiskControlConfig
+	if riskcontrolConfig == nil {
+		defaultConfig = &store.RiskControlConfig{
+			MaxPositions:                 5,
+			BTCETHMaxLeverage:            5,
+			AltcoinMaxLeverage:           3,
+			BTCETHMaxPositionValueRatio:  5.0,
+			AltcoinMaxPositionValueRatio: 1.0,
+			MaxMarginUsage:               0.9,
+			MinPositionSize:              50.0,
+			MinRiskRewardRatio:           1.5,
+			MinConfidence:                65,
+			DrawdownMonitoringEnabled:    true,
+			DrawdownCheckInterval:        60,
+			MinProfitThreshold:           5.0,
+			DrawdownCloseThreshold:       40.0,
+		}
+	} else {
+		defaultConfig = riskcontrolConfig
 	}
 
 	// Copy for current config (will be modified)
@@ -138,7 +143,7 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 	newConfig := *fo.currentConfig
 	improvements := make([]string, 0)
 
-	// 1. Optimize leverage based on failure patterns
+	// 1. Optimize leverage based on failure and success patterns
 	if fo.hasPattern(feedback.FailurePatterns, "high_leverage_losses") {
 		// Reduce leverage by 30%
 		newConfig.BTCETHMaxLeverage = int(float64(newConfig.BTCETHMaxLeverage) * 0.7)
@@ -150,6 +155,13 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 			newConfig.AltcoinMaxLeverage = 1
 		}
 		improvements = append(improvements, fmt.Sprintf("Reduced BTC/ETH leverage %d→%d, Altcoin %d→%d due to losses",
+			oldConfig.BTCETHMaxLeverage, newConfig.BTCETHMaxLeverage,
+			oldConfig.AltcoinMaxLeverage, newConfig.AltcoinMaxLeverage))
+	} else if fo.hasPattern(feedback.SuccessPatterns, "high_leverage_success") {
+		// Increase leverage by 15%
+		newConfig.BTCETHMaxLeverage = int(float64(newConfig.BTCETHMaxLeverage) * 1.15)
+		newConfig.AltcoinMaxLeverage = int(float64(newConfig.AltcoinMaxLeverage) * 1.15)
+		improvements = append(improvements, fmt.Sprintf("Increased BTC/ETH leverage %d→%d, Altcoin %d→%d due to success",
 			oldConfig.BTCETHMaxLeverage, newConfig.BTCETHMaxLeverage,
 			oldConfig.AltcoinMaxLeverage, newConfig.AltcoinMaxLeverage))
 	}
@@ -340,6 +352,11 @@ func (fo *FactorOptimizer) hasPattern(patterns []TradingPattern, patternType str
 		}
 	}
 	return false
+}
+
+// GetRiskControlConfig returns the current RiskControlConfig
+func (fo *FactorOptimizer) GetRiskControlConfig() *store.RiskControlConfig {
+	return fo.currentConfig
 }
 
 // GetOptimizationHistory returns the optimization history
