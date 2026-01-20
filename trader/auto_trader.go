@@ -25,7 +25,7 @@ type AutoTraderConfig struct {
 	AIModel string // AI model: "qwen" or "deepseek"
 
 	// Trading platform selection
-	Exchange   string // Exchange type: "binance", "bybit", "okx", "bitget", "hyperliquid", "aster" or "lighter"
+	Exchange   string // Exchange type: "binance", "bybit", "okx", "bitget", "hyperliquid", "aster"
 	ExchangeID string // Exchange account UUID (for multi-account support)
 
 	// Binance API configuration
@@ -287,24 +287,6 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize Aster trader: %w", err)
 		}
-	case "lighter":
-		logger.Infof("🏦 [%s] Using LIGHTER trading", config.Name)
-
-		if config.LighterWalletAddr == "" || config.LighterAPIKeyPrivateKey == "" {
-			return nil, fmt.Errorf("Lighter requires wallet address and API Key private key")
-		}
-
-		// Lighter only supports mainnet (testnet disabled)
-		trader, err = NewLighterTraderV2(
-			config.LighterWalletAddr,
-			config.LighterAPIKeyPrivateKey,
-			config.LighterAPIKeyIndex,
-			false, // Always use mainnet for Lighter
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize LIGHTER trader: %w", err)
-		}
-		logger.Infof("✓ LIGHTER trader initialized successfully")
 	default:
 		return nil, fmt.Errorf("unsupported trading platform: %s", config.Exchange)
 	}
@@ -456,14 +438,6 @@ func (at *AutoTrader) Run() error {
 	orderSyncInterval := at.config.OrderSyncInterval
 	if orderSyncInterval == 0 {
 		orderSyncInterval = 30 * time.Second
-	}
-
-	// Start Lighter order sync if using Lighter exchange
-	if at.exchange == "lighter" {
-		if lighterTrader, ok := at.trader.(*LighterTraderV2); ok && at.store != nil {
-			lighterTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, orderSyncInterval)
-			logger.Infof("🔄 [%s] Lighter order+position sync enabled (every %v)", at.name, orderSyncInterval)
-		}
 	}
 
 	// Start Hyperliquid order sync if using Hyperliquid exchange
@@ -2641,7 +2615,7 @@ func (at *AutoTrader) recordAndConfirmOrder(orderResult map[string]interface{}, 
 	// Exchanges with OrderSync: Skip immediate order recording, let OrderSync handle it
 	// This ensures accurate data from GetTrades API and avoids duplicate records
 	switch at.exchange {
-	case "binance", "lighter", "hyperliquid", "bybit", "okx", "bitget", "aster":
+	case "binance", "hyperliquid", "bybit", "okx", "bitget", "aster":
 		logger.Infof("  📝 Order submitted (id: %s), will be synced by OrderSync", orderID)
 		return
 	}

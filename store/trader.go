@@ -339,8 +339,7 @@ func (s *TraderStore) GetFullConfig(userID, traderID string) (*TraderFullConfig,
 			e.id, COALESCE(e.exchange_type, '') as exchange_type, COALESCE(e.account_name, '') as account_name,
 			e.user_id, e.name, e.type, e.enabled, e.api_key, e.secret_key, COALESCE(e.passphrase, ''), e.testnet,
 			COALESCE(e.hyperliquid_wallet_addr, ''), COALESCE(e.aster_user, ''), COALESCE(e.aster_signer, ''),
-			COALESCE(e.aster_private_key, ''), COALESCE(e.lighter_wallet_addr, ''), COALESCE(e.lighter_private_key, ''),
-			COALESCE(e.lighter_api_key_private_key, ''), COALESCE(e.lighter_api_key_index, 0), e.created_at, e.updated_at
+			COALESCE(e.aster_private_key, ''), e.created_at, e.updated_at
 		FROM traders t
 		JOIN ai_models a ON t.ai_model_id = a.id AND t.user_id = a.user_id
 		JOIN exchanges e ON t.exchange_id = e.id AND t.user_id = e.user_id
@@ -358,7 +357,6 @@ func (s *TraderStore) GetFullConfig(userID, traderID string) (*TraderFullConfig,
 		&exchange.UserID, &exchange.Name, &exchange.Type, &exchange.Enabled,
 		&exchange.APIKey, &exchange.SecretKey, &exchange.Passphrase, &exchange.Testnet, &exchange.HyperliquidWalletAddr,
 		&exchange.AsterUser, &exchange.AsterSigner, &exchange.AsterPrivateKey,
-		&exchange.LighterWalletAddr, &exchange.LighterPrivateKey, &exchange.LighterAPIKeyPrivateKey, &exchange.LighterAPIKeyIndex,
 		&exchangeCreatedAt, &exchangeUpdatedAt,
 	)
 	if err != nil {
@@ -378,8 +376,6 @@ func (s *TraderStore) GetFullConfig(userID, traderID string) (*TraderFullConfig,
 	exchange.SecretKey = s.decrypt(exchange.SecretKey)
 	exchange.Passphrase = s.decrypt(exchange.Passphrase)
 	exchange.AsterPrivateKey = s.decrypt(exchange.AsterPrivateKey)
-	exchange.LighterPrivateKey = s.decrypt(exchange.LighterPrivateKey)
-	exchange.LighterAPIKeyPrivateKey = s.decrypt(exchange.LighterAPIKeyPrivateKey)
 
 	// Load associated strategy
 	var strategy *Strategy

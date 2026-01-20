@@ -689,12 +689,6 @@ func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg 
 		traderConfig.AsterUser = exchangeCfg.AsterUser
 		traderConfig.AsterSigner = exchangeCfg.AsterSigner
 		traderConfig.AsterPrivateKey = exchangeCfg.AsterPrivateKey
-	case "lighter":
-		traderConfig.LighterPrivateKey = exchangeCfg.LighterPrivateKey
-		traderConfig.LighterWalletAddr = exchangeCfg.LighterWalletAddr
-		traderConfig.LighterAPIKeyPrivateKey = exchangeCfg.LighterAPIKeyPrivateKey
-		traderConfig.LighterAPIKeyIndex = exchangeCfg.LighterAPIKeyIndex
-		traderConfig.LighterTestnet = traderCfg.PaperTrading || exchangeCfg.Testnet
 	}
 
 	// Set API keys based on AI model

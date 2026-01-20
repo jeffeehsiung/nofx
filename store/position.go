@@ -28,7 +28,7 @@ type TraderPosition struct {
 	ID                 int64      `json:"id"`
 	TraderID           string     `json:"trader_id"`
 	ExchangeID         string     `json:"exchange_id"`          // Exchange account UUID (for multi-account support)
-	ExchangeType       string     `json:"exchange_type"`        // Exchange type: binance/bybit/okx/hyperliquid/aster/lighter
+	ExchangeType       string     `json:"exchange_type"`        // Exchange type: binance/bybit/okx/hyperliquid/aster
 	ExchangePositionID string     `json:"exchange_position_id"` // Exchange-specific unique position ID for deduplication
 	Symbol             string     `json:"symbol"`
 	Side               string     `json:"side"`           // LONG/SHORT

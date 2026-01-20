@@ -168,7 +168,7 @@ func getKlinesFromHyperliquid(symbol, interval string, limit int) ([]Kline, erro
 }
 
 // GetKlinesCoinank fetches kline data for crypto exchanges via CoinAnk (Binance default with multi-exchange support)
-// exchange: "binance", "bybit", "okx", "bitget", "aster", "lighter" (lighter falls back to binance)
+// exchange: "binance", "bybit", "okx", "bitget", "aster"
 // interval: supports second/minute/hour/day/week/month intervals as provided by CoinAnk
 func GetKlinesCoinank(symbol, interval, exchange string, limit int) ([]Kline, error) {
 	// Map exchange string to coinank enum
@@ -184,9 +184,6 @@ func GetKlinesCoinank(symbol, interval, exchange string, limit int) ([]Kline, er
 		coinankExchange = coinank_enum.Bitget
 	case "aster":
 		coinankExchange = coinank_enum.Aster
-	case "lighter":
-		// Lighter doesn't have direct CoinAnk support, use Binance data as fallback
-		coinankExchange = coinank_enum.Binance
 	default:
 		logger.Warnf("⚠️ Unknown exchange '%s', defaulting to Binance for CoinAnk", exchange)
 		coinankExchange = coinank_enum.Binance

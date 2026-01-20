@@ -6,7 +6,6 @@ require (
 	github.com/adshao/go-binance/v2 v2.8.9
 	github.com/agiledragon/gomonkey/v2 v2.14.0
 	github.com/bybit-exchange/bybit.go.api v1.1.1
-	github.com/elliottech/lighter-go v1.0.2
 	github.com/ethereum/go-ethereum v1.16.8
 	github.com/gin-gonic/gin v1.11.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
@@ -42,7 +41,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/elastic/go-sysinfo v1.15.4 // indirect
 	github.com/elastic/go-windows v1.0.2 // indirect
-	github.com/elliottech/poseidon_crypto v0.0.15 // indirect
 	github.com/ethereum/c-kzg-4844/v2 v2.1.5 // indirect
 	github.com/ethereum/go-verkle v0.2.2 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect

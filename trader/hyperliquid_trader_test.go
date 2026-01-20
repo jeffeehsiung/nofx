@@ -207,11 +207,12 @@ func NewHyperliquidTestSuite(t *testing.T) *HyperliquidTestSuite {
 	exchange := hyperliquid.NewExchange(
 		ctx,
 		privateKey,
-		mockServer.URL, // Use mock server URL
-		nil,
-		"",
+		mockServer.URL,      // Use mock server URL
+		&hyperliquid.Meta{}, // Provide empty Meta
+		"",                  // Some string argument
 		walletAddr,
-		nil,
+		&hyperliquid.SpotMeta{},   // Provide empty SpotMeta
+		&hyperliquid.MixedArray{}, // Provide empty MixedArray
 	)
 
 	// Create meta (simulate successful fetch)

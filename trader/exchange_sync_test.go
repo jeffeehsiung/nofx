@@ -188,7 +188,7 @@ func runStandardTests(t *testing.T, exchangeName string) {
 
 // TestAllExchangesStandardScenarios runs standard scenarios for all exchanges
 func TestAllExchangesStandardScenarios(t *testing.T) {
-	exchanges := []string{"hyperliquid", "binance", "bybit", "okx", "bitget", "aster", "lighter"}
+	exchanges := []string{"hyperliquid", "binance", "bybit", "okx", "bitget", "aster"}
 
 	for _, exchange := range exchanges {
 		t.Run(exchange, func(t *testing.T) {

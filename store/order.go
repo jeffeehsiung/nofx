@@ -11,7 +11,7 @@ type TraderOrder struct {
 	ID                int64     `json:"id"`
 	TraderID          string    `json:"trader_id"`
 	ExchangeID        string    `json:"exchange_id"`         // Exchange account UUID
-	ExchangeType      string    `json:"exchange_type"`       // Exchange type (hyperliquid/lighter/binance/etc)
+	ExchangeType      string    `json:"exchange_type"`       // Exchange type (hyperliquid/binance/etc)
 	ExchangeOrderID   string    `json:"exchange_order_id"`   // Exchange order ID
 	ClientOrderID     string    `json:"client_order_id"`     // Client order ID
 	Symbol            string    `json:"symbol"`              // Trading pair
@@ -44,7 +44,7 @@ type TraderFill struct {
 	ID              int64     `json:"id"`
 	TraderID        string    `json:"trader_id"`
 	ExchangeID      string    `json:"exchange_id"`       // Exchange account UUID
-	ExchangeType    string    `json:"exchange_type"`     // Exchange type (hyperliquid/lighter/binance/etc)
+	ExchangeType    string    `json:"exchange_type"`     // Exchange type (hyperliquid/binance/etc)
 	OrderID         int64     `json:"order_id"`          // Related order ID
 	ExchangeOrderID string    `json:"exchange_order_id"` // Exchange order ID
 	ExchangeTradeID string    `json:"exchange_trade_id"` // Exchange trade ID
