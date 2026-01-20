@@ -1312,9 +1312,21 @@ func (fg *FeedbackGenerator) generateKeyInsights(metrics *Metrics, outcomes []De
 
 	// Profit factor analysis
 	if metrics.ProfitFactor < 1.0 {
-		insights = append(insights, fmt.Sprintf("⚠️ Profit factor %.2f < 1.0: Losses exceed profits. Let winners run longer", metrics.ProfitFactor))
+		insights = append(insights, fmt.Sprintf("⚠️ Okay profit factor %.2f < 1.0: Losses exceed profits. Strategy is likely losing money over time."+
+			"Every single trade** must have a **minimum 1.5:1 reward-to-risk ratio** before entry."+
+			"Until you have a winning strategy, you must enforce discipline. **Aim for a minimum 2:1 Reward-to-Risk ratio on every planned trade.**"+
+			"This means if your stop-loss is 2%%, your target should be at least 4%% away."+
+			"**Define Riding-the-Trend as a Trade Management Rule**: Once a trade is in profit (e.g., +1.5R), move your stop-loss to breakeven."+
+			"Then* you can ride-the-trend without risk. This is how you let winners run safely."+
+			"### 📝 **Your New Trade Checklist (Must Complete Before Every Entry)**"+
+			"- [ ] **Confidence Level ≥ 70%%?**"+
+			"- [ ] **Position Size = 50%% of my usual size?**"+
+			"- [ ] **Stop-Loss Set at 2-3%%?**"+
+			"- [ ] **Price Target Set for at least 2x the risk (2:1 R/R)?**"+
+			"- [ ] **Entry confirmed by volume & multi-timeframe alignment?**"+
+			"- [ ] **Market context (high timeframe) supportive?** \n\n", metrics.ProfitFactor))
 	} else if metrics.ProfitFactor < 1.5 {
-		insights = append(insights, fmt.Sprintf("Profit factor %.2f is acceptable but can be improved. Focus on risk/reward ratio", metrics.ProfitFactor))
+		insights = append(insights, fmt.Sprintf("Profit factor %.2f is acceptable but can be improved. Focus on better closing time, and ride the market trend.", metrics.ProfitFactor))
 	} else {
 		insights = append(insights, fmt.Sprintf("✅ Good profit factor (%.2f). Average wins sufficiently larger than losses", metrics.ProfitFactor))
 	}
@@ -1454,7 +1466,7 @@ func (fg *FeedbackGenerator) generateRecommendedActions(analysis *FeedbackAnalys
 	// Based on profit factor
 	if analysis.ProfitFactor < 1.5 {
 		actions = append(actions, "11. LET WINNERS RUN: Move stop-loss to breakeven and let profitable trades reach larger targets")
-		actions = append(actions, "12. IMPROVE RISK/REWARD: Target at least 2:1 reward-to-risk ratio on all trades")
+		actions = append(actions, "12. IMPROVE RISK/REWARD: Target at least 2:1 reward-to-risk ratio on all trades. But also okay to have lower R/R if you can ride the market trend")
 	}
 
 	return actions
