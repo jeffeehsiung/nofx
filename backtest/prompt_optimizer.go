@@ -22,10 +22,13 @@ import (
 
 // PromptVariant represents a specific version of a system prompt
 type PromptVariant struct {
-	ID               string    `json:"id"`
-	SystemPromptText string    `json:"system_prompt_text"` // Role definition + trading principles
-	Version          int       `json:"version"`
-	CreatedAt        time.Time `json:"created_at"`
+	ID                     string    `json:"id"`
+	PromptRoleDefinition   string    `json:"prompt_role_definition"`
+	PromptTradingFrequency string    `json:"prompt_trading_frequency"`
+	PromptEntryStandards   string    `json:"prompt_entry_standards"`
+	PromptDecisionProcess  string    `json:"prompt_decision_process"`
+	Version                int       `json:"version"`
+	CreatedAt              time.Time `json:"created_at"`
 
 	// Performance metrics
 	TotalDecisions int     `json:"total_decisions"`
@@ -44,7 +47,7 @@ type PromptVariant struct {
 // PromptOptimizer manages prompt evolution and A/B testing
 type PromptOptimizer struct {
 	RunID          string // Backtest run ID for database persistence
-	BasePrompt     string
+	BasePrompt     *store.PromptSectionsConfig
 	Variants       []*PromptVariant
 	CurrentVariant *PromptVariant
 	Generation     int
@@ -90,12 +93,12 @@ func DefaultPromptOptimizerConfig() *PromptOptimizerConfig {
 }
 
 // NewPromptOptimizer creates a new prompt optimizer
-func NewPromptOptimizer(basePrompt string, config *PromptOptimizerConfig) *PromptOptimizer {
+func NewPromptOptimizer(basePrompt *store.PromptSectionsConfig, config *PromptOptimizerConfig) *PromptOptimizer {
 	return NewPromptOptimizerWithAI(basePrompt, config, nil, "", nil)
 }
 
 // NewPromptOptimizerWithAI creates a new prompt optimizer with AI client for LLM-based evolution
-func NewPromptOptimizerWithAI(basePrompt string, config *PromptOptimizerConfig, aiClient interface {
+func NewPromptOptimizerWithAI(basePrompt *store.PromptSectionsConfig, config *PromptOptimizerConfig, aiClient interface {
 	CallWithMessages(systemPrompt, userPrompt string) (string, error)
 }, runID string, storage *store.BacktestStore) *PromptOptimizer {
 	if config == nil {
@@ -118,13 +121,16 @@ func NewPromptOptimizerWithAI(basePrompt string, config *PromptOptimizerConfig, 
 
 	// Create initial variant (base prompt) with consistent naming: gen1-v1
 	baseVariant := &PromptVariant{
-		ID:               "gen1-v1",
-		SystemPromptText: basePrompt,
-		Version:          1,
-		CreatedAt:        time.Now(),
-		Generation:       1,
-		IsActive:         true,
-		FitnessScore:     0.0,
+		ID:                     "gen1-v1",
+		PromptRoleDefinition:   basePrompt.RoleDefinition,
+		PromptTradingFrequency: basePrompt.TradingFrequency,
+		PromptEntryStandards:   basePrompt.EntryStandards,
+		PromptDecisionProcess:  basePrompt.DecisionProcess,
+		Version:                1,
+		CreatedAt:              time.Now(),
+		Generation:             1,
+		IsActive:               true,
+		FitnessScore:           0.0,
 	}
 
 	po.Variants = append(po.Variants, baseVariant)
@@ -139,11 +145,35 @@ func NewPromptOptimizerWithAI(basePrompt string, config *PromptOptimizerConfig, 
 }
 
 // GetCurrentPrompt returns the currently active system prompt variant
-func (po *PromptOptimizer) GetCurrentPrompt() string {
-	if po.CurrentVariant != nil {
-		return po.CurrentVariant.SystemPromptText
+func (pv *PromptVariant) toStoreData(runID string) *store.PromptVariantData {
+	return &store.PromptVariantData{
+		ID:                     pv.ID,
+		RunID:                  runID,
+		VariantID:              pv.ID,
+		Generation:             pv.Generation,
+		IsActive:               pv.IsActive,
+		PromptRoleDefinition:   pv.PromptRoleDefinition,
+		PromptTradingFrequency: pv.PromptTradingFrequency,
+		PromptEntryStandards:   pv.PromptEntryStandards,
+		PromptDecisionProcess:  pv.PromptDecisionProcess,
+		TotalDecisions:         pv.TotalDecisions,
+		TotalReturn:            pv.TotalReturn,
+		WinRate:                pv.WinRate,
+		ProfitFactor:           pv.ProfitFactor,
+		SharpeRatio:            pv.SharpeRatio,
+		MaxDrawdown:            pv.MaxDrawdown,
+		FitnessScore:           pv.FitnessScore,
+		CreatedAt:              pv.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:              time.Now().Format(time.RFC3339),
 	}
-	return po.BasePrompt
+}
+
+// GetCurrentPrompt returns the currently active system prompt variant data
+func (po *PromptOptimizer) GetCurrentPrompt() *store.PromptVariantData {
+	if po.CurrentVariant != nil {
+		return po.CurrentVariant.toStoreData(po.RunID)
+	}
+	return nil
 }
 
 // GetAllVariants returns a copy of all prompt variants for inspection
@@ -168,22 +198,24 @@ func (po *PromptOptimizer) SaveVariantToDB(variant *PromptVariant) error {
 	if metrics == nil {
 		metrics = &Metrics{}
 	}
-
 	variantData := &store.PromptVariantData{
-		ID:             variant.ID,
-		RunID:          po.RunID,
-		VariantID:      variant.ID,
-		Generation:     variant.Generation,
-		IsActive:       variant.IsActive,
-		Prompt:         variant.SystemPromptText,
-		TotalDecisions: po.DecisionCounts[variant.ID],
-		TotalReturn:    metrics.TotalReturnPct,
-		WinRate:        metrics.WinRate,
-		ProfitFactor:   metrics.ProfitFactor,
-		SharpeRatio:    metrics.SharpeRatio,
-		MaxDrawdown:    metrics.MaxDrawdownPct,
-		FitnessScore:   variant.FitnessScore,
-		CreatedAt:      variant.CreatedAt.Format(time.RFC3339),
+		ID:                     variant.ID,
+		RunID:                  po.RunID,
+		VariantID:              variant.ID,
+		Generation:             variant.Generation,
+		IsActive:               variant.IsActive,
+		PromptRoleDefinition:   variant.PromptRoleDefinition,
+		PromptTradingFrequency: variant.PromptTradingFrequency,
+		PromptEntryStandards:   variant.PromptEntryStandards,
+		PromptDecisionProcess:  variant.PromptDecisionProcess,
+		TotalDecisions:         po.DecisionCounts[variant.ID],
+		TotalReturn:            metrics.TotalReturnPct,
+		WinRate:                metrics.WinRate,
+		ProfitFactor:           metrics.ProfitFactor,
+		SharpeRatio:            metrics.SharpeRatio,
+		MaxDrawdown:            metrics.MaxDrawdownPct,
+		FitnessScore:           variant.FitnessScore,
+		CreatedAt:              variant.CreatedAt.Format(time.RFC3339),
 	}
 
 	return po.Storage.SavePromptVariant(variantData)
@@ -280,7 +312,7 @@ func (po *PromptOptimizer) ShouldEvolve(currentCycle int) bool {
 
 // EvolvePrompts creates new generation of prompts using LLM-based evolution
 // The LLM analyzes performance and rewrites the system prompt to address weaknesses
-func (po *PromptOptimizer) EvolvePrompts() error {
+func (po *PromptOptimizer) EvolvePrompts(strategy_prompt *store.PromptSectionsConfig) error {
 	if !po.Config.EnableOptimization {
 		return nil
 	}
@@ -306,7 +338,7 @@ func (po *PromptOptimizer) EvolvePrompts() error {
 
 	// Use LLM-based evolution if AI client is available
 	if po.AIClient != nil {
-		return po.evolvePromptsWithLLM()
+		return po.evolvePromptsWithLLM(strategy_prompt)
 	}
 
 	// Fallback: Keep top performers only (no genetic algorithm)
@@ -328,7 +360,7 @@ func (po *PromptOptimizer) EvolvePrompts() error {
 }
 
 // evolvePro mptsWithLLM uses LLM to evolve system prompts based on performance
-func (po *PromptOptimizer) evolvePromptsWithLLM() error {
+func (po *PromptOptimizer) evolvePromptsWithLLM(strategy_prompt *store.PromptSectionsConfig) error {
 	currentVariant := po.Variants[0] // Best performing variant
 	currentMetrics := po.PerformanceData[currentVariant.ID]
 
@@ -340,43 +372,69 @@ func (po *PromptOptimizer) evolvePromptsWithLLM() error {
 
 	// Detect language from current prompt
 	lang := "en"
-	if strings.Contains(currentVariant.SystemPromptText, "交易") || strings.Contains(currentVariant.SystemPromptText, "策略") {
+	if strings.Contains(currentVariant.PromptRoleDefinition, "专业") || strings.Contains(currentVariant.PromptRoleDefinition, "量化") {
 		lang = "zh"
 	}
 
 	// Build meta-learning prompt for LLM
-	var metaPrompt string
-	var systemPrompt string
+	var role_definition string
+	var trading_frequency string
+	var entry_standards string
+	var decision_process string
 
-	if lang == "zh" {
-		metaPrompt = po.buildEvolutionMetaPromptChinese(currentVariant, currentMetrics)
-		systemPrompt = "你是交易系统提示词工程专家。你的任务是基于表现分析改进交易提示词。"
-	} else {
-		metaPrompt = po.buildEvolutionMetaPrompt(currentVariant, currentMetrics)
-		systemPrompt = "You are an expert in prompt engineering for trading systems. Your task is to improve trading prompts based on performance analysis."
-	}
+	role_definition = strategy_prompt.RoleDefinition
+	trading_frequency = strategy_prompt.TradingFrequency
+	entry_standards = strategy_prompt.EntryStandards
+	decision_process = strategy_prompt.DecisionProcess
 
 	logger.Infof("[PromptOptimizer] 🤖 Asking LLM to evolve system prompt (%s)...", lang)
 
 	// Ask LLM to improve the prompt
-	evolvedText, err := po.AIClient.CallWithMessages(systemPrompt, metaPrompt)
-
-	if err != nil {
-		logger.Infof("[PromptOptimizer] ❌ LLM evolution failed: %v", err)
-		// Fallback: keep current variant
-		po.Generation++
-		return fmt.Errorf("LLM evolution failed: %w", err)
+	for prompt_section, content := range map[string]string{
+		"Role Definition":   role_definition,
+		"Trading Frequency": trading_frequency,
+		"Entry Standards":   entry_standards,
+		"Decision Process":  decision_process,
+	} {
+		var metaPrompt string
+		var evolvedText string
+		var err error
+		if lang == "zh" {
+			metaPrompt = po.buildEvolutionMetaPromptZH(content, currentVariant, currentMetrics)
+			evolvedText, err = po.AIClient.CallWithMessages(metaPrompt, fmt.Sprintf("当前的%s系统提示词\n是:\n%s。\n请改写\n", prompt_section, content))
+		} else {
+			metaPrompt = po.buildEvolutionMetaPromptEN(content, currentVariant, currentMetrics)
+			evolvedText, err = po.AIClient.CallWithMessages(metaPrompt, fmt.Sprintf("The current %s system prompt is:\n%s.\nPlease rewrite it.\n", prompt_section, content))
+		}
+		if err != nil {
+			logger.Infof("[PromptOptimizer] ❌ LLM evolution failed for section %s: %v", prompt_section, err)
+			// Fallback: keep current variant
+		} else {
+			switch prompt_section {
+			case "Role Definition":
+				role_definition = evolvedText
+			case "Trading Frequency":
+				trading_frequency = evolvedText
+			case "Entry Standards":
+				entry_standards = evolvedText
+			case "Decision Process":
+				decision_process = evolvedText
+			}
+		}
 	}
 
 	// Create new evolved variant
 	evolvedVariant := &PromptVariant{
-		ID:               fmt.Sprintf("gen%d-v1", po.Generation+1),
-		SystemPromptText: evolvedText,
-		Version:          po.Generation + 1,
-		CreatedAt:        time.Now(),
-		Generation:       po.Generation + 1,
-		IsActive:         true,
-		FitnessScore:     0.0, // Will be evaluated in next cycle
+		ID:                     fmt.Sprintf("gen%d-v1", po.Generation+1),
+		PromptRoleDefinition:   role_definition,
+		PromptTradingFrequency: trading_frequency,
+		PromptEntryStandards:   entry_standards,
+		PromptDecisionProcess:  decision_process,
+		Version:                po.Generation + 1,
+		CreatedAt:              time.Now(),
+		Generation:             po.Generation + 1,
+		IsActive:               true,
+		FitnessScore:           0.0, // Will be evaluated in next cycle
 	}
 
 	// Update generation
@@ -392,18 +450,21 @@ func (po *PromptOptimizer) evolvePromptsWithLLM() error {
 	po.PerformanceData = make(map[string]*Metrics)
 
 	logger.Infof("[PromptOptimizer] ✅ LLM evolution complete: new variant %s (generation %d)", evolvedVariant.ID, po.Generation)
-	logger.Infof("[PromptOptimizer] 📝 Preview: %s...", evolvedText[:min(200, len(evolvedText))])
+	logger.Infof("[PromptOptimizer] 📝 Role definition preview: %s...", evolvedVariant.PromptRoleDefinition[:100])
+	logger.Infof("[PromptOptimizer] 📝 Trading frequency preview: %s...", evolvedVariant.PromptTradingFrequency[:100])
+	logger.Infof("[PromptOptimizer] 📝 Entry standards preview: %s...", evolvedVariant.PromptEntryStandards[:100])
+	logger.Infof("[PromptOptimizer] 📝 Decision process preview: %s...", evolvedVariant.PromptDecisionProcess[:100])
 
 	return nil
 }
 
 // buildEvolutionMetaPrompt creates a prompt for the LLM to evolve the system prompt
-func (po *PromptOptimizer) buildEvolutionMetaPrompt(variant *PromptVariant, metrics *Metrics) string {
+func (po *PromptOptimizer) buildEvolutionMetaPromptEN(prompt string, variant *PromptVariant, metrics *Metrics) string {
 	var sb strings.Builder
-
+	sb.WriteString("You are an expert in prompt engineering for trading systems. Your task is to improve trading prompts based on performance analysis.")
 	sb.WriteString("# System Prompt Evolution Task\n\n")
 	sb.WriteString("## Current System Prompt\n```\n")
-	sb.WriteString(variant.SystemPromptText)
+	sb.WriteString(prompt)
 	sb.WriteString("\n```\n\n")
 
 	sb.WriteString("## Performance Analysis\n")
@@ -513,13 +574,13 @@ func (po *PromptOptimizer) buildEvolutionMetaPrompt(variant *PromptVariant, metr
 	return sb.String()
 }
 
-// buildEvolutionMetaPromptChinese creates a Chinese prompt for the LLM to evolve the system prompt
-func (po *PromptOptimizer) buildEvolutionMetaPromptChinese(variant *PromptVariant, metrics *Metrics) string {
+// buildEvolutionMetaPromptZH creates a Chinese prompt for the LLM to evolve the system prompt
+func (po *PromptOptimizer) buildEvolutionMetaPromptZH(prompt string, variant *PromptVariant, metrics *Metrics) string {
 	var sb strings.Builder
-
+	sb.WriteString("你是交易系统提示词工程专家。你的任务是基于表现分析改进交易提示词。")
 	sb.WriteString("# 系统提示词进化任务\n\n")
 	sb.WriteString("## 当前系统提示词\n```\n")
-	sb.WriteString(variant.SystemPromptText)
+	sb.WriteString(prompt)
 	sb.WriteString("\n```\n\n")
 
 	sb.WriteString("## 表现分析\n")

@@ -607,21 +607,24 @@ func (s *BacktestStore) LoadConfig(runID string) ([]byte, error) {
 
 // PromptVariantData represents a prompt variant stored in database
 type PromptVariantData struct {
-	ID             string  `json:"id"`
-	RunID          string  `json:"run_id"`
-	VariantID      string  `json:"variant_id"`
-	Generation     int     `json:"generation"`
-	IsActive       bool    `json:"is_active"`
-	Prompt         string  `json:"prompt"`
-	TotalDecisions int     `json:"total_decisions"`
-	TotalReturn    float64 `json:"total_return"`
-	WinRate        float64 `json:"win_rate"`
-	ProfitFactor   float64 `json:"profit_factor"`
-	SharpeRatio    float64 `json:"sharpe_ratio"`
-	MaxDrawdown    float64 `json:"max_drawdown"`
-	FitnessScore   float64 `json:"fitness_score"`
-	CreatedAt      string  `json:"created_at"`
-	UpdatedAt      string  `json:"updated_at"`
+	ID                     string  `json:"id"`
+	RunID                  string  `json:"run_id"`
+	VariantID              string  `json:"variant_id"`
+	Generation             int     `json:"generation"`
+	IsActive               bool    `json:"is_active"`
+	PromptRoleDefinition   string  `json:"prompt_role_definition"`
+	PromptTradingFrequency string  `json:"prompt_trading_frequency"`
+	PromptEntryStandards   string  `json:"prompt_entry_standards"`
+	PromptDecisionProcess  string  `json:"prompt_decision_process"`
+	TotalDecisions         int     `json:"total_decisions"`
+	TotalReturn            float64 `json:"total_return"`
+	WinRate                float64 `json:"win_rate"`
+	ProfitFactor           float64 `json:"profit_factor"`
+	SharpeRatio            float64 `json:"sharpe_ratio"`
+	MaxDrawdown            float64 `json:"max_drawdown"`
+	FitnessScore           float64 `json:"fitness_score"`
+	CreatedAt              string  `json:"created_at"`
+	UpdatedAt              string  `json:"updated_at"`
 }
 
 // SavePromptVariant saves a prompt variant to the database
@@ -634,7 +637,7 @@ func (s *BacktestStore) SavePromptVariant(variant *PromptVariantData) error {
 
 	_, err := s.db.Exec(`
 		INSERT INTO backtest_prompt_variants (
-			id, run_id, variant_id, generation, is_active, prompt,
+			id, run_id, variant_id, generation, is_active, prompt_role_definition, prompt_trading_frequency, prompt_entry_standards, prompt_decision_process,
 			total_decisions, total_return, win_rate, profit_factor,
 			sharpe_ratio, max_drawdown, fitness_score, created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -649,7 +652,8 @@ func (s *BacktestStore) SavePromptVariant(variant *PromptVariantData) error {
 			fitness_score = excluded.fitness_score,
 			updated_at = excluded.updated_at
 	`, variant.ID, variant.RunID, variant.VariantID, variant.Generation, variant.IsActive,
-		variant.Prompt, variant.TotalDecisions, variant.TotalReturn, variant.WinRate,
+		variant.PromptRoleDefinition, variant.PromptTradingFrequency, variant.PromptEntryStandards, variant.PromptDecisionProcess,
+		variant.TotalDecisions, variant.TotalReturn, variant.WinRate,
 		variant.ProfitFactor, variant.SharpeRatio, variant.MaxDrawdown, variant.FitnessScore,
 		variant.CreatedAt, variant.UpdatedAt)
 	return err
@@ -658,7 +662,7 @@ func (s *BacktestStore) SavePromptVariant(variant *PromptVariantData) error {
 // LoadPromptVariants loads all prompt variants for a backtest run
 func (s *BacktestStore) LoadPromptVariants(runID string) ([]*PromptVariantData, error) {
 	rows, err := s.db.Query(`
-		SELECT id, run_id, variant_id, generation, is_active, prompt,
+		SELECT id, run_id, variant_id, generation, is_active, prompt_role_definition, prompt_trading_frequency, prompt_entry_standards, prompt_decision_process,
 		       total_decisions, total_return, win_rate, profit_factor,
 		       sharpe_ratio, max_drawdown, fitness_score, created_at, updated_at
 		FROM backtest_prompt_variants
@@ -674,7 +678,7 @@ func (s *BacktestStore) LoadPromptVariants(runID string) ([]*PromptVariantData, 
 	for rows.Next() {
 		var v PromptVariantData
 		err := rows.Scan(
-			&v.ID, &v.RunID, &v.VariantID, &v.Generation, &v.IsActive, &v.Prompt,
+			&v.ID, &v.RunID, &v.VariantID, &v.Generation, &v.IsActive, &v.PromptRoleDefinition, &v.PromptTradingFrequency, &v.PromptEntryStandards, &v.PromptDecisionProcess,
 			&v.TotalDecisions, &v.TotalReturn, &v.WinRate, &v.ProfitFactor,
 			&v.SharpeRatio, &v.MaxDrawdown, &v.FitnessScore, &v.CreatedAt, &v.UpdatedAt,
 		)

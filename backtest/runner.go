@@ -166,8 +166,8 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 
 	// Initialize advanced optimization systems
 	// Use a default system prompt (will be overridden by StrategyEngine)
-	defaultPrompt := "You are a professional crypto trader making short-term trading decisions."
-	promptOptimizer := NewPromptOptimizerWithAI(defaultPrompt, DefaultPromptOptimizerConfig(), client, cfg.RunID, cfg.Storage)
+	defaultPrompt := cfg.loadedStrategy.PromptSections
+	promptOptimizer := NewPromptOptimizerWithAI(&defaultPrompt, DefaultPromptOptimizerConfig(), client, cfg.RunID, cfg.Storage)
 	factorOptimizer := NewFactorOptimizer(DefaultFactorOptimizerConfig())
 	complianceTracker := NewComplianceTracker(DefaultComplianceConfig())
 
@@ -914,7 +914,6 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 		record.CandidateCoins = append(record.CandidateCoins, coin.Symbol)
 	}
 	record.Timestamp = time.UnixMilli(ts).UTC()
-
 	// Generate feedback if enabled and enough decisions have been made
 	if r.feedbackConfig.EnableFeedback && callCount >= r.feedbackConfig.MinDecisionsForFeedback {
 		// Regenerate feedback every 5 cycles
@@ -957,7 +956,7 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 
 					// Use the generic EvolvePrompts method for backtest
 					// (Live trading uses meta-prompting via EvolvePromptsWithMetaLearning)
-					if err := r.promptOptimizer.EvolvePrompts(); err != nil {
+					if err := r.promptOptimizer.EvolvePrompts(&strategyConfig.PromptSections); err != nil {
 						logger.Infof("Failed to evolve prompts: %v", err)
 					} else {
 						// Save optimizer state
@@ -967,7 +966,7 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 
 						// CRITICAL: Update strategy engine with the evolved prompt
 						evolvedPrompt := r.promptOptimizer.GetCurrentPrompt()
-						r.strategyEngine.SetCustomPrompt(evolvedPrompt)
+						r.strategyEngine.SetStrategyPrompt(evolvedPrompt)
 						logger.Infof("✅ Applied evolved prompt variant to strategy engine (gen %d)", r.promptOptimizer.GetGeneration())
 					}
 				}

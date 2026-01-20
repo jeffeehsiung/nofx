@@ -397,7 +397,7 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	at.orderWebSocketManager = NewOrderWebSocketManager(at.eventBus)
 
 	// Initialize PromptOptimizer for live strategy evolution with persistence
-	basePrompt := config.StrategyConfig.PromptSections.RoleDefinition
+	basePrompt := config.StrategyConfig.PromptSections
 	optimizerConfig := backtest.DefaultPromptOptimizerConfig()
 	optimizerConfig.PopulationSize = 3      // Smaller population for live trading
 	optimizerConfig.EvaluationCycles = 10   // Evolve every 10 trades
@@ -408,7 +408,7 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	if st != nil {
 		backtestStore = st.Backtest()
 	}
-	at.promptOptimizer = backtest.NewPromptOptimizerWithAI(basePrompt, optimizerConfig, mcpClient, config.ID, backtestStore)
+	at.promptOptimizer = backtest.NewPromptOptimizerWithAI(&basePrompt, optimizerConfig, mcpClient, config.ID, backtestStore)
 
 	// Try to load saved optimizer state
 	if st != nil {
@@ -1255,7 +1255,7 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 							}
 							at.promptOptimizer.RecordDecisionOutcome("current", metrics)
 
-							if err := at.promptOptimizer.EvolvePrompts(); err != nil {
+							if err := at.promptOptimizer.EvolvePrompts(&strategyConfig.PromptSections); err != nil {
 								logger.Infof("⚠️ [%s] Failed to evolve prompts: %v", at.name, err)
 							} else {
 								// Save optimizer state
@@ -1265,7 +1265,7 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 
 								// CRITICAL: Update strategy engine with evolved prompt
 								evolvedPrompt := at.promptOptimizer.GetCurrentPrompt()
-								at.strategyEngine.SetCustomPrompt(evolvedPrompt)
+								at.strategyEngine.SetStrategyPrompt(evolvedPrompt)
 								logger.Infof("✅ [%s] Applied evolved prompt to live trading (gen %d)", at.name, at.promptOptimizer.GetGeneration())
 							}
 						}

@@ -273,10 +273,18 @@ func (e *StrategyEngine) GetConfig() *store.StrategyConfig {
 	return e.config
 }
 
+// SetStrategyPrompt updates the strategy prompt sections in the strategy configuration
+func (e *StrategyEngine) SetStrategyPrompt(variant *store.PromptVariantData) {
+	e.config.PromptSections.RoleDefinition = variant.PromptRoleDefinition
+	e.config.PromptSections.TradingFrequency = variant.PromptTradingFrequency
+	e.config.PromptSections.EntryStandards = variant.PromptEntryStandards
+	e.config.PromptSections.DecisionProcess = variant.PromptDecisionProcess
+}
+
 // SetCustomPrompt updates the custom prompt in the strategy configuration
 // Used by prompt optimizer to apply evolved prompts to future decisions
-func (e *StrategyEngine) SetCustomPrompt(prompt string) {
-	e.config.CustomPrompt = prompt
+func (e *StrategyEngine) SetCustomPrompt(customPrompt string) {
+	e.config.CustomPrompt = customPrompt
 }
 
 // ============================================================================

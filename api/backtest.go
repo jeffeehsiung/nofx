@@ -967,7 +967,10 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 		VariantID      string  `json:"VariantID"`
 		Generation     int     `json:"Generation"`
 		IsActive       bool    `json:"IsActive"`
-		Prompt         string  `json:"Prompt"`
+		PromptRoleDefinition string  `json:"PromptRoleDefinition"`
+		PromptTradingFrequency string  `json:"PromptTradingFrequency"`
+		PromptEntryStandards   string  `json:"PromptEntryStandards"`
+		PromptDecisionProcess string  `json:"PromptDecisionProcess"`
 		CreatedAt      string  `json:"CreatedAt"`
 		TotalDecisions int     `json:"TotalDecisions"`
 		TotalReturn    float64 `json:"TotalReturn"`
@@ -988,7 +991,10 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 			VariantID:      v.VariantID,
 			Generation:     v.Generation,
 			IsActive:       v.IsActive,
-			Prompt:         v.Prompt,
+			PromptRoleDefinition:   v.PromptRoleDefinition,
+			PromptTradingFrequency: v.PromptTradingFrequency,
+			PromptEntryStandards:   v.PromptEntryStandards,
+			PromptDecisionProcess:  v.PromptDecisionProcess,
 			CreatedAt:      v.CreatedAt,
 			TotalDecisions: v.TotalDecisions,
 			TotalReturn:    v.TotalReturn,
