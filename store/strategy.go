@@ -693,12 +693,15 @@ func (s *StrategyStore) Update(strategy *Strategy) error {
 func (s *StrategyStore) Delete(userID, id string) error {
 	// do not allow deleting system default strategy
 	var isDefault bool
-	s.db.QueryRow(`SELECT is_default FROM strategies WHERE id = ?`, id).Scan(&isDefault)
+	err := s.db.QueryRow(`SELECT is_default FROM strategies WHERE id = ?`, id).Scan(&isDefault)
+	if err != nil {
+		return fmt.Errorf("failed to check if strategy is default: %w", err)
+	}
 	if isDefault {
 		return fmt.Errorf("cannot delete system default strategy")
 	}
 
-	_, err := s.db.Exec(`DELETE FROM strategies WHERE id = ? AND user_id = ?`, id, userID)
+	_, err = s.db.Exec(`DELETE FROM strategies WHERE id = ? AND user_id = ?`, id, userID)
 	return err
 }
 

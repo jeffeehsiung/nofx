@@ -644,7 +644,8 @@ func (e *StrategyEngine) FetchMicrostructureData(symbol string) *market.MarketMi
 	}
 
 	// Get K-lines for VWAP calculation (get last 100 candles, 1h timeframe)
-	apiClient := &market.APIClient{}
+	// apiClient := &market.APIClient{}
+	apiClient := market.NewAPIClient()
 	klines, err := apiClient.GetKlines(symbol, "1h", 100)
 	if err != nil {
 		logger.Infof("⚠️  Failed to fetch K-lines for %s: %v", symbol, err)

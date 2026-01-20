@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"nofx/logger"
 	"strings"
 	"time"
 )
@@ -103,27 +104,56 @@ func (s *PositionStore) InitTables() error {
 
 	// Migration: add exchange_id column to existing table (if not exists)
 	// Must be executed before creating indexes!
-	s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN exchange_id TEXT NOT NULL DEFAULT ''`)
+	if _, err := s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN exchange_id TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add exchange_id column: %w", err)
+	}
 	// Migration: add exchange_type column (binance/bybit/okx/etc)
-	s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN exchange_type TEXT NOT NULL DEFAULT ''`)
+	if _, err := s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN exchange_type TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add exchange_type column: %w", err)
+	}
 	// Migration: add exchange_position_id for deduplication
-	s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN exchange_position_id TEXT NOT NULL DEFAULT ''`)
+	if _, err := s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN exchange_position_id TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add exchange_position_id column: %w", err)
+	}
 
 	// Migration: add stop loss/take profit tracking columns
-	s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN initial_stop_loss REAL DEFAULT 0`)
-	s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN initial_take_profit REAL DEFAULT 0`)
-	s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN final_stop_loss REAL DEFAULT 0`)
-	s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN final_take_profit REAL DEFAULT 0`)
-	s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN adjustment_count INTEGER DEFAULT 0`)
-	s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN last_adjustment_time DATETIME`)
-	s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN exchange_synced BOOLEAN DEFAULT 0`)
-	s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN last_sync_time DATETIME`)
+	if _, err := s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN initial_stop_loss REAL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add initial_stop_loss column: %w", err)
+	}
+	if _, err := s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN initial_take_profit REAL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add initial_take_profit column: %w", err)
+	}
+	if _, err := s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN final_stop_loss REAL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add final_stop_loss column: %w", err)
+	}
+	if _, err := s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN final_take_profit REAL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add final_take_profit column: %w", err)
+	}
+	if _, err := s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN adjustment_count INTEGER DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add adjustment_count column: %w", err)
+	}
+	if _, err := s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN last_adjustment_time DATETIME`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add last_adjustment_time column: %w", err)
+	}
+	if _, err := s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN exchange_synced BOOLEAN DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add exchange_synced column: %w", err)
+	}
+	if _, err := s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN last_sync_time DATETIME`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add last_sync_time column: %w", err)
+	}
 	// Migration: add source field (system/manual/sync)
-	s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN source TEXT DEFAULT 'system'`)
+	if _, err := s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN source TEXT DEFAULT 'system'`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add source column: %w", err)
+	}
 	// Migration: add entry_quantity field (original quantity, never modified on partial close)
-	s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN entry_quantity REAL DEFAULT 0`)
+	if _, err := s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN entry_quantity REAL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add entry_quantity column: %w", err)
+	}
 	// Backfill: set entry_quantity = quantity for existing records where entry_quantity is 0
-	s.db.Exec(`UPDATE trader_positions SET entry_quantity = quantity WHERE entry_quantity = 0 OR entry_quantity IS NULL`)
+	if _, err := s.db.Exec(`UPDATE trader_positions SET entry_quantity = quantity WHERE entry_quantity = 0 OR entry_quantity IS NULL`); err != nil {
+		return fmt.Errorf("failed to backfill entry_quantity: %w", err)
+	}
+	// Migration: add margin used field (for future use)
 
 	// Create indexes (after migration)
 	indices := []string{
@@ -580,7 +610,7 @@ type RecentTrade struct {
 // GetRecentTrades gets recent closed trades
 func (s *PositionStore) GetRecentTrades(traderID string, limit int) ([]RecentTrade, error) {
 	rows, err := s.db.Query(`
-		SELECT symbol, side, entry_price, exit_price, realized_pnl, quantity, margin_used, entry_time, exit_time
+		SELECT symbol, side, entry_price, exit_price, realized_pnl, quantity, entry_quantity, entry_time, exit_time
 		FROM trader_positions
 		WHERE trader_id = ? AND status = 'CLOSED'
 		ORDER BY exit_time DESC
@@ -594,10 +624,10 @@ func (s *PositionStore) GetRecentTrades(traderID string, limit int) ([]RecentTra
 	var trades []RecentTrade
 	for rows.Next() {
 		var t RecentTrade
-		var quantity, marginUsed float64
+		var quantity, entryQuantity float64
 		var entryTime, exitTime sql.NullString
 
-		err := rows.Scan(&t.Symbol, &t.Side, &t.EntryPrice, &t.ExitPrice, &t.RealizedPnL, &quantity, &marginUsed, &entryTime, &exitTime)
+		err := rows.Scan(&t.Symbol, &t.Side, &t.EntryPrice, &t.ExitPrice, &t.RealizedPnL, &quantity, &entryQuantity, &entryTime, &exitTime)
 		if err != nil {
 			continue
 		}
@@ -612,10 +642,10 @@ func (s *PositionStore) GetRecentTrades(traderID string, limit int) ([]RecentTra
 
 		// Calculate profit/loss percentage based on margin used (correct formula)
 		// PnL% = (realized_pnl / margin_used) * 100
-		if marginUsed > 0 {
-			t.PnLPct = (t.RealizedPnL / marginUsed) * 100
+		if entryQuantity > 0 {
+			t.PnLPct = (t.RealizedPnL / (entryQuantity * t.EntryPrice)) * 100
 		} else if t.EntryPrice > 0 && quantity > 0 {
-			// Fallback: calculate from entry price and quantity if margin_used not available
+			// Fallback: calculate from entry price and quantity
 			estimatedMarginCost := t.EntryPrice * quantity
 			if estimatedMarginCost > 0 {
 				t.PnLPct = (t.RealizedPnL / estimatedMarginCost) * 100
@@ -1000,13 +1030,15 @@ func (s *PositionStore) GetHistorySummary(traderID string) (*HistorySummary, err
 
 	// Calculate average holding time
 	var avgHold sql.NullFloat64
-	s.db.QueryRow(`
+	err = s.db.QueryRow(`
 		SELECT AVG((julianday(exit_time) - julianday(entry_time)) * 24 * 60)
 		FROM trader_positions
 		WHERE trader_id = ? AND status = 'CLOSED' AND exit_time IS NOT NULL
 	`, traderID).Scan(&avgHold)
-	if avgHold.Valid {
+	if err == nil && avgHold.Valid {
 		summary.AvgHoldingMins = avgHold.Float64
+	} else {
+		logger.Error(fmt.Sprintf("[DB] Average holding time db query error: %v", err))
 	}
 
 	// Get recent 20 trades performance

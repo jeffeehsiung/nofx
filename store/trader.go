@@ -107,7 +107,9 @@ func (s *TraderStore) initTables() error {
 		`ALTER TABLE traders ADD COLUMN trading_mode TEXT DEFAULT ''`,
 	}
 	for _, q := range alterQueries {
-		s.db.Exec(q)
+		if _, err := s.db.Exec(q); err != nil {
+			logger.Warnf("Failed to execute alter query: %s, error: %v", q, err)
+		}
 	}
 
 	// Migration: Remove FOREIGN KEY constraint from existing traders table
