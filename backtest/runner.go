@@ -702,6 +702,7 @@ func (r *Runner) stepOnce() error {
 
 		if fullDecision != nil {
 			r.fillDecisionRecord(record, fullDecision)
+			r.complianceTracker.CheckCompliance(state.DecisionCycle, &fullDecision.Decisions[0], r.lastFeedback)
 
 			sorted := sortDecisionsByPriority(fullDecision.Decisions)
 
@@ -921,7 +922,7 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 	// Generate feedback if enabled and enough decisions have been made
 	if r.feedbackConfig.EnableFeedback && callCount >= r.feedbackConfig.MinDecisionsForFeedback {
 		// Regenerate feedback every 5 cycles
-		if r.lastFeedback == nil || (callCount-r.feedbackCycle) >= 1 {
+		if r.lastFeedback == nil || (callCount-r.feedbackCycle) >= 5 {
 			feedback, err := r.feedbackGenerator.GenerateFeedback()
 			if err != nil {
 				logger.Infof("Failed to generate feedback: %v", err)
@@ -1002,6 +1003,7 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 
 				// Update compliance tracker with active recommendations
 				r.complianceTracker.SetRecommendations(feedback.RecommendedActions)
+
 			}
 		}
 

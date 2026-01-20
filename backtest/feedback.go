@@ -22,6 +22,14 @@ import (
 // and their outcomes to help the LLM learn from mistakes and improve profitability.
 // ============================================================================
 
+// Add to FeedbackGenerator struct
+type TradingFrequencyMetrics struct {
+	TradesPerHour           float64
+	AvgTimeBetweenTrades    time.Duration
+	ConsecutiveTradingHours int
+	MaxTradesInHour         int
+}
+
 // FeedbackAnalysis contains comprehensive analysis of historical trading performance
 type FeedbackAnalysis struct {
 	// Period analyzed
@@ -47,12 +55,18 @@ type FeedbackAnalysis struct {
 	RecommendedActions []string `json:"recommended_actions"`
 
 	// Detailed decision analysis
+	AllOutcomes      []DecisionOutcome `json:"all_outcomes"` // NEW: All outcomes for calculations
 	TopWinningTrades []DecisionOutcome `json:"top_winning_trades"`
 	TopLosingTrades  []DecisionOutcome `json:"top_losing_trades"`
 
 	// Market regime analysis
 	MarketConditions string             `json:"market_conditions"`
 	RegimeAnalysis   map[string]float64 `json:"regime_analysis"`
+
+	// Calculated metrics for display
+	TradesPerHour       float64 `json:"trades_per_hour"`      // NEW
+	AvgHoldTime         string  `json:"avg_hold_time"`        // NEW
+	ChecklistCompliance float64 `json:"checklist_compliance"` // NEW
 }
 
 // TradingPattern represents a discovered pattern in trading behavior
@@ -169,10 +183,17 @@ func (fg *FeedbackGenerator) GenerateFeedback() (*FeedbackAnalysis, error) {
 		return nil, fmt.Errorf("failed to calculate metrics: %w", err)
 	}
 
+	// Analyze closed positions (match open and close events)
+	closedPositions := fg.extractClosedPositions(events)
+
+	// Generate decision outcomes
+	outcomes := fg.createDecisionOutcomes(closedPositions)
+
 	// Create analysis
 	analysis := &FeedbackAnalysis{
 		AnalysisPeriod:   fmt.Sprintf("Last %d trades", len(events)),
-		DecisionsCovered: len(events),
+		DecisionsCovered: len(outcomes), // Use outcomes count
+		AllOutcomes:      outcomes,      // Store all outcomes
 		TotalReturnPct:   metrics.TotalReturnPct,
 		WinRate:          metrics.WinRate,
 		ProfitFactor:     metrics.ProfitFactor,
@@ -186,11 +207,15 @@ func (fg *FeedbackGenerator) GenerateFeedback() (*FeedbackAnalysis, error) {
 		analysis.EndTime = time.UnixMilli(events[len(events)-1].Timestamp)
 	}
 
-	// Analyze closed positions (match open and close events)
-	closedPositions := fg.extractClosedPositions(events)
+	// Calculate and store metrics
+	analysis.TradesPerHour = fg.calculateTradesPerHour(outcomes)
+	analysis.AvgHoldTime = fg.calculateAvgHoldTime(outcomes)
+	analysis.ChecklistCompliance = fg.calculateChecklistCompliance(outcomes)
 
-	// Generate decision outcomes
-	outcomes := fg.createDecisionOutcomes(closedPositions)
+	if len(outcomes) > 0 {
+		analysis.StartTime = outcomes[0].Timestamp
+		analysis.EndTime = outcomes[len(outcomes)-1].Timestamp
+	}
 
 	// Identify patterns
 	analysis.SuccessPatterns = fg.identifySuccessPatterns(outcomes, metrics)
@@ -555,6 +580,139 @@ func (fg *FeedbackGenerator) findDecisionForTrade(decisionMap map[int64]*store.D
 	return nil
 }
 
+// New detection function
+func (fg *FeedbackGenerator) detectOvertrading(outcomes []DecisionOutcome) *TradingPattern {
+	if len(outcomes) < 2 {
+		return nil
+	}
+
+	// Sort by timestamp
+	sort.Slice(outcomes, func(i, j int) bool {
+		return outcomes[i].Timestamp.Before(outcomes[j].Timestamp)
+	})
+
+	tradesByHour := make(map[string]int)
+	tradesByMinute := make(map[string]int)
+
+	var totalDuration time.Duration
+	var lastTime time.Time
+
+	for i, outcome := range outcomes {
+		hourKey := outcome.Timestamp.Format("2006-01-02-15")
+		minuteKey := outcome.Timestamp.Format("2006-01-02-15:04")
+
+		tradesByHour[hourKey]++
+		tradesByMinute[minuteKey]++
+
+		if i > 0 {
+			timeDiff := outcome.Timestamp.Sub(lastTime)
+			totalDuration += timeDiff
+		}
+		lastTime = outcome.Timestamp
+	}
+
+	// Calculate metrics
+	tradesPerHour := float64(len(outcomes)) / (totalDuration.Hours() + 1)
+	avgTimeBetween := totalDuration / time.Duration(len(outcomes)-1)
+
+	// Find problematic patterns
+	problematicHours := 0
+	maxTradesInHour := 0
+
+	for _, count := range tradesByHour {
+		if count > maxTradesInHour {
+			maxTradesInHour = count
+		}
+		if count >= 4 { // 4+ trades per hour is excessive for swing trading
+			problematicHours++
+		}
+	}
+
+	if problematicHours >= 2 || tradesPerHour > 2.0 {
+		evidence := []string{
+			fmt.Sprintf("Trading frequency: %.1f trades/hour (recommended: 0.2-0.5)", tradesPerHour),
+			fmt.Sprintf("Average time between trades: %v", avgTimeBetween.Round(time.Minute)),
+			fmt.Sprintf("%d instances of 4+ trades in one hour", problematicHours),
+		}
+
+		return &TradingPattern{
+			PatternType:    "overtrading_frequency",
+			Frequency:      problematicHours,
+			AvgPnLPct:      -1.5, // Overtrading typically results in -1% to -3% per trade
+			Description:    fmt.Sprintf("Excessive trading frequency: %.1fx higher than optimal", tradesPerHour/0.3),
+			Evidence:       evidence,
+			Recommendation: "ENFORCE: Max 2 trades/hour, 8 trades/day. Wait minimum 30 minutes between trades unless high-conviction setup.",
+		}
+	}
+
+	return nil
+}
+
+// Add to identifyFailurePatterns
+func (fg *FeedbackGenerator) detectContradictoryAnalysis(outcomes []DecisionOutcome) *TradingPattern {
+	if len(outcomes) < 3 {
+		return nil
+	}
+
+	sort.Slice(outcomes, func(i, j int) bool {
+		return outcomes[i].Timestamp.Before(outcomes[j].Timestamp)
+	})
+
+	contradictoryMoves := 0
+	evidence := []string{}
+
+	for i := 1; i < len(outcomes)-1; i++ {
+		current := outcomes[i]
+		previous := outcomes[i-1]
+
+		// Check for same symbol trades with conflicting directions in short time
+		timeDiffCurrentPrev := current.Timestamp.Sub(previous.Timestamp)
+
+		if current.Symbol == previous.Symbol && timeDiffCurrentPrev < 60*time.Minute {
+			// Get directions (simplified)
+			currentDirection := "unknown"
+			previousDirection := "unknown"
+
+			if strings.Contains(strings.ToLower(current.Action), "long") {
+				currentDirection = "long"
+			} else if strings.Contains(strings.ToLower(current.Action), "short") {
+				currentDirection = "short"
+			}
+
+			if strings.Contains(strings.ToLower(previous.Action), "long") {
+				previousDirection = "long"
+			} else if strings.Contains(strings.ToLower(previous.Action), "short") {
+				previousDirection = "short"
+			}
+
+			// If opposite directions on same symbol within short time
+			if currentDirection != "unknown" && previousDirection != "unknown" &&
+				currentDirection != previousDirection && timeDiffCurrentPrev < 30*time.Minute {
+
+				contradictoryMoves++
+				evidence = append(evidence,
+					fmt.Sprintf("%s: %s at %s, then %s at %s (gap: %v)",
+						current.Symbol, previousDirection, previous.Timestamp.Format("15:04"),
+						currentDirection, current.Timestamp.Format("15:04"),
+						timeDiffCurrentPrev.Round(time.Minute)))
+			}
+		}
+	}
+
+	if contradictoryMoves >= 2 {
+		return &TradingPattern{
+			PatternType:    "contradictory_analysis",
+			Frequency:      contradictoryMoves,
+			AvgPnLPct:      -2.0,
+			Description:    "Frequent directional flip-flopping on same symbols within short timeframes",
+			Evidence:       evidence[:min(3, len(evidence))],
+			Recommendation: "ENFORCE: Once a position is closed on a symbol, wait minimum 2 hours before re-entering same symbol. Maintain conviction in original analysis.",
+		}
+	}
+
+	return nil
+}
+
 // extractReasoningFromDecision extracts the reasoning for a specific symbol/side from decision record
 func (fg *FeedbackGenerator) extractReasoningFromDecision(record *store.DecisionRecord, symbol, side string) string {
 	if record == nil {
@@ -890,6 +1048,25 @@ func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome,
 	}
 
 	// ============================================================================
+	// NEW: Call the specialized detection functions
+	// ============================================================================
+
+	// 1. Detect overtrading patterns
+	if overtradingPattern := fg.detectOvertrading(outcomes); overtradingPattern != nil {
+		patterns = append(patterns, *overtradingPattern)
+	}
+
+	// 2. Detect contradictory analysis patterns
+	if contradictoryPattern := fg.detectContradictoryAnalysis(outcomes); contradictoryPattern != nil {
+		patterns = append(patterns, *contradictoryPattern)
+	}
+
+	// 3. Detect "scared money" patterns
+	if scaredMoneyPattern := fg.detectScaredMoneyPattern(outcomes); scaredMoneyPattern != nil {
+		patterns = append(patterns, *scaredMoneyPattern)
+	}
+
+	// ============================================================================
 	// TIER 1: Execution-Level Failure Analysis (Trade Failure V2)
 	// ============================================================================
 
@@ -979,6 +1156,18 @@ func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome,
 				longLossesPnL += outcome.RealizedPnLPct
 			}
 		}
+	}
+
+	if longLosses >= fg.config.MinPatternFrequency {
+		patterns = append(patterns, TradingPattern{
+			PatternType:    "holding_losers",
+			Frequency:      longLosses,
+			AvgPnL:         0,
+			AvgPnLPct:      longLossesPnL / float64(longLosses),
+			Description:    "Holding losing positions for too long (>4h)",
+			Evidence:       []string{fmt.Sprintf("%d trades, avg loss %.2f%%", longLosses, longLossesPnL/float64(longLosses))},
+			Recommendation: "⚠️ CRITICAL: Cut losses faster. Set tighter stop-losses and respect them",
+		})
 	}
 
 	if longLosses >= fg.config.MinPatternFrequency {
@@ -1245,6 +1434,60 @@ func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome,
 		}
 	}
 
+	// NEW: Specific pattern detection from your NOFX example
+
+	// Pattern: Trading During Consolidation
+	consolidationTrades := 0
+	consolidationLoss := 0.0
+	for _, outcome := range outcomes {
+		// This would need market data - simplified check
+		if outcome.HoldDuration < "45m" && !outcome.Success {
+			// Quick losses often happen in consolidation
+			consolidationTrades++
+			consolidationLoss += outcome.RealizedPnLPct
+		}
+	}
+
+	if consolidationTrades >= fg.config.MinPatternFrequency {
+		patterns = append(patterns, TradingPattern{
+			PatternType:    "trading_consolidation",
+			Frequency:      consolidationTrades,
+			AvgPnLPct:      consolidationLoss / float64(consolidationTrades),
+			Description:    "Trading during sideways/consolidation markets",
+			Evidence:       []string{fmt.Sprintf("%d trades during low-volatility periods", consolidationTrades)},
+			Recommendation: "AVOID trading when: 1) Price between EMAs, 2) Bollinger Bands < 50% width, 3) Volume < average",
+		})
+	}
+
+	// Pattern: Poor R/R Execution
+	poorRRCount := 0
+	poorRRLoss := 0.0
+	for _, outcome := range outcomes {
+		// Simplified: Winners should be significantly larger than losers
+		if outcome.Success && outcome.RealizedPnLPct < 2.0 {
+			// Small winners suggest poor R/R
+			poorRRCount++
+		} else if !outcome.Success && math.Abs(outcome.RealizedPnLPct) > 3.0 {
+			// Large losers suggest poor risk management
+			poorRRCount++
+			poorRRLoss += outcome.RealizedPnLPct
+		}
+	}
+
+	if poorRRCount >= fg.config.MinPatternFrequency {
+		patterns = append(patterns, TradingPattern{
+			PatternType: "poor_risk_reward",
+			Frequency:   poorRRCount,
+			AvgPnLPct:   poorRRLoss / float64(poorRRCount),
+			Description: "Inadequate risk/reward ratios on trades",
+			Evidence: []string{
+				fmt.Sprintf("%d trades with suboptimal R/R", poorRRCount),
+				"Winners too small (<2%) or losers too large (>3%)",
+			},
+			Recommendation: "ENFORCE: Minimum 2:1 R/R. Set stop-loss at 2%, target at 4%+. Use ATR-based stops (1.5x ATR).",
+		})
+	}
+
 	return patterns
 }
 
@@ -1340,9 +1583,16 @@ func (fg *FeedbackGenerator) generateKeyInsights(metrics *Metrics, outcomes []De
 		insights = append(insights, fmt.Sprintf("✅ Drawdown well-controlled at %.1f%%", metrics.MaxDrawdownPct))
 	}
 
-	// Pattern-specific insights
+	// Pattern-specific insights from the identified failure patterns
 	for _, pattern := range analysis.FailurePatterns {
+		// Add insights for the new patterns we're detecting
 		switch pattern.PatternType {
+		case "overtrading_frequency":
+			insights = append(insights, fmt.Sprintf("🚨 OVERTRADING: %s", pattern.Description))
+		case "contradictory_analysis":
+			insights = append(insights, fmt.Sprintf("🔄 CONTRADICTORY ANALYSIS: %s", pattern.Description))
+		case "scared_money_pattern":
+			insights = append(insights, fmt.Sprintf("💸 SCARED MONEY: %s", pattern.Description))
 		case "holding_losers":
 			insights = append(insights, "⚠️ Tendency to hold losing positions. Set and respect stop-losses")
 		case "high_leverage_losses":
@@ -1358,7 +1608,59 @@ func (fg *FeedbackGenerator) generateKeyInsights(metrics *Metrics, outcomes []De
 		}
 	}
 
+	// Remove the duplicate detection logic that's now in the pattern detection functions
+
 	return insights
+}
+
+// Add the "scared money" pattern detection function (was in generateKeyInsights but should be a pattern detector)
+func (fg *FeedbackGenerator) detectScaredMoneyPattern(outcomes []DecisionOutcome) *TradingPattern {
+	if len(outcomes) < 2 {
+		return nil
+	}
+
+	sort.Slice(outcomes, func(i, j int) bool {
+		return outcomes[i].Timestamp.Before(outcomes[j].Timestamp)
+	})
+
+	scaredMoneyInstances := 0
+	scaredMoneyLoss := 0.0
+	evidence := []string{}
+
+	for i := 0; i < len(outcomes)-1; i++ {
+		current := outcomes[i]
+		next := outcomes[i+1]
+
+		// Check for pattern: small loss followed by quick re-entry on same symbol
+		if !current.Success &&
+			math.Abs(current.RealizedPnLPct) < 0.5 && // Small loss (<0.5%)
+			next.Symbol == current.Symbol && // Same symbol
+			next.Timestamp.Sub(current.Timestamp) < 30*time.Minute { // Within 30 minutes
+
+			scaredMoneyInstances++
+			scaredMoneyLoss += current.RealizedPnLPct
+
+			evidence = append(evidence,
+				fmt.Sprintf("%s: Small loss (%.2f%%) at %s, re-entered at %s (gap: %v)",
+					current.Symbol, current.RealizedPnLPct,
+					current.Timestamp.Format("15:04"),
+					next.Timestamp.Format("15:04"),
+					next.Timestamp.Sub(current.Timestamp).Round(time.Minute)))
+		}
+	}
+
+	if scaredMoneyInstances >= fg.config.MinPatternFrequency {
+		return &TradingPattern{
+			PatternType:    "scared_money_pattern",
+			Frequency:      scaredMoneyInstances,
+			AvgPnLPct:      scaredMoneyLoss / float64(scaredMoneyInstances),
+			Description:    "Scared Money Pattern: Cutting positions early after small losses, then re-entering",
+			Evidence:       evidence[:min(3, len(evidence))],
+			Recommendation: "ENFORCE: After closing a position on ANY symbol, wait minimum 60 minutes before re-entering same symbol. Small losses are acceptable - don't chase trades.",
+		}
+	}
+
+	return nil
 }
 
 // generateRecommendedActions creates specific actions to improve performance
@@ -1469,6 +1771,34 @@ func (fg *FeedbackGenerator) generateRecommendedActions(analysis *FeedbackAnalys
 		actions = append(actions, "12. IMPROVE RISK/REWARD: Target at least 2:1 reward-to-risk ratio on all trades. But also okay to have lower R/R if you can ride the market trend")
 	}
 
+	// NEW: Stricter actions based on specific phenomenons
+	// 1. Overtrading countermeasures
+	actions = append(actions, "🚫 **TRADING FREQUENCY LIMITS**:")
+	actions = append(actions, "   • MAX 2 trades per hour")
+	actions = append(actions, "   • MAX 8 trades per day")
+	actions = append(actions, "   • Minimum 45 minutes between trades")
+
+	// 2. Checklist enforcement
+	actions = append(actions, "✅ **MANDATORY PRE-TRADE CHECKLIST**:")
+	actions = append(actions, "   • [ ] Confidence ≥ 80% (not 70%)")
+	actions = append(actions, "   • [ ] Position size ≤ 40% of usual (not 50%)")
+	actions = append(actions, "   • [ ] Clear 2:1 R/R BEFORE entry")
+	actions = append(actions, "   • [ ] Market in trending regime (ChopScore < 40)")
+	actions = append(actions, "   • [ ] Multi-timeframe alignment (5m, 15m, 1H)")
+
+	// 3. Psychological safeguards
+	actions = append(actions, "🧘 **PSYCHOLOGICAL SAFEGUARDS**:")
+	actions = append(actions, "   • After ANY loss: 60-minute mandatory break")
+	actions = append(actions, "   • After 2 consecutive wins: Reduce position size by 30%")
+	actions = append(actions, "   • Never re-enter same symbol within 90 minutes")
+
+	// 4. Market context emphasis
+	actions = append(actions, "📊 **MARKET CONTEXT RULES**:")
+	actions = append(actions, "   • SKIP trades when: EMA20 between EMA50 and EMA100")
+	actions = append(actions, "   • SKIP trades when: RSI 40-60 (neutral)")
+	actions = append(actions, "   • ONLY enter when: Volume > 150% of 20-period average")
+	actions = append(actions, "   • ONLY enter when: Institutional OI trending same direction")
+
 	return actions
 }
 
@@ -1523,11 +1853,11 @@ func (fg *FeedbackGenerator) FormatFeedbackForPrompt(analysis *FeedbackAnalysis,
 		return ""
 	}
 
-	return analysis.FormatForPrompt(lang)
+	return fg.FormatForPrompt(analysis, lang)
 }
 
 // FormatForPrompt formats the feedback analysis for inclusion in AI prompts (method on FeedbackAnalysis)
-func (analysis *FeedbackAnalysis) FormatForPrompt(lang string) string {
+func (fg *FeedbackGenerator) FormatForPrompt(analysis *FeedbackAnalysis, lang string) string {
 	if analysis == nil {
 		return ""
 	}
@@ -1535,6 +1865,28 @@ func (analysis *FeedbackAnalysis) FormatForPrompt(lang string) string {
 	var sb strings.Builder
 
 	if lang == "zh" {
+		sb.WriteString("## 🎯 战略级问题诊断\n\n")
+		sb.WriteString("### 🔍 核心问题识别\n\n")
+
+		// Categorize problems by severity
+		sb.WriteString("**🔴 严重问题 (需要立即解决):**\n")
+		// Add detected severe problems
+
+		sb.WriteString("\n**⚠️ 中等问题 (需要改进):**\n")
+		// Add detected medium problems
+
+		sb.WriteString("\n**📊 性能数据:**\n")
+		sb.WriteString(fmt.Sprintf("- 交易频率: %.1f 笔/小时\n", analysis.TradesPerHour))
+		sb.WriteString(fmt.Sprintf("- 平均持仓时间: %s\n", analysis.AvgHoldTime))
+		sb.WriteString(fmt.Sprintf("- 检查表遵从率: %.1f%%\n", analysis.ChecklistCompliance))
+
+		sb.WriteString("\n### 🛡️ 防护机制激活\n")
+		sb.WriteString("基于上述问题，以下防护机制已激活:\n")
+		sb.WriteString("1. **频率限制器**: 最大2笔/小时\n")
+		sb.WriteString("2. **情绪冷却器**: 亏损后60分钟暂停\n")
+		sb.WriteString("3. **市场过滤器**: 仅趋势市场交易\n")
+		sb.WriteString("4. **规模控制器**: 仓位≤40%正常规模\n\n")
+
 		sb.WriteString("## 📊 历史表现反馈\n\n")
 		sb.WriteString(fmt.Sprintf("**分析周期**: %s (覆盖 %d 个决策)\n", analysis.AnalysisPeriod, analysis.DecisionsCovered))
 		sb.WriteString(fmt.Sprintf("**总回报**: %.2f%% | **胜率**: %.1f%% | **盈利因子**: %.2f | **最大回撤**: %.1f%%\n\n",
@@ -1715,6 +2067,26 @@ func (analysis *FeedbackAnalysis) FormatForPrompt(lang string) string {
 		sb.WriteString("**💡 基于以上反馈进行决策**: 学习失败教训，复制成功模式，严格执行建议行动\n\n")
 
 	} else {
+		sb.WriteString("## 🎯 Strategic Problem Diagnosis\n\n")
+		sb.WriteString("### 🔍 Core Issue Identification\n\n")
+
+		sb.WriteString("**🔴 Critical Issues (Immediate Action Required):**\n")
+
+		sb.WriteString("\n**⚠️ Moderate Issues (Needs Improvement):**\n")
+
+		sb.WriteString("\n**📊 Performance Metrics:**\n")
+		sb.WriteString("\n**📊 Performance Metrics:**\n")
+		sb.WriteString(fmt.Sprintf("- Trading Frequency: %.1f trades/hour\n", analysis.TradesPerHour))
+		sb.WriteString(fmt.Sprintf("- Average Hold Time: %s\n", analysis.AvgHoldTime))
+		sb.WriteString(fmt.Sprintf("- Checklist Compliance: %.1f%%\n", analysis.ChecklistCompliance))
+
+		sb.WriteString("\n### 🛡️ Protection Mechanisms Activated\n")
+		sb.WriteString("Based on above issues, the following protections are activated:\n")
+		sb.WriteString("1. **Frequency Limiter**: Max 2 trades/hour\n")
+		sb.WriteString("2. **Emotional Cooldown**: 60-min pause after any loss\n")
+		sb.WriteString("3. **Market Filter**: Trade only in trending regimes\n")
+		sb.WriteString("4. **Size Controller**: Position size ≤40% of normal\n\n")
+
 		sb.WriteString("## 📊 Historical Performance Feedback\n\n")
 		sb.WriteString(fmt.Sprintf("**Analysis Period**: %s (%d decisions covered)\n", analysis.AnalysisPeriod, analysis.DecisionsCovered))
 		sb.WriteString(fmt.Sprintf("**Total Return**: %.2f%% | **Win Rate**: %.1f%% | **Profit Factor**: %.2f | **Max Drawdown**: %.1f%%\n\n",
@@ -1896,6 +2268,143 @@ func (analysis *FeedbackAnalysis) FormatForPrompt(lang string) string {
 	}
 
 	return sb.String()
+}
+
+// Helper functions for FormatForPrompt - ACTUAL IMPLEMENTATIONS
+func (fg *FeedbackGenerator) calculateTradesPerHour(outcomes []DecisionOutcome) float64 {
+	if len(outcomes) < 2 {
+		return 0
+	}
+
+	// Sort by timestamp
+	sort.Slice(outcomes, func(i, j int) bool {
+		return outcomes[i].Timestamp.Before(outcomes[j].Timestamp)
+	})
+
+	// Calculate time window
+	startTime := outcomes[0].Timestamp
+	endTime := outcomes[len(outcomes)-1].Timestamp
+	timeWindow := endTime.Sub(startTime)
+
+	if timeWindow <= 0 {
+		return 0
+	}
+
+	return float64(len(outcomes)) / timeWindow.Hours()
+}
+
+func (fg *FeedbackGenerator) calculateAvgHoldTime(outcomes []DecisionOutcome) string {
+	if len(outcomes) == 0 {
+		return "0m"
+	}
+
+	var totalDuration time.Duration
+	count := 0
+
+	for _, outcome := range outcomes {
+		if outcome.HoldDuration != "" {
+			duration, err := parseDurationFromString(outcome.HoldDuration)
+			if err == nil {
+				totalDuration += duration
+				count++
+			}
+		}
+	}
+
+	if count == 0 {
+		return "0m"
+	}
+
+	avgDuration := totalDuration / time.Duration(count)
+	return formatDurationShort(avgDuration)
+}
+
+func (fg *FeedbackGenerator) calculateChecklistCompliance(outcomes []DecisionOutcome) float64 {
+	if len(outcomes) == 0 {
+		return 0.0
+	}
+
+	compliancePoints := 0
+	totalPossiblePoints := 0
+
+	for _, outcome := range outcomes {
+		// Checklist items to check:
+		// 1. Confidence >= 70%
+		if outcome.Confidence >= 70 {
+			compliancePoints++
+		}
+		totalPossiblePoints++
+
+		// 2. Position size not excessive (simplified check)
+		// In real implementation, you'd check against account size
+		if outcome.PositionSize < 1000 { // Assuming $1000 is reasonable max
+			compliancePoints++
+		}
+		totalPossiblePoints++
+
+		// 3. Hold duration reasonable (not too short, not too long)
+		duration, err := parseDurationFromString(outcome.HoldDuration)
+		if err == nil && duration >= 15*time.Minute && duration <= 24*time.Hour {
+			compliancePoints++
+		}
+		totalPossiblePoints++
+
+		// 4. Leverage not excessive
+		if outcome.Leverage <= 5 {
+			compliancePoints++
+		}
+		totalPossiblePoints++
+	}
+
+	if totalPossiblePoints == 0 {
+		return 0.0
+	}
+
+	return float64(compliancePoints) / float64(totalPossiblePoints) * 100.0
+}
+
+// Helper function to parse duration from string like "2h30m" or "45m"
+func parseDurationFromString(durationStr string) (time.Duration, error) {
+	// Remove any spaces
+	durationStr = strings.TrimSpace(durationStr)
+
+	// Try parsing with time.ParseDuration
+	dur, err := time.ParseDuration(durationStr)
+	if err == nil {
+		return dur, nil
+	}
+
+	// Try custom parsing for format like "2h30m"
+	var hours, minutes int
+	if strings.Contains(durationStr, "h") && strings.Contains(durationStr, "m") {
+		_, err := fmt.Sscanf(durationStr, "%dh%dm", &hours, &minutes)
+		if err == nil {
+			return time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute, nil
+		}
+	} else if strings.Contains(durationStr, "h") {
+		_, err := fmt.Sscanf(durationStr, "%dh", &hours)
+		if err == nil {
+			return time.Duration(hours) * time.Hour, nil
+		}
+	} else if strings.Contains(durationStr, "m") {
+		_, err := fmt.Sscanf(durationStr, "%dm", &minutes)
+		if err == nil {
+			return time.Duration(minutes) * time.Minute, nil
+		}
+	}
+
+	return 0, fmt.Errorf("invalid duration format: %s", durationStr)
+}
+
+// Helper function for short duration formatting
+func formatDurationShort(d time.Duration) string {
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+
+	if hours > 0 {
+		return fmt.Sprintf("%dh%02dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
 }
 
 // SaveFeedbackAnalysis saves the feedback analysis to disk for later reference

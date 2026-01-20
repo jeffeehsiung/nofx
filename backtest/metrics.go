@@ -36,8 +36,16 @@ func CalculateMetrics(runID string, cfg *BacktestConfig, state *BacktestState) (
 	lastEquity := initialBalance
 	if len(points) > 0 && points[len(points)-1].Equity > 0 {
 		lastEquity = points[len(points)-1].Equity
+		// Optionally add unrealized PnL from state if available and not already included
+		if state != nil && state.UnrealizedPnL != 0 {
+			lastEquity += state.UnrealizedPnL
+		}
 	} else if state != nil && state.Equity > 0 {
 		lastEquity = state.Equity
+		// Optionally add unrealized PnL if not included in Equity
+		if state.UnrealizedPnL != 0 {
+			lastEquity += state.UnrealizedPnL
+		}
 	}
 	metrics.TotalReturnPct = ((lastEquity - initialBalance) / initialBalance) * 100
 
