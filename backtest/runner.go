@@ -153,8 +153,8 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	strategyEngine := decision.NewStrategyEngine(strategyConfig)
 	// Initialize feedback loop
 	feedbackConfig := DefaultFeedbackConfig()
-	if !cfg.EnableAnalysis {
-		feedbackConfig.EnableFeedback = false
+	if cfg.EnableAnalysis {
+		feedbackConfig.EnableFeedback = true
 	}
 	feedbackGenerator := NewFeedbackGenerator(cfg.RunID, cfg.InitialBalance, feedbackConfig)
 
@@ -204,8 +204,8 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	defaultPrompt := strategyEngine.GetConfig().PromptSections
 	riskcontrolConfig := strategyEngine.GetConfig().RiskControl
 	promptOptimizationConfig := DefaultPromptOptimizerConfig()
-	if !cfg.EnablePromptLab {
-		promptOptimizationConfig.EnableOptimization = false
+	if cfg.EnablePromptLab {
+		promptOptimizationConfig.EnableOptimization = true
 	}
 	promptOptimizer := NewPromptOptimizerWithAI(&defaultPrompt, promptOptimizationConfig, client, cfg.RunID, cfg.Storage)
 	factorOptimizer := NewFactorOptimizer(&riskcontrolConfig, DefaultFactorOptimizerConfig())

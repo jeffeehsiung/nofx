@@ -121,7 +121,7 @@ type FeedbackConfig struct {
 // DefaultFeedbackConfig returns sensible defaults
 func DefaultFeedbackConfig() FeedbackConfig {
 	return FeedbackConfig{
-		EnableFeedback:          true,
+		EnableFeedback:          false,
 		MinDecisionsForFeedback: 64,
 		FeedbackWindowCycles:    32,
 		TopTradesCount:          3,

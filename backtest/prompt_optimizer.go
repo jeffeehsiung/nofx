@@ -83,7 +83,7 @@ type PromptOptimizerConfig struct {
 // DefaultPromptOptimizerConfig returns default configuration
 func DefaultPromptOptimizerConfig() *PromptOptimizerConfig {
 	return &PromptOptimizerConfig{
-		EnableOptimization:  true,
+		EnableOptimization:  false,
 		PopulationSize:      5,
 		MutationRate:        0.3,
 		EvaluationCycles:    20,
