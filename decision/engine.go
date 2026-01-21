@@ -947,7 +947,9 @@ func (e *StrategyEngine) BuildSystemPromptWithContext(accountEquity float64, var
 
 	// 7. Output format
 	sb.WriteString("# Additional Output Format (Strictly Follow)\n\n")
-	sb.WriteString("**Must use XML tags <reasoning> and <decision> to separate chain of thought and decision JSON, avoiding parsing errors**\n\n")
+	sb.WriteString("**Must use XML tags <reasoning> and <decision> to separate chain of thought and decision JSON, " +
+		"Do not use the ~ (tilde) symbol or any range/approximate notation in your JSON output. All numbers must be precise values. " +
+		"avoiding parsing errors**\n\n")
 	sb.WriteString("## Format Requirements\n\n")
 	sb.WriteString("<reasoning>\n")
 	sb.WriteString("Your chain of thought analysis...\n")
@@ -1166,6 +1168,7 @@ func extractDecisions(response string) ([]Decision, error) {
 		jsonContent := strings.TrimSpace(m[1])
 		jsonContent = compactArrayOpen(jsonContent)
 		jsonContent = fixMissingQuotes(jsonContent)
+		jsonContent = strings.ReplaceAll(jsonContent, "~", "")
 		if err := validateJSONFormat(jsonContent); err != nil {
 			return nil, fmt.Errorf("JSON format validation failed: %w\nJSON content: %s\nFull response:\n%s", err, jsonContent, response)
 		}
@@ -1196,6 +1199,7 @@ func extractDecisions(response string) ([]Decision, error) {
 
 	jsonContent = compactArrayOpen(jsonContent)
 	jsonContent = fixMissingQuotes(jsonContent)
+	jsonContent = strings.ReplaceAll(jsonContent, "~", "")
 
 	if err := validateJSONFormat(jsonContent); err != nil {
 		return nil, fmt.Errorf("JSON format validation failed: %w\nJSON content: %s\nFull response:\n%s", err, jsonContent, response)
@@ -1311,7 +1315,11 @@ func validateDecision(d *Decision, accountEquity float64, btcEthLeverage, altcoi
 			posRatio = btcEthPosRatio
 			maxPositionValue = accountEquity * posRatio
 		}
+		d.Action = strings.ToLower(d.Action)
 
+		if !validActions[d.Action] {
+			return fmt.Errorf("invalid action: %s", d.Action)
+		}
 		if d.Leverage <= 0 {
 			return fmt.Errorf("leverage must be greater than 0: %d", d.Leverage)
 		}
