@@ -921,8 +921,8 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 	record.Timestamp = time.UnixMilli(ts).UTC()
 	// Generate feedback if enabled and enough decisions have been made
 	if r.feedbackConfig.EnableFeedback && callCount >= r.feedbackConfig.MinDecisionsForFeedback {
-		// Regenerate feedback every 5 cycles
-		if r.lastFeedback == nil || (callCount-r.feedbackCycle) >= 5 {
+		// Regenerate feedback every FeedbackWindowCycles cycles
+		if r.lastFeedback == nil || (callCount-r.feedbackCycle) >= r.feedbackConfig.FeedbackWindowCycles {
 			feedback, err := r.feedbackGenerator.GenerateFeedback()
 			if err != nil {
 				logger.Infof("Failed to generate feedback: %v", err)

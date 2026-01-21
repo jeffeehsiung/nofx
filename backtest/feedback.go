@@ -123,7 +123,7 @@ func DefaultFeedbackConfig() FeedbackConfig {
 	return FeedbackConfig{
 		EnableFeedback:          true,
 		MinDecisionsForFeedback: 20,
-		FeedbackWindowCycles:    2,
+		FeedbackWindowCycles:    10,
 		TopTradesCount:          3,
 		MinPatternFrequency:     5,
 	}

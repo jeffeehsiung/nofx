@@ -19,16 +19,12 @@ require (
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.47.0
 	golang.org/x/net v0.49.0
-	modernc.org/sqlite v1.44.2
+	modernc.org/sqlite v1.44.3
 )
 
-require (
-	github.com/bytedance/gopkg v0.1.3 // indirect
-)
+require github.com/bytedance/gopkg v0.1.3 // indirect
 
-require (
-	gonum.org/v1/gonum v0.17.0
-)
+require gonum.org/v1/gonum v0.17.0
 
 require (
 	github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20260120135015-58f41aaaee16 // indirect

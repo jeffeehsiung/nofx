@@ -1168,9 +1168,9 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 			}
 
 			// Generate feedback if enabled and enough trades have been made
-			// Regenerate feedback every 5 cycles to avoid constant recalculation
-			if at.feedbackGenerator != nil && stats.TotalTrades >= 5 {
-				if at.lastFeedback == nil || (stats.TotalTrades-at.feedbackCycle) >= 5 {
+			// Regenerate feedback every FeedbackWindowCycles cycles to avoid constant recalculation
+			if at.feedbackGenerator != nil && stats.TotalTrades >= backtest.DefaultFeedbackConfig().FeedbackWindowCycles {
+				if at.lastFeedback == nil || (stats.TotalTrades-at.feedbackCycle) >= backtest.DefaultFeedbackConfig().FeedbackWindowCycles {
 					feedback, err := at.feedbackGenerator.GenerateFeedback()
 					if err != nil {
 						logger.Warnf("⚠️ [%s] Failed to generate feedback analysis: %v", at.name, err)
