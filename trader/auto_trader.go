@@ -1188,7 +1188,7 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 						if strings.Contains(strings.ToLower(at.strategyEngine.GetConfig().PromptSections.RoleDefinition), "交易") {
 							lang = "zh"
 						}
-						userPrompt := at.feedbackGenerator.FormatFeedbackForPrompt(feedback, lang)
+						userPrompt := at.feedbackGenerator.FormatFeedbackForPrompt(feedback, lang, false)
 						var systemPrompt string
 						if lang == "zh" {
 							systemPrompt = "你是一个经验丰富的加密货币交易策略顾问。根据以下反馈，帮助改进交易决策。"

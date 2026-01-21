@@ -153,6 +153,9 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	strategyEngine := decision.NewStrategyEngine(strategyConfig)
 	// Initialize feedback loop
 	feedbackConfig := DefaultFeedbackConfig()
+	if !cfg.EnableAnalysis {
+		feedbackConfig.EnableFeedback = false
+	}
 	feedbackGenerator := NewFeedbackGenerator(cfg.RunID, cfg.InitialBalance, feedbackConfig)
 
 	failureThresholds := decision.DefaultFailureThresholds()
@@ -200,7 +203,11 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	// Use a default system prompt (will be overridden by StrategyEngine)
 	defaultPrompt := strategyEngine.GetConfig().PromptSections
 	riskcontrolConfig := strategyEngine.GetConfig().RiskControl
-	promptOptimizer := NewPromptOptimizerWithAI(&defaultPrompt, DefaultPromptOptimizerConfig(), client, cfg.RunID, cfg.Storage)
+	promptOptimizationConfig := DefaultPromptOptimizerConfig()
+	if !cfg.EnablePromptLab {
+		promptOptimizationConfig.EnableOptimization = false
+	}
+	promptOptimizer := NewPromptOptimizerWithAI(&defaultPrompt, promptOptimizationConfig, client, cfg.RunID, cfg.Storage)
 	factorOptimizer := NewFactorOptimizer(&riskcontrolConfig, DefaultFactorOptimizerConfig())
 	complianceTracker := NewComplianceTracker(DefaultComplianceConfig())
 
@@ -936,7 +943,7 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 				logger.Infof("✅ Generated feedback analysis at cycle %d: Total Return %.2f%%, Win Rate %.1f%%",
 					callCount, feedback.TotalReturnPct, feedback.WinRate)
 				// Feed feedback to LLM
-				userPrompt := r.feedbackGenerator.FormatFeedbackForPrompt(feedback, lang)
+				userPrompt := r.feedbackGenerator.FormatFeedbackForPrompt(feedback, lang, false)
 				var systemPrompt string
 				if lang == "zh" {
 					systemPrompt = "你是一个经验丰富的加密货币交易策略顾问。根据以下反馈，帮助改进交易决策。"
