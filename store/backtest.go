@@ -223,6 +223,10 @@ func (s *BacktestStore) initTables() error {
 	s.addColumnIfNotExists("backtest_runs", "label", "TEXT DEFAULT ''")
 	s.addColumnIfNotExists("backtest_runs", "last_error", "TEXT DEFAULT ''")
 	s.addColumnIfNotExists("backtest_trades", "leverage", "INTEGER DEFAULT 0")
+	s.addColumnIfNotExists("backtest_prompt_variants", "prompt_role_definition", "TEXT DEFAULT ''")
+	s.addColumnIfNotExists("backtest_prompt_variants", "prompt_trading_frequency", "TEXT DEFAULT ''")
+	s.addColumnIfNotExists("backtest_prompt_variants", "prompt_entry_standards", "TEXT DEFAULT ''")
+	s.addColumnIfNotExists("backtest_prompt_variants", "prompt_decision_process", "TEXT DEFAULT ''")
 
 	return nil
 }
