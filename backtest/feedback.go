@@ -122,10 +122,10 @@ type FeedbackConfig struct {
 func DefaultFeedbackConfig() FeedbackConfig {
 	return FeedbackConfig{
 		EnableFeedback:          true,
-		MinDecisionsForFeedback: 1,
+		MinDecisionsForFeedback: 20,
 		FeedbackWindowCycles:    2,
 		TopTradesCount:          3,
-		MinPatternFrequency:     2,
+		MinPatternFrequency:     5,
 	}
 }
 
@@ -510,9 +510,9 @@ func (fg *FeedbackGenerator) createDecisionOutcomes(closedPositions []ClosedPosi
 				pnlPct = ((pos.EntryPrice - pos.ExitPrice) / pos.EntryPrice) * 100 * float64(pos.Leverage)
 			}
 		}
-
 		holdDuration := pos.ExitTime.Sub(pos.EntryTime)
 
+		isTradeSuccess := pnlPct >= (1.0 * float64(pos.Leverage))
 		// Try to find the original decision record for this trade
 		reasoning := ""
 		confidence := 0
@@ -534,7 +534,7 @@ func (fg *FeedbackGenerator) createDecisionOutcomes(closedPositions []ClosedPosi
 			HoldDuration:   formatDuration(holdDuration),
 			RealizedPnL:    pos.RealizedPnL,
 			RealizedPnLPct: pnlPct,
-			Success:        pos.RealizedPnL > 0,
+			Success:        isTradeSuccess,
 			Analysis:       fg.analyzeDecisionOutcome(pos, pnlPct, holdDuration),
 			RecentOrder:    buildRecentOrderFromPosition(pos), // Bridge to Trade Failure V2
 		}
@@ -1121,7 +1121,7 @@ func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome,
 
 			// Add metrics context to make patterns more actionable
 			frequencyPct := float64(data.count) / float64(len(outcomes)) * 100
-			description := fmt.Sprintf("Execution-level failure: %s | Frequency: %.1f%% of trades", humanizeV2Reason(v2Reason), frequencyPct)
+			description := fmt.Sprintf("Execution-level failure: %s | Frequency: %.1f%% of trades", humanizeV2ReasonEN(v2Reason), frequencyPct)
 			if metrics.TotalReturnPct < -5 {
 				description += " (CRITICAL - impacts overall returns)"
 			} else if metrics.TotalReturnPct < 0 {
@@ -1559,15 +1559,7 @@ func (fg *FeedbackGenerator) generateKeyInsights(metrics *Metrics, outcomes []De
 			"Every single trade** must have a **minimum 1.5:1 reward-to-risk ratio** before entry."+
 			"Until you have a winning strategy, you must enforce discipline. **Aim for a minimum 2:1 Reward-to-Risk ratio on every planned trade.**"+
 			"This means if your stop-loss is 2%%, your target should be at least 4%% away."+
-			"**Define Riding-the-Trend as a Trade Management Rule**: Once a trade is in profit (e.g., +1.5R), move your stop-loss to breakeven."+
-			"Then* you can ride-the-trend without risk. This is how you let winners run safely."+
-			"### 📝 **Your New Trade Checklist (Must Complete Before Every Entry)**"+
-			"- [ ] **Confidence Level ≥ 70%%?**"+
-			"- [ ] **Position Size = 50%% of my usual size?**"+
-			"- [ ] **Stop-Loss Set at 2-3%%?**"+
-			"- [ ] **Price Target Set for at least 2x the risk (2:1 R/R)?**"+
-			"- [ ] **Entry confirmed by volume & multi-timeframe alignment?**"+
-			"- [ ] **Market context (high timeframe) supportive?** \n\n", metrics.ProfitFactor))
+			"**Define Riding-the-Trend as a Trade Management Rule**: Once a trade is in profit (e.g., +1.5R), move your stop-loss to breakeven.\n\n", metrics.ProfitFactor))
 	} else if metrics.ProfitFactor < 1.5 {
 		insights = append(insights, fmt.Sprintf("Profit factor %.2f is acceptable but can be improved. Focus on better closing time, and ride the market trend.", metrics.ProfitFactor))
 	} else {
@@ -1768,7 +1760,7 @@ func (fg *FeedbackGenerator) generateRecommendedActions(analysis *FeedbackAnalys
 	// Based on profit factor
 	if analysis.ProfitFactor < 1.5 {
 		actions = append(actions, "11. LET WINNERS RUN: Move stop-loss to breakeven and let profitable trades reach larger targets")
-		actions = append(actions, "12. IMPROVE RISK/REWARD: Target at least 2:1 reward-to-risk ratio on all trades. But also okay to have lower R/R if you can ride the market trend")
+		actions = append(actions, "12. IMPROVE RISK/REWARD: Target at least 2:1 reward-to-risk ratio on all trades")
 	}
 
 	// NEW: Stricter actions based on specific phenomenons
@@ -1856,419 +1848,439 @@ func (fg *FeedbackGenerator) FormatFeedbackForPrompt(analysis *FeedbackAnalysis,
 	return fg.FormatForPrompt(analysis, lang)
 }
 
-// FormatForPrompt formats the feedback analysis for inclusion in AI prompts (method on FeedbackAnalysis)
+// FormatForPrompt formats feedback for LLM consumption - CONCISE VERSION
 func (fg *FeedbackGenerator) FormatForPrompt(analysis *FeedbackAnalysis, lang string) string {
 	if analysis == nil {
-		return ""
+		return "NO_FEEDBACK_AVAILABLE"
 	}
+
+	// Get only the MOST important insights (top 3 of each category)
+	prioritized := fg.prioritizeFeedback(analysis)
 
 	var sb strings.Builder
 
 	if lang == "zh" {
-		sb.WriteString("## 🎯 战略级问题诊断\n\n")
-		sb.WriteString("### 🔍 核心问题识别\n\n")
-
-		// Categorize problems by severity
-		sb.WriteString("**🔴 严重问题 (需要立即解决):**\n")
-		// Add detected severe problems
-
-		sb.WriteString("\n**⚠️ 中等问题 (需要改进):**\n")
-		// Add detected medium problems
-
-		sb.WriteString("\n**📊 性能数据:**\n")
-		sb.WriteString(fmt.Sprintf("- 交易频率: %.1f 笔/小时\n", analysis.TradesPerHour))
-		sb.WriteString(fmt.Sprintf("- 平均持仓时间: %s\n", analysis.AvgHoldTime))
-		sb.WriteString(fmt.Sprintf("- 检查表遵从率: %.1f%%\n", analysis.ChecklistCompliance))
-
-		sb.WriteString("\n### 🛡️ 防护机制激活\n")
-		sb.WriteString("基于上述问题，以下防护机制已激活:\n")
-		sb.WriteString("1. **频率限制器**: 最大2笔/小时\n")
-		sb.WriteString("2. **情绪冷却器**: 亏损后60分钟暂停\n")
-		sb.WriteString("3. **市场过滤器**: 仅趋势市场交易\n")
-		sb.WriteString("4. **规模控制器**: 仓位≤40%正常规模\n\n")
-
-		sb.WriteString("## 📊 历史表现反馈\n\n")
-		sb.WriteString(fmt.Sprintf("**分析周期**: %s (覆盖 %d 个决策)\n", analysis.AnalysisPeriod, analysis.DecisionsCovered))
-		sb.WriteString(fmt.Sprintf("**总回报**: %.2f%% | **胜率**: %.1f%% | **盈利因子**: %.2f | **最大回撤**: %.1f%%\n\n",
-			analysis.TotalReturnPct, analysis.WinRate, analysis.ProfitFactor, analysis.MaxDrawdown))
-
-		if len(analysis.KeyInsights) > 0 {
-			sb.WriteString("### 关键洞察\n\n")
-			for _, insight := range analysis.KeyInsights {
-				sb.WriteString(fmt.Sprintf("- %s\n", insight))
-			}
-			sb.WriteString("\n")
-		}
-
-		// ============================================================================
-		// EXECUTION-LEVEL FAILURE ANALYSIS (Trade Failure V2 Microstructure)
-		// ============================================================================
-		if len(analysis.FailurePatterns) > 0 {
-			// Separate V2 execution failures from other patterns
-			var v2Failures []TradingPattern
-			var otherFailures []TradingPattern
-
-			for _, pattern := range analysis.FailurePatterns {
-				// V2 failure reasons contain microstructure keywords
-				if strings.Contains(pattern.PatternType, "_") ||
-					strings.Contains(pattern.Description, "Execution-level") {
-					v2Failures = append(v2Failures, pattern)
-				} else {
-					otherFailures = append(otherFailures, pattern)
-				}
-			}
-
-			// Display V2 execution-level diagnostics
-			if len(v2Failures) > 0 {
-				sb.WriteString("### 📋 执行级失败诊断 (微观结构分析)\n\n")
-				sb.WriteString("**这些失败根植于市场执行条件和入场/出场时机：**\n\n")
-
-				for i, pattern := range v2Failures {
-					if i >= 5 { // Limit to top 5
-						break
-					}
-					sb.WriteString(fmt.Sprintf("**%s**\n", pattern.Description))
-					sb.WriteString(fmt.Sprintf("   发生: %d 次 | 平均亏损: %.2f%%\n", pattern.Frequency, pattern.AvgPnLPct))
-
-					// Display evidence (first 2 pieces)
-					if len(pattern.Evidence) > 0 {
-						for j, evidence := range pattern.Evidence {
-							if j >= 2 {
-								break
-							}
-							sb.WriteString(fmt.Sprintf("   证据: %s\n", evidence))
-						}
-					}
-
-					sb.WriteString(fmt.Sprintf("   **行动**: %s\n\n", pattern.Recommendation))
-				}
-			}
-
-			// Display other failure patterns
-			if len(otherFailures) > 0 {
-				sb.WriteString("### ⚠️ 其他发现的失败模式\n\n")
-				for i, pattern := range otherFailures {
-					if i >= 3 {
-						break
-					}
-					sb.WriteString(fmt.Sprintf("**%s** (发生 %d 次, 平均亏损 %.2f%%)\n",
-						pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
-					sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
-				}
-			}
-		} else if len(analysis.FailurePatterns) > 0 {
-			sb.WriteString("### ⚠️ 发现的失败模式\n\n")
-			for i, pattern := range analysis.FailurePatterns {
-				if i >= 3 {
-					break // Limit to top 3
-				}
-				sb.WriteString(fmt.Sprintf("**%s** (发生 %d 次, 平均亏损 %.2f%%)\n",
-					pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
-				sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
-			}
-		}
-
-		if len(analysis.SuccessPatterns) > 0 {
-			sb.WriteString("### ✅ 发现的成功模式\n\n")
-			for i, pattern := range analysis.SuccessPatterns {
-				if i >= 3 {
-					break
-				}
-				sb.WriteString(fmt.Sprintf("**%s** (发生 %d 次, 平均盈利 %.2f%%)\n",
-					pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
-				sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
-			}
-		}
-
-		if len(analysis.RecommendedActions) > 0 {
-			sb.WriteString("### 🎯 建议行动\n\n")
-			for _, action := range analysis.RecommendedActions {
-				if strings.HasPrefix(action, "⚠️") || strings.HasPrefix(action, "🔴") {
-					sb.WriteString(fmt.Sprintf("**%s**\n", action))
-				} else {
-					sb.WriteString(fmt.Sprintf("%s\n", action))
-				}
-			}
-			sb.WriteString("\n")
-		}
-
-		// ============================================================================
-		// FEW-SHOT LEARNING: Concrete Trade Examples
-		// ============================================================================
-		if len(analysis.TopWinningTrades) > 0 || len(analysis.TopLosingTrades) > 0 {
-			sb.WriteString("### 📚 从过去的交易中学习 (Few-Shot Examples)\n\n")
-			sb.WriteString("**研究这些具体案例来理解什么有效，什么无效：**\n\n")
-
-			// Show top winning trades as positive examples
-			if len(analysis.TopWinningTrades) > 0 {
-				sb.WriteString("#### ✅ 成功案例 (模仿这些交易):\n\n")
-				for i, trade := range analysis.TopWinningTrades {
-					if i >= 3 { // Limit to top 3
-						break
-					}
-					sb.WriteString(fmt.Sprintf("**案例 %d: %s %s**\n", i+1, trade.Symbol, trade.Action))
-					sb.WriteString(fmt.Sprintf("- 时间: %s | 持仓: %s\n", trade.Timestamp.Format("01-02 15:04"), trade.HoldDuration))
-					sb.WriteString(fmt.Sprintf("- 入场: %.4f | 出场: %.4f | 杠杆: %dx\n", trade.EntryPrice, trade.ExitPrice, trade.Leverage))
-					sb.WriteString(fmt.Sprintf("- **结果**: +%.2f%% (%.2f USDT)\n", trade.RealizedPnLPct, trade.RealizedPnL))
-					if trade.Analysis != "" {
-						sb.WriteString(fmt.Sprintf("- 分析: %s\n", trade.Analysis))
-					}
-					if trade.Reasoning != "" {
-						sb.WriteString(fmt.Sprintf("- 原始理由: %s\n", trade.Reasoning))
-					}
-					sb.WriteString("\n")
-				}
-			}
-
-			// Show top losing trades as negative examples
-			if len(analysis.TopLosingTrades) > 0 {
-				sb.WriteString("#### ❌ 失败案例 (避免重复这些错误):\n\n")
-				for i, trade := range analysis.TopLosingTrades {
-					if i >= 3 { // Limit to top 3
-						break
-					}
-					sb.WriteString(fmt.Sprintf("**案例 %d: %s %s**\n", i+1, trade.Symbol, trade.Action))
-					sb.WriteString(fmt.Sprintf("- 时间: %s | 持仓: %s\n", trade.Timestamp.Format("01-02 15:04"), trade.HoldDuration))
-					sb.WriteString(fmt.Sprintf("- 入场: %.4f | 出场: %.4f | 杠杆: %dx\n", trade.EntryPrice, trade.ExitPrice, trade.Leverage))
-					sb.WriteString(fmt.Sprintf("- **结果**: %.2f%% (%.2f USDT)\n", trade.RealizedPnLPct, trade.RealizedPnL))
-
-					// Add Trade Failure V2 execution-level diagnosis
-					if trade.RecentOrder != nil {
-						failureAnalysis := decision.AnalyzeFailedTrade(trade.RecentOrder)
-						if failureAnalysis != nil {
-							sb.WriteString(fmt.Sprintf("- **执行诊断**: %s (置信度: %.0f%%)\n",
-								humanizeV2Reason(failureAnalysis.PrimaryReason),
-								failureAnalysis.ConfidenceScore*100))
-							if failureAnalysis.DetailedNotes != "" {
-								sb.WriteString(fmt.Sprintf("- 详细说明: %s\n", failureAnalysis.DetailedNotes))
-							}
-							if failureAnalysis.Recommendation != "" {
-								sb.WriteString(fmt.Sprintf("- ⚠️ 如何避免: %s\n", failureAnalysis.Recommendation))
-							}
-						}
-					}
-
-					if trade.Analysis != "" {
-						sb.WriteString(fmt.Sprintf("- 分析: %s\n", trade.Analysis))
-					}
-					if trade.Reasoning != "" {
-						sb.WriteString(fmt.Sprintf("- 原始理由: %s\n", trade.Reasoning))
-					}
-					sb.WriteString("\n")
-				}
-			}
-
-			sb.WriteString("**💡 学习要点**: 分析这些真实案例，理解决策背景和结果之间的因果关系\n\n")
-		}
-
-		sb.WriteString(fmt.Sprintf("**市场条件评估**: %s\n\n", analysis.MarketConditions))
-
-		sb.WriteString("---\n\n")
-		sb.WriteString("**💡 基于以上反馈进行决策**: 学习失败教训，复制成功模式，严格执行建议行动\n\n")
-
+		fg.formatZHConcise(&sb, prioritized, analysis)
 	} else {
-		sb.WriteString("## 🎯 Strategic Problem Diagnosis\n\n")
-		sb.WriteString("### 🔍 Core Issue Identification\n\n")
-
-		sb.WriteString("**🔴 Critical Issues (Immediate Action Required):**\n")
-
-		sb.WriteString("\n**⚠️ Moderate Issues (Needs Improvement):**\n")
-
-		sb.WriteString("\n**📊 Performance Metrics:**\n")
-		sb.WriteString("\n**📊 Performance Metrics:**\n")
-		sb.WriteString(fmt.Sprintf("- Trading Frequency: %.1f trades/hour\n", analysis.TradesPerHour))
-		sb.WriteString(fmt.Sprintf("- Average Hold Time: %s\n", analysis.AvgHoldTime))
-		sb.WriteString(fmt.Sprintf("- Checklist Compliance: %.1f%%\n", analysis.ChecklistCompliance))
-
-		sb.WriteString("\n### 🛡️ Protection Mechanisms Activated\n")
-		sb.WriteString("Based on above issues, the following protections are activated:\n")
-		sb.WriteString("1. **Frequency Limiter**: Max 2 trades/hour\n")
-		sb.WriteString("2. **Emotional Cooldown**: 60-min pause after any loss\n")
-		sb.WriteString("3. **Market Filter**: Trade only in trending regimes\n")
-		sb.WriteString("4. **Size Controller**: Position size ≤40% of normal\n\n")
-
-		sb.WriteString("## 📊 Historical Performance Feedback\n\n")
-		sb.WriteString(fmt.Sprintf("**Analysis Period**: %s (%d decisions covered)\n", analysis.AnalysisPeriod, analysis.DecisionsCovered))
-		sb.WriteString(fmt.Sprintf("**Total Return**: %.2f%% | **Win Rate**: %.1f%% | **Profit Factor**: %.2f | **Max Drawdown**: %.1f%%\n\n",
-			analysis.TotalReturnPct, analysis.WinRate, analysis.ProfitFactor, analysis.MaxDrawdown))
-
-		if len(analysis.KeyInsights) > 0 {
-			sb.WriteString("### Key Insights\n\n")
-			for _, insight := range analysis.KeyInsights {
-				sb.WriteString(fmt.Sprintf("- %s\n", insight))
-			}
-			sb.WriteString("\n")
-		}
-
-		// ============================================================================
-		// EXECUTION-LEVEL FAILURE ANALYSIS (Trade Failure V2 Microstructure)
-		// ============================================================================
-		if len(analysis.FailurePatterns) > 0 {
-			// Separate V2 execution failures from other patterns
-			var v2Failures []TradingPattern
-			var otherFailures []TradingPattern
-
-			for _, pattern := range analysis.FailurePatterns {
-				// V2 failure reasons contain microstructure keywords
-				if strings.Contains(pattern.PatternType, "_") ||
-					strings.Contains(pattern.Description, "Execution-level") {
-					v2Failures = append(v2Failures, pattern)
-				} else {
-					otherFailures = append(otherFailures, pattern)
-				}
-			}
-
-			// Display V2 execution-level diagnostics
-			if len(v2Failures) > 0 {
-				sb.WriteString("### 📋 Execution-Level Failure Diagnostics (Microstructure)\n\n")
-				sb.WriteString("**These failures are rooted in actual market execution conditions and entry/exit timing:**\n\n")
-
-				for i, pattern := range v2Failures {
-					if i >= 5 { // Limit to top 5
-						break
-					}
-					sb.WriteString(fmt.Sprintf("**%s**\n", pattern.Description))
-					sb.WriteString(fmt.Sprintf("   Occurred: %d times | Avg Loss: %.2f%%\n", pattern.Frequency, pattern.AvgPnLPct))
-
-					// Display evidence (first 2 pieces)
-					if len(pattern.Evidence) > 0 {
-						for j, evidence := range pattern.Evidence {
-							if j >= 2 {
-								break
-							}
-							sb.WriteString(fmt.Sprintf("   Evidence: %s\n", evidence))
-						}
-					}
-
-					sb.WriteString(fmt.Sprintf("   **Action**: %s\n\n", pattern.Recommendation))
-				}
-			}
-
-			// Display other failure patterns
-			if len(otherFailures) > 0 {
-				sb.WriteString("### ⚠️ Other Identified Failure Patterns\n\n")
-				for i, pattern := range otherFailures {
-					if i >= 3 {
-						break
-					}
-					sb.WriteString(fmt.Sprintf("**%s** (occurred %d times, avg loss %.2f%%)\n",
-						pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
-					sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
-				}
-			}
-		} else if len(analysis.FailurePatterns) > 0 {
-			sb.WriteString("### ⚠️ Identified Failure Patterns\n\n")
-			for i, pattern := range analysis.FailurePatterns {
-				if i >= 3 {
-					break
-				}
-				sb.WriteString(fmt.Sprintf("**%s** (occurred %d times, avg loss %.2f%%)\n",
-					pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
-				sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
-			}
-		}
-
-		if len(analysis.SuccessPatterns) > 0 {
-			sb.WriteString("### ✅ Identified Success Patterns\n\n")
-			for i, pattern := range analysis.SuccessPatterns {
-				if i >= 3 {
-					break
-				}
-				sb.WriteString(fmt.Sprintf("**%s** (occurred %d times, avg profit %.2f%%)\n",
-					pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
-				sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
-			}
-		}
-
-		if len(analysis.RecommendedActions) > 0 {
-			sb.WriteString("### 🎯 Recommended Actions\n\n")
-			for _, action := range analysis.RecommendedActions {
-				if strings.HasPrefix(action, "⚠️") || strings.HasPrefix(action, "🔴") {
-					sb.WriteString(fmt.Sprintf("**%s**\n", action))
-				} else {
-					sb.WriteString(fmt.Sprintf("%s\n", action))
-				}
-			}
-			sb.WriteString("\n")
-		}
-
-		// ============================================================================
-		// FEW-SHOT LEARNING: Concrete Trade Examples
-		// ============================================================================
-		if len(analysis.TopWinningTrades) > 0 || len(analysis.TopLosingTrades) > 0 {
-			sb.WriteString("### 📚 Learn from Past Trades (Few-Shot Examples)\n\n")
-			sb.WriteString("**Study these concrete examples to understand what works and what doesn't:**\n\n")
-
-			// Show top winning trades as positive examples
-			if len(analysis.TopWinningTrades) > 0 {
-				sb.WriteString("#### ✅ Success Examples (Replicate These Trades):\n\n")
-				for i, trade := range analysis.TopWinningTrades {
-					if i >= 3 { // Limit to top 3
-						break
-					}
-					sb.WriteString(fmt.Sprintf("**Example %d: %s %s**\n", i+1, trade.Symbol, trade.Action))
-					sb.WriteString(fmt.Sprintf("- Time: %s | Duration: %s\n", trade.Timestamp.Format("01-02 15:04"), trade.HoldDuration))
-					sb.WriteString(fmt.Sprintf("- Entry: %.4f | Exit: %.4f | Leverage: %dx\n", trade.EntryPrice, trade.ExitPrice, trade.Leverage))
-					sb.WriteString(fmt.Sprintf("- **Outcome**: +%.2f%% (%.2f USDT)\n", trade.RealizedPnLPct, trade.RealizedPnL))
-					if trade.Analysis != "" {
-						sb.WriteString(fmt.Sprintf("- Analysis: %s\n", trade.Analysis))
-					}
-					if trade.Reasoning != "" {
-						sb.WriteString(fmt.Sprintf("- Original Reasoning: %s\n", trade.Reasoning))
-					}
-					sb.WriteString("\n")
-				}
-			}
-
-			// Show top losing trades as negative examples
-			if len(analysis.TopLosingTrades) > 0 {
-				sb.WriteString("#### ❌ Failure Examples (Avoid Repeating These Mistakes):\n\n")
-				for i, trade := range analysis.TopLosingTrades {
-					if i >= 3 { // Limit to top 3
-						break
-					}
-					sb.WriteString(fmt.Sprintf("**Example %d: %s %s**\n", i+1, trade.Symbol, trade.Action))
-					sb.WriteString(fmt.Sprintf("- Time: %s | Duration: %s\n", trade.Timestamp.Format("01-02 15:04"), trade.HoldDuration))
-					sb.WriteString(fmt.Sprintf("- Entry: %.4f | Exit: %.4f | Leverage: %dx\n", trade.EntryPrice, trade.ExitPrice, trade.Leverage))
-					sb.WriteString(fmt.Sprintf("- **Outcome**: %.2f%% (%.2f USDT)\n", trade.RealizedPnLPct, trade.RealizedPnL))
-
-					// Add Trade Failure V2 execution-level diagnosis
-					if trade.RecentOrder != nil {
-						failureAnalysis := decision.AnalyzeFailedTrade(trade.RecentOrder)
-						if failureAnalysis != nil {
-							sb.WriteString(fmt.Sprintf("- **Execution Diagnosis**: %s (confidence: %.0f%%)\n",
-								humanizeV2Reason(failureAnalysis.PrimaryReason),
-								failureAnalysis.ConfidenceScore*100))
-							if failureAnalysis.DetailedNotes != "" {
-								sb.WriteString(fmt.Sprintf("- Root Cause: %s\n", failureAnalysis.DetailedNotes))
-							}
-							if failureAnalysis.Recommendation != "" {
-								sb.WriteString(fmt.Sprintf("- ⚠️ How to Avoid: %s\n", failureAnalysis.Recommendation))
-							}
-						}
-					}
-
-					if trade.Analysis != "" {
-						sb.WriteString(fmt.Sprintf("- Analysis: %s\n", trade.Analysis))
-					}
-					if trade.Reasoning != "" {
-						sb.WriteString(fmt.Sprintf("- Original Reasoning: %s\n", trade.Reasoning))
-					}
-					sb.WriteString("\n")
-				}
-			}
-
-			sb.WriteString("**💡 Learning Point**: Analyze these real examples to understand the causal relationship between decision context and outcomes\n\n")
-		}
-
-		sb.WriteString(fmt.Sprintf("**Market Conditions Assessment**: %s\n\n", analysis.MarketConditions))
-
-		sb.WriteString("---\n\n")
-		sb.WriteString("**💡 Make decisions based on this feedback**: Learn from failures, replicate successes, and strictly follow recommended actions\n\n")
+		fg.formatENConcise(&sb, prioritized, analysis)
 	}
 
 	return sb.String()
 }
+
+// // FormatForPrompt formats the feedback analysis for inclusion in AI prompts (method on FeedbackAnalysis)
+// func (fg *FeedbackGenerator) FormatForPrompt(analysis *FeedbackAnalysis, lang string) string {
+// 	if analysis == nil {
+// 		return ""
+// 	}
+
+// 	var sb strings.Builder
+
+// 	if lang == "zh" {
+// 		sb.WriteString("## 🎯 战略级问题诊断\n\n")
+// 		sb.WriteString("### 🔍 核心问题识别\n\n")
+
+// 		// Categorize problems by severity
+// 		sb.WriteString("**🔴 严重问题 (需要立即解决):**\n")
+// 		// Add detected severe problems
+
+// 		sb.WriteString("\n**⚠️ 中等问题 (需要改进):**\n")
+// 		// Add detected medium problems
+
+// 		sb.WriteString("\n**📊 性能数据:**\n")
+// 		sb.WriteString(fmt.Sprintf("- 交易频率: %.1f 笔/小时\n", analysis.TradesPerHour))
+// 		sb.WriteString(fmt.Sprintf("- 平均持仓时间: %s\n", analysis.AvgHoldTime))
+// 		sb.WriteString(fmt.Sprintf("- 检查表遵从率: %.1f%%\n", analysis.ChecklistCompliance))
+
+// 		sb.WriteString("\n### 🛡️ 防护机制激活\n")
+// 		sb.WriteString("基于上述问题，以下防护机制已激活:\n")
+// 		sb.WriteString("1. **频率限制器**: 最大2笔/小时\n")
+// 		sb.WriteString("2. **情绪冷却器**: 亏损后60分钟暂停\n")
+// 		sb.WriteString("3. **市场过滤器**: 仅趋势市场交易\n")
+// 		sb.WriteString("4. **规模控制器**: 仓位≤40%正常规模\n\n")
+
+// 		sb.WriteString("## 📊 历史表现反馈\n\n")
+// 		sb.WriteString(fmt.Sprintf("**分析周期**: %s (覆盖 %d 个决策)\n", analysis.AnalysisPeriod, analysis.DecisionsCovered))
+// 		sb.WriteString(fmt.Sprintf("**总回报**: %.2f%% | **胜率**: %.1f%% | **盈利因子**: %.2f | **最大回撤**: %.1f%%\n\n",
+// 			analysis.TotalReturnPct, analysis.WinRate, analysis.ProfitFactor, analysis.MaxDrawdown))
+
+// 		if len(analysis.KeyInsights) > 0 {
+// 			sb.WriteString("### 关键洞察\n\n")
+// 			for _, insight := range analysis.KeyInsights {
+// 				sb.WriteString(fmt.Sprintf("- %s\n", insight))
+// 			}
+// 			sb.WriteString("\n")
+// 		}
+
+// 		// ============================================================================
+// 		// EXECUTION-LEVEL FAILURE ANALYSIS (Trade Failure V2 Microstructure)
+// 		// ============================================================================
+// 		if len(analysis.FailurePatterns) > 0 {
+// 			// Separate V2 execution failures from other patterns
+// 			var v2Failures []TradingPattern
+// 			var otherFailures []TradingPattern
+
+// 			for _, pattern := range analysis.FailurePatterns {
+// 				// V2 failure reasons contain microstructure keywords
+// 				if strings.Contains(pattern.PatternType, "_") ||
+// 					strings.Contains(pattern.Description, "Execution-level") {
+// 					v2Failures = append(v2Failures, pattern)
+// 				} else {
+// 					otherFailures = append(otherFailures, pattern)
+// 				}
+// 			}
+
+// 			// Display V2 execution-level diagnostics
+// 			if len(v2Failures) > 0 {
+// 				sb.WriteString("### 📋 执行级失败诊断 (微观结构分析)\n\n")
+// 				sb.WriteString("**这些失败根植于市场执行条件和入场/出场时机：**\n\n")
+
+// 				for i, pattern := range v2Failures {
+// 					if i >= 5 { // Limit to top 5
+// 						break
+// 					}
+// 					sb.WriteString(fmt.Sprintf("**%s**\n", pattern.Description))
+// 					sb.WriteString(fmt.Sprintf("   发生: %d 次 | 平均亏损: %.2f%%\n", pattern.Frequency, pattern.AvgPnLPct))
+
+// 					// Display evidence (first 2 pieces)
+// 					if len(pattern.Evidence) > 0 {
+// 						for j, evidence := range pattern.Evidence {
+// 							if j >= 2 {
+// 								break
+// 							}
+// 							sb.WriteString(fmt.Sprintf("   证据: %s\n", evidence))
+// 						}
+// 					}
+
+// 					sb.WriteString(fmt.Sprintf("   **行动**: %s\n\n", pattern.Recommendation))
+// 				}
+// 			}
+
+// 			// Display other failure patterns
+// 			if len(otherFailures) > 0 {
+// 				sb.WriteString("### ⚠️ 其他发现的失败模式\n\n")
+// 				for i, pattern := range otherFailures {
+// 					if i >= 3 {
+// 						break
+// 					}
+// 					sb.WriteString(fmt.Sprintf("**%s** (发生 %d 次, 平均亏损 %.2f%%)\n",
+// 						pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
+// 					sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
+// 				}
+// 			}
+// 		} else if len(analysis.FailurePatterns) > 0 {
+// 			sb.WriteString("### ⚠️ 发现的失败模式\n\n")
+// 			for i, pattern := range analysis.FailurePatterns {
+// 				if i >= 3 {
+// 					break // Limit to top 3
+// 				}
+// 				sb.WriteString(fmt.Sprintf("**%s** (发生 %d 次, 平均亏损 %.2f%%)\n",
+// 					pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
+// 				sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
+// 			}
+// 		}
+
+// 		if len(analysis.SuccessPatterns) > 0 {
+// 			sb.WriteString("### ✅ 发现的成功模式\n\n")
+// 			for i, pattern := range analysis.SuccessPatterns {
+// 				if i >= 3 {
+// 					break
+// 				}
+// 				sb.WriteString(fmt.Sprintf("**%s** (发生 %d 次, 平均盈利 %.2f%%)\n",
+// 					pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
+// 				sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
+// 			}
+// 		}
+
+// 		if len(analysis.RecommendedActions) > 0 {
+// 			sb.WriteString("### 🎯 建议行动\n\n")
+// 			for _, action := range analysis.RecommendedActions {
+// 				if strings.HasPrefix(action, "⚠️") || strings.HasPrefix(action, "🔴") {
+// 					sb.WriteString(fmt.Sprintf("**%s**\n", action))
+// 				} else {
+// 					sb.WriteString(fmt.Sprintf("%s\n", action))
+// 				}
+// 			}
+// 			sb.WriteString("\n")
+// 		}
+
+// 		// ============================================================================
+// 		// FEW-SHOT LEARNING: Concrete Trade Examples
+// 		// ============================================================================
+// 		if len(analysis.TopWinningTrades) > 0 || len(analysis.TopLosingTrades) > 0 {
+// 			sb.WriteString("### 📚 从过去的交易中学习 (Few-Shot Examples)\n\n")
+// 			sb.WriteString("**研究这些具体案例来理解什么有效，什么无效：**\n\n")
+
+// 			// Show top winning trades as positive examples
+// 			if len(analysis.TopWinningTrades) > 0 {
+// 				sb.WriteString("#### ✅ 成功案例 (模仿这些交易):\n\n")
+// 				for i, trade := range analysis.TopWinningTrades {
+// 					if i >= 3 { // Limit to top 3
+// 						break
+// 					}
+// 					sb.WriteString(fmt.Sprintf("**案例 %d: %s %s**\n", i+1, trade.Symbol, trade.Action))
+// 					sb.WriteString(fmt.Sprintf("- 时间: %s | 持仓: %s\n", trade.Timestamp.Format("01-02 15:04"), trade.HoldDuration))
+// 					sb.WriteString(fmt.Sprintf("- 入场: %.4f | 出场: %.4f | 杠杆: %dx\n", trade.EntryPrice, trade.ExitPrice, trade.Leverage))
+// 					sb.WriteString(fmt.Sprintf("- **结果**: +%.2f%% (%.2f USDT)\n", trade.RealizedPnLPct, trade.RealizedPnL))
+// 					if trade.Analysis != "" {
+// 						sb.WriteString(fmt.Sprintf("- 分析: %s\n", trade.Analysis))
+// 					}
+// 					if trade.Reasoning != "" {
+// 						sb.WriteString(fmt.Sprintf("- 原始理由: %s\n", trade.Reasoning))
+// 					}
+// 					sb.WriteString("\n")
+// 				}
+// 			}
+
+// 			// Show top losing trades as negative examples
+// 			if len(analysis.TopLosingTrades) > 0 {
+// 				sb.WriteString("#### ❌ 失败案例 (避免重复这些错误):\n\n")
+// 				for i, trade := range analysis.TopLosingTrades {
+// 					if i >= 3 { // Limit to top 3
+// 						break
+// 					}
+// 					sb.WriteString(fmt.Sprintf("**案例 %d: %s %s**\n", i+1, trade.Symbol, trade.Action))
+// 					sb.WriteString(fmt.Sprintf("- 时间: %s | 持仓: %s\n", trade.Timestamp.Format("01-02 15:04"), trade.HoldDuration))
+// 					sb.WriteString(fmt.Sprintf("- 入场: %.4f | 出场: %.4f | 杠杆: %dx\n", trade.EntryPrice, trade.ExitPrice, trade.Leverage))
+// 					sb.WriteString(fmt.Sprintf("- **结果**: %.2f%% (%.2f USDT)\n", trade.RealizedPnLPct, trade.RealizedPnL))
+
+// 					// Add Trade Failure V2 execution-level diagnosis
+// 					if trade.RecentOrder != nil {
+// 						failureAnalysis := decision.AnalyzeFailedTrade(trade.RecentOrder)
+// 						if failureAnalysis != nil {
+// 							sb.WriteString(fmt.Sprintf("- **执行诊断**: %s (置信度: %.0f%%)\n",
+// 								humanizeV2Reason(failureAnalysis.PrimaryReason),
+// 								failureAnalysis.ConfidenceScore*100))
+// 							if failureAnalysis.DetailedNotes != "" {
+// 								sb.WriteString(fmt.Sprintf("- 详细说明: %s\n", failureAnalysis.DetailedNotes))
+// 							}
+// 							if failureAnalysis.Recommendation != "" {
+// 								sb.WriteString(fmt.Sprintf("- ⚠️ 如何避免: %s\n", failureAnalysis.Recommendation))
+// 							}
+// 						}
+// 					}
+
+// 					if trade.Analysis != "" {
+// 						sb.WriteString(fmt.Sprintf("- 分析: %s\n", trade.Analysis))
+// 					}
+// 					if trade.Reasoning != "" {
+// 						sb.WriteString(fmt.Sprintf("- 原始理由: %s\n", trade.Reasoning))
+// 					}
+// 					sb.WriteString("\n")
+// 				}
+// 			}
+
+// 			sb.WriteString("**💡 学习要点**: 分析这些真实案例，理解决策背景和结果之间的因果关系\n\n")
+// 		}
+
+// 		sb.WriteString(fmt.Sprintf("**市场条件评估**: %s\n\n", analysis.MarketConditions))
+
+// 		sb.WriteString("---\n\n")
+// 		sb.WriteString("**💡 基于以上反馈进行决策**: 学习失败教训，复制成功模式，严格执行建议行动\n\n")
+
+// 	} else {
+// 		sb.WriteString("## 🎯 Strategic Problem Diagnosis\n\n")
+// 		sb.WriteString("### 🔍 Core Issue Identification\n\n")
+
+// 		sb.WriteString("**🔴 Critical Issues (Immediate Action Required):**\n")
+
+// 		sb.WriteString("\n**⚠️ Moderate Issues (Needs Improvement):**\n")
+
+// 		sb.WriteString("\n**📊 Performance Metrics:**\n")
+// 		sb.WriteString("\n**📊 Performance Metrics:**\n")
+// 		sb.WriteString(fmt.Sprintf("- Trading Frequency: %.1f trades/hour\n", analysis.TradesPerHour))
+// 		sb.WriteString(fmt.Sprintf("- Average Hold Time: %s\n", analysis.AvgHoldTime))
+// 		sb.WriteString(fmt.Sprintf("- Checklist Compliance: %.1f%%\n", analysis.ChecklistCompliance))
+
+// 		sb.WriteString("\n### 🛡️ Protection Mechanisms Activated\n")
+// 		sb.WriteString("Based on above issues, the following protections are activated:\n")
+// 		sb.WriteString("1. **Frequency Limiter**: Max 2 trades/hour\n")
+// 		sb.WriteString("2. **Emotional Cooldown**: 60-min pause after any loss\n")
+// 		sb.WriteString("3. **Market Filter**: Trade only in trending regimes\n")
+// 		sb.WriteString("4. **Size Controller**: Position size ≤40% of normal\n\n")
+
+// 		sb.WriteString("## 📊 Historical Performance Feedback\n\n")
+// 		sb.WriteString(fmt.Sprintf("**Analysis Period**: %s (%d decisions covered)\n", analysis.AnalysisPeriod, analysis.DecisionsCovered))
+// 		sb.WriteString(fmt.Sprintf("**Total Return**: %.2f%% | **Win Rate**: %.1f%% | **Profit Factor**: %.2f | **Max Drawdown**: %.1f%%\n\n",
+// 			analysis.TotalReturnPct, analysis.WinRate, analysis.ProfitFactor, analysis.MaxDrawdown))
+
+// 		if len(analysis.KeyInsights) > 0 {
+// 			sb.WriteString("### Key Insights\n\n")
+// 			for _, insight := range analysis.KeyInsights {
+// 				sb.WriteString(fmt.Sprintf("- %s\n", insight))
+// 			}
+// 			sb.WriteString("\n")
+// 		}
+
+// 		// ============================================================================
+// 		// EXECUTION-LEVEL FAILURE ANALYSIS (Trade Failure V2 Microstructure)
+// 		// ============================================================================
+// 		if len(analysis.FailurePatterns) > 0 {
+// 			// Separate V2 execution failures from other patterns
+// 			var v2Failures []TradingPattern
+// 			var otherFailures []TradingPattern
+
+// 			for _, pattern := range analysis.FailurePatterns {
+// 				// V2 failure reasons contain microstructure keywords
+// 				if strings.Contains(pattern.PatternType, "_") ||
+// 					strings.Contains(pattern.Description, "Execution-level") {
+// 					v2Failures = append(v2Failures, pattern)
+// 				} else {
+// 					otherFailures = append(otherFailures, pattern)
+// 				}
+// 			}
+
+// 			// Display V2 execution-level diagnostics
+// 			if len(v2Failures) > 0 {
+// 				sb.WriteString("### 📋 Execution-Level Failure Diagnostics (Microstructure)\n\n")
+// 				sb.WriteString("**These failures are rooted in actual market execution conditions and entry/exit timing:**\n\n")
+
+// 				for i, pattern := range v2Failures {
+// 					if i >= 5 { // Limit to top 5
+// 						break
+// 					}
+// 					sb.WriteString(fmt.Sprintf("**%s**\n", pattern.Description))
+// 					sb.WriteString(fmt.Sprintf("   Occurred: %d times | Avg Loss: %.2f%%\n", pattern.Frequency, pattern.AvgPnLPct))
+
+// 					// Display evidence (first 2 pieces)
+// 					if len(pattern.Evidence) > 0 {
+// 						for j, evidence := range pattern.Evidence {
+// 							if j >= 2 {
+// 								break
+// 							}
+// 							sb.WriteString(fmt.Sprintf("   Evidence: %s\n", evidence))
+// 						}
+// 					}
+
+// 					sb.WriteString(fmt.Sprintf("   **Action**: %s\n\n", pattern.Recommendation))
+// 				}
+// 			}
+
+// 			// Display other failure patterns
+// 			if len(otherFailures) > 0 {
+// 				sb.WriteString("### ⚠️ Other Identified Failure Patterns\n\n")
+// 				for i, pattern := range otherFailures {
+// 					if i >= 3 {
+// 						break
+// 					}
+// 					sb.WriteString(fmt.Sprintf("**%s** (occurred %d times, avg loss %.2f%%)\n",
+// 						pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
+// 					sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
+// 				}
+// 			}
+// 		} else if len(analysis.FailurePatterns) > 0 {
+// 			sb.WriteString("### ⚠️ Identified Failure Patterns\n\n")
+// 			for i, pattern := range analysis.FailurePatterns {
+// 				if i >= 3 {
+// 					break
+// 				}
+// 				sb.WriteString(fmt.Sprintf("**%s** (occurred %d times, avg loss %.2f%%)\n",
+// 					pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
+// 				sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
+// 			}
+// 		}
+
+// 		if len(analysis.SuccessPatterns) > 0 {
+// 			sb.WriteString("### ✅ Identified Success Patterns\n\n")
+// 			for i, pattern := range analysis.SuccessPatterns {
+// 				if i >= 3 {
+// 					break
+// 				}
+// 				sb.WriteString(fmt.Sprintf("**%s** (occurred %d times, avg profit %.2f%%)\n",
+// 					pattern.Description, pattern.Frequency, pattern.AvgPnLPct))
+// 				sb.WriteString(fmt.Sprintf("   → %s\n\n", pattern.Recommendation))
+// 			}
+// 		}
+
+// 		if len(analysis.RecommendedActions) > 0 {
+// 			sb.WriteString("### 🎯 Recommended Actions\n\n")
+// 			for _, action := range analysis.RecommendedActions {
+// 				if strings.HasPrefix(action, "⚠️") || strings.HasPrefix(action, "🔴") {
+// 					sb.WriteString(fmt.Sprintf("**%s**\n", action))
+// 				} else {
+// 					sb.WriteString(fmt.Sprintf("%s\n", action))
+// 				}
+// 			}
+// 			sb.WriteString("\n")
+// 		}
+
+// 		// ============================================================================
+// 		// FEW-SHOT LEARNING: Concrete Trade Examples
+// 		// ============================================================================
+// 		if len(analysis.TopWinningTrades) > 0 || len(analysis.TopLosingTrades) > 0 {
+// 			sb.WriteString("### 📚 Learn from Past Trades (Few-Shot Examples)\n\n")
+// 			sb.WriteString("**Study these concrete examples to understand what works and what doesn't:**\n\n")
+
+// 			// Show top winning trades as positive examples
+// 			if len(analysis.TopWinningTrades) > 0 {
+// 				sb.WriteString("#### ✅ Success Examples (Replicate These Trades):\n\n")
+// 				for i, trade := range analysis.TopWinningTrades {
+// 					if i >= 3 { // Limit to top 3
+// 						break
+// 					}
+// 					sb.WriteString(fmt.Sprintf("**Example %d: %s %s**\n", i+1, trade.Symbol, trade.Action))
+// 					sb.WriteString(fmt.Sprintf("- Time: %s | Duration: %s\n", trade.Timestamp.Format("01-02 15:04"), trade.HoldDuration))
+// 					sb.WriteString(fmt.Sprintf("- Entry: %.4f | Exit: %.4f | Leverage: %dx\n", trade.EntryPrice, trade.ExitPrice, trade.Leverage))
+// 					sb.WriteString(fmt.Sprintf("- **Outcome**: +%.2f%% (%.2f USDT)\n", trade.RealizedPnLPct, trade.RealizedPnL))
+// 					if trade.Analysis != "" {
+// 						sb.WriteString(fmt.Sprintf("- Analysis: %s\n", trade.Analysis))
+// 					}
+// 					if trade.Reasoning != "" {
+// 						sb.WriteString(fmt.Sprintf("- Original Reasoning: %s\n", trade.Reasoning))
+// 					}
+// 					sb.WriteString("\n")
+// 				}
+// 			}
+
+// 			// Show top losing trades as negative examples
+// 			if len(analysis.TopLosingTrades) > 0 {
+// 				sb.WriteString("#### ❌ Failure Examples (Avoid Repeating These Mistakes):\n\n")
+// 				for i, trade := range analysis.TopLosingTrades {
+// 					if i >= 3 { // Limit to top 3
+// 						break
+// 					}
+// 					sb.WriteString(fmt.Sprintf("**Example %d: %s %s**\n", i+1, trade.Symbol, trade.Action))
+// 					sb.WriteString(fmt.Sprintf("- Time: %s | Duration: %s\n", trade.Timestamp.Format("01-02 15:04"), trade.HoldDuration))
+// 					sb.WriteString(fmt.Sprintf("- Entry: %.4f | Exit: %.4f | Leverage: %dx\n", trade.EntryPrice, trade.ExitPrice, trade.Leverage))
+// 					sb.WriteString(fmt.Sprintf("- **Outcome**: %.2f%% (%.2f USDT)\n", trade.RealizedPnLPct, trade.RealizedPnL))
+
+// 					// Add Trade Failure V2 execution-level diagnosis
+// 					if trade.RecentOrder != nil {
+// 						failureAnalysis := decision.AnalyzeFailedTrade(trade.RecentOrder)
+// 						if failureAnalysis != nil {
+// 							sb.WriteString(fmt.Sprintf("- **Execution Diagnosis**: %s (confidence: %.0f%%)\n",
+// 								humanizeV2Reason(failureAnalysis.PrimaryReason),
+// 								failureAnalysis.ConfidenceScore*100))
+// 							if failureAnalysis.DetailedNotes != "" {
+// 								sb.WriteString(fmt.Sprintf("- Root Cause: %s\n", failureAnalysis.DetailedNotes))
+// 							}
+// 							if failureAnalysis.Recommendation != "" {
+// 								sb.WriteString(fmt.Sprintf("- ⚠️ How to Avoid: %s\n", failureAnalysis.Recommendation))
+// 							}
+// 						}
+// 					}
+
+// 					if trade.Analysis != "" {
+// 						sb.WriteString(fmt.Sprintf("- Analysis: %s\n", trade.Analysis))
+// 					}
+// 					if trade.Reasoning != "" {
+// 						sb.WriteString(fmt.Sprintf("- Original Reasoning: %s\n", trade.Reasoning))
+// 					}
+// 					sb.WriteString("\n")
+// 				}
+// 			}
+
+// 			sb.WriteString("**💡 Learning Point**: Analyze these real examples to understand the causal relationship between decision context and outcomes\n\n")
+// 		}
+
+// 		sb.WriteString(fmt.Sprintf("**Market Conditions Assessment**: %s\n\n", analysis.MarketConditions))
+
+// 		sb.WriteString("---\n\n")
+// 		sb.WriteString("**💡 Make decisions based on this feedback**: Learn from failures, replicate successes, and strictly follow recommended actions\n\n")
+// 	}
+
+// 	return sb.String()
+// }
 
 // Helper functions for FormatForPrompt - ACTUAL IMPLEMENTATIONS
 func (fg *FeedbackGenerator) calculateTradesPerHour(outcomes []DecisionOutcome) float64 {
@@ -2448,7 +2460,7 @@ func LoadFeedbackAnalysis(runID string) (*FeedbackAnalysis, error) {
 // ============================================================================
 
 // humanizeV2Reason converts Trade Failure V2 reason code to human-readable text
-func humanizeV2Reason(reason decision.TradeFailureReason) string {
+func humanizeV2ReasonEN(reason decision.TradeFailureReason) string {
 	switch reason {
 	case decision.ReasonSignalQualityLow:
 		return "Signal quality too low - weak edge"
@@ -2488,6 +2500,51 @@ func humanizeV2Reason(reason decision.TradeFailureReason) string {
 		return "Borrowing costs were significant"
 	case decision.ReasonTechnicalFault:
 		return "Technical or execution system error"
+	default:
+		return string(reason)
+	}
+}
+
+func humanizeV2ReasonZH(reason decision.TradeFailureReason) string {
+	switch reason {
+	case decision.ReasonSignalQualityLow:
+		return "信号质量过低 - 优势微弱"
+	case decision.ReasonRegimeMismatch:
+		return "交易与市场状态冲突"
+	case decision.ReasonLiquidityRiskHigh:
+		return "入场时流动性风险过高"
+	case decision.ReasonStackedRisk:
+		return "对同一市场因子过度暴露"
+	case decision.ReasonChasingEntry:
+		return "追逐入场导致滑点过高"
+	case decision.ReasonFalseBreakoutV2:
+		return "假突破 - 缺乏跟进"
+	case decision.ReasonPrematureEntry:
+		return "确认条件未满足前过早入场"
+	case decision.ReasonSizingError:
+		return "仓位过大超出可用流动性"
+	case decision.ReasonSlippageExceeded:
+		return "实际滑点超出预算"
+	case decision.ReasonStopTooTight:
+		return "止损相对于波动率设置过紧"
+	case decision.ReasonMomentumDecay:
+		return "动量衰减 - 成交量/OI崩溃"
+	case decision.ReasonLiquidityDried:
+		return "持仓期间市场流动性枯竭"
+	case decision.ReasonStopHitRegimeChange:
+		return "止损被触发因市场状态变化"
+	case decision.ReasonLateExitGiveBack:
+		return "出场过晚导致利润大幅回吐"
+	case decision.ReasonTrendReversalIgnored:
+		return "忽略趋势反转信号"
+	case decision.ReasonHighSlippageExit:
+		return "出场执行不佳导致高滑点"
+	case decision.ReasonFundingDrag:
+		return "资金费用侵蚀利润"
+	case decision.ReasonBorrowingCostHigh:
+		return "借贷成本显著"
+	case decision.ReasonTechnicalFault:
+		return "技术或执行系统错误"
 	default:
 		return string(reason)
 	}
@@ -2619,4 +2676,781 @@ func (analysis *FeedbackAnalysis) FormatForDebate(lang string, agentRole string)
 	}
 
 	return sb.String()
+}
+
+// ============================================================================
+// Concise prompt Helpers
+// ============================================================================
+
+// prioritizeFeedback extracts only the most critical feedback items
+func (fg *FeedbackGenerator) prioritizeFeedback(analysis *FeedbackAnalysis) *PrioritizedFeedback {
+	pf := &PrioritizedFeedback{}
+
+	// CRITICAL: Issues causing direct losses
+	for _, pattern := range analysis.FailurePatterns {
+		if pattern.AvgPnLPct < -3.0 && pattern.Frequency >= 3 {
+			pf.CriticalFailures = append(pf.CriticalFailures, pattern)
+			if len(pf.CriticalFailures) >= 2 {
+				break
+			}
+		}
+	}
+
+	// HIGH: Issues hurting performance but not catastrophic
+	for _, pattern := range analysis.FailurePatterns {
+		if pattern.AvgPnLPct < -1.5 && pattern.Frequency >= 2 {
+			pf.HighFailures = append(pf.HighFailures, pattern)
+			if len(pf.HighFailures) >= 3 {
+				break
+			}
+		}
+	}
+
+	// SUCCESS: Replicable winning patterns
+	for _, pattern := range analysis.SuccessPatterns {
+		if pattern.AvgPnLPct > 2.0 && pattern.Frequency >= 3 {
+			pf.SuccessPatterns = append(pf.SuccessPatterns, pattern)
+			if len(pf.SuccessPatterns) >= 2 {
+				break
+			}
+		}
+	}
+
+	// Get key metrics summary
+	pf.Metrics = fg.summarizeMetrics(analysis)
+
+	// Get top 2 actionable recommendations
+	pf.Actions = fg.getTopActions(analysis)
+
+	return pf
+}
+
+type PrioritizedFeedback struct {
+	CriticalFailures []TradingPattern // Must fix NOW
+	HighFailures     []TradingPattern // Important to fix
+	SuccessPatterns  []TradingPattern // Replicate these
+	Metrics          MetricsSummary
+	Actions          []string
+}
+
+type MetricsSummary struct {
+	ReturnStatus       string // "CRITICAL", "POOR", "OK", "GOOD", "EXCELLENT"
+	WinRateStatus      string
+	ProfitFactorStatus string
+	DrawdownStatus     string
+	TradesPerHour      float64
+}
+
+func (fg *FeedbackGenerator) formatENConcise(sb *strings.Builder, pf *PrioritizedFeedback, analysis *FeedbackAnalysis) {
+	// === URGENT SECTION (MAX 3 LINES) ===
+	sb.WriteString("🚨 **PERFORMANCE FEEDBACK (CRITICAL)**\n\n")
+
+	// 1-line performance summary
+	sb.WriteString(fg.oneLineSummary(analysis))
+	sb.WriteString("\n\n")
+
+	// === CRITICAL FAILURES (MAX 2) ===
+	if len(pf.CriticalFailures) > 0 {
+		sb.WriteString("**🔥 MUST FIX IMMEDIATELY:**\n")
+		for i, pattern := range pf.CriticalFailures {
+			sb.WriteString(fmt.Sprintf("%d. %s (Avg loss: %.1f%%, Occurred: %dx)\n",
+				i+1, pattern.Description, pattern.AvgPnLPct, pattern.Frequency))
+			sb.WriteString(fmt.Sprintf("   → %s\n", pattern.Recommendation))
+			if i >= 1 {
+				break
+			} // Max 2
+		}
+		sb.WriteString("\n")
+	}
+
+	// === EXECUTION DIAGNOSTICS (MAX 3) ===
+	// Focus on microstructure failures if present
+	v2Failures := fg.extractV2Failures(pf.HighFailures)
+	if len(v2Failures) > 0 {
+		sb.WriteString("**🔍 EXECUTION ISSUES:**\n")
+		for i, pattern := range v2Failures {
+			sb.WriteString(fmt.Sprintf("• %s\n", pattern.Description))
+			if i >= 2 {
+				break
+			} // Max 3
+		}
+		sb.WriteString("\n")
+	}
+
+	// === SUCCESS PATTERNS TO REPLICATE (MAX 2) ===
+	if len(pf.SuccessPatterns) > 0 {
+		sb.WriteString("**✅ REPLICATE THESE WINNERS:**\n")
+		for i, pattern := range pf.SuccessPatterns {
+			sb.WriteString(fmt.Sprintf("%d. %s (Avg gain: %.1f%%)\n",
+				i+1, pattern.Description, pattern.AvgPnLPct))
+			sb.WriteString(fmt.Sprintf("   → %s\n", pattern.Recommendation))
+			if i >= 1 {
+				break
+			} // Max 2
+		}
+		sb.WriteString("\n")
+	}
+
+	// === QUANTITATIVE RULES (CONDENSE TO 5 MAX) ===
+	sb.WriteString("**📊 ENFORCE THESE RULES:**\n")
+	rules := fg.getEssentialRules(analysis)
+	for i, rule := range rules {
+		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, rule))
+		if i >= 4 {
+			break
+		} // Max 5 rules
+	}
+	sb.WriteString("\n")
+
+	// === FEW-SHOT EXAMPLES (1 WIN, 1 LOSS ONLY) ===
+	sb.WriteString("**📚 LEARN FROM THESE 2 TRADES:**\n")
+
+	// One winning example
+	if len(analysis.TopWinningTrades) > 0 {
+		trade := analysis.TopWinningTrades[0]
+		sb.WriteString(fmt.Sprintf("✅ WIN: %s %s (+%.1f%% in %s)\n",
+			trade.Symbol, trade.Action, trade.RealizedPnLPct, trade.HoldDuration))
+		if trade.Reasoning != "" && len(trade.Reasoning) < 100 {
+			sb.WriteString(fmt.Sprintf("   Reason: %s\n", truncate(trade.Reasoning, 80)))
+		}
+	}
+
+	// One losing example with root cause
+	if len(analysis.TopLosingTrades) > 0 {
+		trade := analysis.TopLosingTrades[0]
+		sb.WriteString(fmt.Sprintf("❌ LOSS: %s %s (%.1f%% in %s)\n",
+			trade.Symbol, trade.Action, trade.RealizedPnLPct, trade.HoldDuration))
+
+		// Add root cause if available from V2 analysis
+		if trade.RecentOrder != nil {
+			failure := decision.AnalyzeFailedTrade(trade.RecentOrder)
+			if failure != nil && failure.ConfidenceScore > 0.7 {
+				sb.WriteString(fmt.Sprintf("   Root cause: %s\n",
+					truncate(failure.DetailedNotes, 60)))
+			}
+		}
+	}
+	sb.WriteString("\n")
+
+	// === MARKET CONTEXT ===
+	sb.WriteString(fmt.Sprintf("**📈 MARKET CONDITION:** %s\n",
+		truncate(analysis.MarketConditions, 80)))
+
+	// === MEMORY AID (CRITICAL ONLY) ===
+	sb.WriteString("\n**💡 CRITICAL TAKEAWAY:** ")
+	sb.WriteString(fg.getCriticalTakeaway(pf, analysis))
+}
+
+func (fg *FeedbackGenerator) formatZHConcise(sb *strings.Builder, pf *PrioritizedFeedback, analysis *FeedbackAnalysis) {
+	sb.WriteString("🚨 **表现反馈 (核心摘要)**\n\n")
+
+	// 1-line summary
+	sb.WriteString(fg.oneLineSummaryZH(analysis))
+	sb.WriteString("\n\n")
+
+	if len(pf.CriticalFailures) > 0 {
+		sb.WriteString("**🔥 必须立即修复:**\n")
+		for i, pattern := range pf.CriticalFailures {
+			sb.WriteString(fmt.Sprintf("%d. %s (平均亏损: %.1f%%, 出现: %d次)\n",
+				i+1, pattern.Description, pattern.AvgPnLPct, pattern.Frequency))
+			sb.WriteString(fmt.Sprintf("   → %s\n", pattern.Recommendation))
+			if i >= 1 {
+				break
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	// Success patterns
+	if len(pf.SuccessPatterns) > 0 {
+		sb.WriteString("**✅ 复制这些成功模式:**\n")
+		for i, pattern := range pf.SuccessPatterns {
+			sb.WriteString(fmt.Sprintf("%d. %s (平均盈利: %.1f%%)\n",
+				i+1, pattern.Description, pattern.AvgPnLPct))
+			sb.WriteString(fmt.Sprintf("   → %s\n", pattern.Recommendation))
+			if i >= 1 {
+				break
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	// Essential rules
+	sb.WriteString("**📊 强制执行这些规则:**\n")
+	rules := fg.getEssentialRulesZH(analysis)
+	for i, rule := range rules {
+		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, rule))
+		if i >= 4 {
+			break
+		}
+	}
+
+	sb.WriteString(fmt.Sprintf("\n**📈 市场状况:** %s\n",
+		truncate(analysis.MarketConditions, 60)))
+}
+
+// Helper functions for concise formatting
+func (fg *FeedbackGenerator) oneLineSummary(analysis *FeedbackAnalysis) string {
+	var status string
+	if analysis.TotalReturnPct < -10 {
+		status = "🔴 CRITICAL LOSS"
+	} else if analysis.TotalReturnPct < 0 {
+		status = "⚠️ NEGATIVE"
+	} else if analysis.TotalReturnPct < 5 {
+		status = "🟡 NEUTRAL"
+	} else {
+		status = "✅ PROFITABLE"
+	}
+
+	return fmt.Sprintf("%s | Return: %.1f%% | Win Rate: %.0f%% | Trades/Hour: %.1f",
+		status, analysis.TotalReturnPct, analysis.WinRate, analysis.TradesPerHour)
+}
+
+func (fg *FeedbackGenerator) oneLineSummaryZH(analysis *FeedbackAnalysis) string {
+	var status string
+	if analysis.TotalReturnPct < -10 {
+		status = "🔴 严重亏损"
+	} else if analysis.TotalReturnPct < 0 {
+		status = "⚠️ 负收益"
+	} else if analysis.TotalReturnPct < 5 {
+		status = "🟡 中性"
+	} else {
+		status = "✅ 盈利"
+	}
+
+	return fmt.Sprintf("%s | 回报: %.1f%% | 胜率: %.0f%% | 交易频率: %.1f笔/小时",
+		status, analysis.TotalReturnPct, analysis.WinRate, analysis.TradesPerHour)
+}
+
+func (fg *FeedbackGenerator) extractV2Failures(patterns []TradingPattern) []TradingPattern {
+	var v2 []TradingPattern
+	for _, p := range patterns {
+		// Check if it's a V2 microstructure failure
+		if strings.Contains(p.PatternType, "_") ||
+			strings.Contains(p.Description, "Execution-level") ||
+			strings.Contains(p.Description, "slippage") ||
+			strings.Contains(p.Description, "spread") ||
+			strings.Contains(p.Description, "ATR") {
+			v2 = append(v2, p)
+		}
+	}
+	return v2
+}
+
+func (fg *FeedbackGenerator) getEssentialRules(analysis *FeedbackAnalysis) []string {
+	rules := []string{}
+
+	// Always include these core rules
+	rules = append(rules, "Max 2 trades/hour, 8 trades/day")
+	rules = append(rules, "Minimum 30min between trades")
+
+	// Add context-specific rules
+	if analysis.TradesPerHour > 1.5 {
+		rules = append(rules, "⚠️ You are overtrading - reduce frequency by 50%")
+	}
+
+	if analysis.WinRate < 40 {
+		rules = append(rules, "Only take trades with ≥70% confidence")
+	}
+
+	if analysis.TotalReturnPct < 0 {
+		rules = append(rules, "Reduce position size by 30% until profitable")
+	}
+
+	// Add rule from most critical failure
+	if len(analysis.FailurePatterns) > 0 {
+		topFailure := analysis.FailurePatterns[0]
+		// Extract the core rule from recommendation
+		if strings.Contains(topFailure.Recommendation, "ENFORCE:") {
+			rule := strings.Replace(topFailure.Recommendation, "ENFORCE:", "", 1)
+			rules = append(rules, strings.TrimSpace(rule))
+		}
+	}
+
+	return rules[:min(5, len(rules))]
+}
+
+func (fg *FeedbackGenerator) getEssentialRulesZH(analysis *FeedbackAnalysis) []string {
+	rules := []string{}
+
+	rules = append(rules, "每小时最多2笔交易, 每天最多8笔")
+	rules = append(rules, "交易间隔至少30分钟")
+
+	if analysis.TradesPerHour > 1.5 {
+		rules = append(rules, "⚠️ 交易过度 - 频率减少50%")
+	}
+
+	if analysis.WinRate < 40 {
+		rules = append(rules, "只做信心度≥70%的交易")
+	}
+
+	if analysis.TotalReturnPct < 0 {
+		rules = append(rules, "仓位减少30%直到盈利")
+	}
+
+	return rules[:min(5, len(rules))]
+}
+
+func (fg *FeedbackGenerator) getCriticalTakeaway(pf *PrioritizedFeedback, analysis *FeedbackAnalysis) string {
+	if len(pf.CriticalFailures) > 0 {
+		return fmt.Sprintf("Fix '%s' first - it's causing %.1f%% average losses",
+			pf.CriticalFailures[0].Description, pf.CriticalFailures[0].AvgPnLPct)
+	}
+
+	if analysis.TotalReturnPct < -5 {
+		return "Strategy is losing money. Reduce trading frequency and position sizes immediately."
+	}
+
+	if analysis.WinRate > 55 && analysis.ProfitFactor > 1.5 {
+		return "Strategy is working. Continue but stay disciplined with position sizing."
+	}
+
+	return "Focus on quality over quantity. Wait for high-conviction setups only."
+}
+
+func (fg *FeedbackGenerator) summarizeMetrics(analysis *FeedbackAnalysis) MetricsSummary {
+	ms := MetricsSummary{
+		TradesPerHour: analysis.TradesPerHour,
+	}
+
+	// Return status
+	if analysis.TotalReturnPct < -10 {
+		ms.ReturnStatus = "CRITICAL"
+	} else if analysis.TotalReturnPct < 0 {
+		ms.ReturnStatus = "POOR"
+	} else if analysis.TotalReturnPct < 5 {
+		ms.ReturnStatus = "OK"
+	} else if analysis.TotalReturnPct < 15 {
+		ms.ReturnStatus = "GOOD"
+	} else {
+		ms.ReturnStatus = "EXCELLENT"
+	}
+
+	// Win rate status
+	if analysis.WinRate < 40 {
+		ms.WinRateStatus = "POOR"
+	} else if analysis.WinRate < 50 {
+		ms.WinRateStatus = "OK"
+	} else if analysis.WinRate < 60 {
+		ms.WinRateStatus = "GOOD"
+	} else {
+		ms.WinRateStatus = "EXCELLENT"
+	}
+
+	// Profit factor status
+	if analysis.ProfitFactor < 1.0 {
+		ms.ProfitFactorStatus = "CRITICAL"
+	} else if analysis.ProfitFactor < 1.2 {
+		ms.ProfitFactorStatus = "POOR"
+	} else if analysis.ProfitFactor < 1.5 {
+		ms.ProfitFactorStatus = "OK"
+	} else if analysis.ProfitFactor < 2.0 {
+		ms.ProfitFactorStatus = "GOOD"
+	} else {
+		ms.ProfitFactorStatus = "EXCELLENT"
+	}
+
+	// Drawdown status
+	if analysis.MaxDrawdown > 30 {
+		ms.DrawdownStatus = "CRITICAL"
+	} else if analysis.MaxDrawdown > 20 {
+		ms.DrawdownStatus = "HIGH"
+	} else if analysis.MaxDrawdown > 10 {
+		ms.DrawdownStatus = "MODERATE"
+	} else {
+		ms.DrawdownStatus = "LOW"
+	}
+
+	return ms
+}
+
+func (fg *FeedbackGenerator) getTopActions(analysis *FeedbackAnalysis) []string {
+	actions := []string{}
+
+	// Always include if losing money
+	if analysis.TotalReturnPct < 0 {
+		actions = append(actions, "Reduce position sizes by 30%")
+	}
+
+	// Include from failure patterns
+	for _, pattern := range analysis.FailurePatterns {
+		if pattern.AvgPnLPct < -2.0 {
+			// Extract action from recommendation
+			if strings.Contains(pattern.Recommendation, "ENFORCE:") {
+				action := strings.Replace(pattern.Recommendation, "ENFORCE:", "Implement:", 1)
+				actions = append(actions, action)
+			}
+			if len(actions) >= 2 {
+				break
+			}
+		}
+	}
+
+	return actions[:min(2, len(actions))]
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
+
+// ============================================================
+// ADDITIONAL: Real-time feedback for immediate use
+// ============================================================
+
+// GetImmediateFeedback returns feedback for the MOST RECENT trade only
+func (fg *FeedbackGenerator) GetImmediateFeedback(lastTrade DecisionOutcome, lang string) string {
+	var sb strings.Builder
+
+	if lang == "zh" {
+		fg.formatImmediateFeedbackZH(&sb, lastTrade)
+	} else {
+		fg.formatImmediateFeedbackEN(&sb, lastTrade)
+	}
+
+	return sb.String()
+}
+
+func (fg *FeedbackGenerator) formatImmediateFeedbackEN(sb *strings.Builder, lastTrade DecisionOutcome) {
+	sb.WriteString("🔍 **LAST TRADE DIAGNOSIS:**\n\n")
+
+	if lastTrade.Success {
+		sb.WriteString(fmt.Sprintf("✅ WIN: +%.1f%% in %s\n",
+			lastTrade.RealizedPnLPct, lastTrade.HoldDuration))
+
+		// What worked well
+		if lastTrade.HoldDuration < "30m" {
+			sb.WriteString("   Quick profit capture - good execution\n")
+		}
+		if lastTrade.Leverage <= 3 {
+			sb.WriteString("   Appropriate leverage used\n")
+		}
+		if lastTrade.RealizedPnLPct > 3.0 {
+			sb.WriteString("   Strong profit - good trade management\n")
+		}
+	} else {
+		sb.WriteString(fmt.Sprintf("❌ LOSS: %.1f%% in %s\n",
+			lastTrade.RealizedPnLPct, lastTrade.HoldDuration))
+
+		// Root cause analysis using V2
+		if lastTrade.RecentOrder != nil {
+			failure := decision.AnalyzeFailedTrade(lastTrade.RecentOrder)
+			if failure != nil && failure.ConfidenceScore > 0.6 {
+				sb.WriteString(fmt.Sprintf("   Root cause: %s\n",
+					humanizeV2ReasonEN(failure.PrimaryReason)))
+
+				// Add V2-specific details
+				if failure.DetailedNotes != "" {
+					note := truncate(failure.DetailedNotes, 100)
+					sb.WriteString(fmt.Sprintf("   Details: %s\n", note))
+				}
+			}
+		}
+
+		// Behavioral warnings
+		if lastTrade.HoldDuration < "15m" {
+			sb.WriteString("   ⚠️ Stopped out quickly - poor entry timing\n")
+		} else if lastTrade.HoldDuration > "4h" {
+			sb.WriteString("   ⚠️ Held loser too long - cut losses faster\n")
+		}
+
+		if math.Abs(lastTrade.RealizedPnLPct) > 5 {
+			sb.WriteString("   ⚠️ Large loss - stop loss too wide\n")
+		}
+
+		if lastTrade.Leverage >= 5 && math.Abs(lastTrade.RealizedPnLPct) > 2 {
+			sb.WriteString("   ⚠️ High leverage amplified loss\n")
+		}
+	}
+
+	// Add execution quality assessment
+	if lastTrade.RecentOrder != nil {
+		sb.WriteString(fg.assessExecutionQuality(lastTrade.RecentOrder))
+	}
+
+	// One specific action for next trade
+	sb.WriteString("\n**NEXT TRADE ACTION:** ")
+	sb.WriteString(fg.getNextTradeAction(lastTrade))
+}
+
+func (fg *FeedbackGenerator) formatImmediateFeedbackZH(sb *strings.Builder, lastTrade DecisionOutcome) {
+	sb.WriteString("🔍 **最近交易诊断:**\n\n")
+
+	if lastTrade.Success {
+		sb.WriteString(fmt.Sprintf("✅ 盈利: +%.1f%% (持仓: %s)\n",
+			lastTrade.RealizedPnLPct, lastTrade.HoldDuration))
+
+		// 成功因素分析
+		if lastTrade.HoldDuration < "30m" {
+			sb.WriteString("   快速获利了结 - 执行良好\n")
+		}
+		if lastTrade.Leverage <= 3 {
+			sb.WriteString("   杠杆使用恰当\n")
+		}
+		if lastTrade.RealizedPnLPct > 3.0 {
+			sb.WriteString("   强劲利润 - 交易管理优秀\n")
+		}
+
+		// 检查是否有改进空间
+		if lastTrade.RecentOrder != nil && lastTrade.RecentOrder.GiveBackFromPeak > 0 {
+			sb.WriteString(fmt.Sprintf("   ⚠️ 利润回吐: %.2f USDT\n",
+				lastTrade.RecentOrder.GiveBackFromPeak))
+		}
+	} else {
+		sb.WriteString(fmt.Sprintf("❌ 亏损: %.1f%% (持仓: %s)\n",
+			lastTrade.RealizedPnLPct, lastTrade.HoldDuration))
+
+		// V2根因分析
+		if lastTrade.RecentOrder != nil {
+			failure := decision.AnalyzeFailedTrade(lastTrade.RecentOrder)
+			if failure != nil && failure.ConfidenceScore > 0.6 {
+				sb.WriteString(fmt.Sprintf("   失败原因: %s\n",
+					humanizeV2ReasonZH(failure.PrimaryReason)))
+
+				// 添加详细说明
+				if failure.DetailedNotes != "" {
+					note := truncate(failure.DetailedNotes, 80)
+					sb.WriteString(fmt.Sprintf("   详细说明: %s\n", note))
+				}
+			}
+		}
+
+		// 行为警告
+		if lastTrade.HoldDuration < "15m" {
+			sb.WriteString("   ⚠️ 过早被止损 - 入场时机不佳\n")
+		} else if lastTrade.HoldDuration > "4h" {
+			sb.WriteString("   ⚠️ 持仓亏损过久 - 应更快止损\n")
+		}
+
+		if math.Abs(lastTrade.RealizedPnLPct) > 5 {
+			sb.WriteString("   ⚠️ 亏损过大 - 止损设置太宽\n")
+		}
+
+		if lastTrade.Leverage >= 5 && math.Abs(lastTrade.RealizedPnLPct) > 2 {
+			sb.WriteString("   ⚠️ 高杠杆放大了亏损\n")
+		}
+	}
+
+	// 执行质量评估
+	if lastTrade.RecentOrder != nil {
+		sb.WriteString(fg.assessExecutionQualityZH(lastTrade.RecentOrder))
+	}
+
+	// 下一交易具体行动
+	sb.WriteString("\n**下一交易行动:** ")
+	sb.WriteString(fg.getNextTradeActionZH(lastTrade))
+}
+
+func (fg *FeedbackGenerator) assessExecutionQuality(order *decision.RecentOrder) string {
+	if order == nil {
+		return ""
+	}
+
+	var issues []string
+
+	// Check slippage
+	if order.EntrySlippage > 0.001 { // 0.1%
+		issues = append(issues, fmt.Sprintf("High entry slippage: %.3f%%", order.EntrySlippage*100))
+	}
+
+	if order.ExitSlippage > 0.001 {
+		issues = append(issues, fmt.Sprintf("High exit slippage: %.3f%%", order.ExitSlippage*100))
+	}
+
+	// Check spread
+	if order.EntrySpread > 0.002 { // 0.2%
+		issues = append(issues, fmt.Sprintf("Wide entry spread: %.3f%%", order.EntrySpread*100))
+	}
+
+	// Check fill time
+	if order.EntryFillTime > 2000 { // 2 seconds
+		issues = append(issues, fmt.Sprintf("Slow fill: %dms", order.EntryFillTime))
+	}
+
+	if len(issues) == 0 {
+		return "   Execution quality: Good ✓\n"
+	}
+
+	return fmt.Sprintf("   ⚠️ Execution issues: %s\n", strings.Join(issues, ", "))
+}
+
+func (fg *FeedbackGenerator) assessExecutionQualityZH(order *decision.RecentOrder) string {
+	if order == nil {
+		return ""
+	}
+
+	var issues []string
+
+	// 检查滑点
+	if order.EntrySlippage > 0.001 { // 0.1%
+		issues = append(issues, fmt.Sprintf("入场滑点过高: %.3f%%", order.EntrySlippage*100))
+	}
+
+	if order.ExitSlippage > 0.001 {
+		issues = append(issues, fmt.Sprintf("出场滑点过高: %.3f%%", order.ExitSlippage*100))
+	}
+
+	// 检查点差
+	if order.EntrySpread > 0.002 { // 0.2%
+		issues = append(issues, fmt.Sprintf("入场点差过大: %.3f%%", order.EntrySpread*100))
+	}
+
+	// 检查成交时间
+	if order.EntryFillTime > 2000 { // 2秒
+		issues = append(issues, fmt.Sprintf("成交缓慢: %dms", order.EntryFillTime))
+	}
+
+	if len(issues) == 0 {
+		return "   执行质量: 良好 ✓\n"
+	}
+
+	return fmt.Sprintf("   ⚠️ 执行问题: %s\n", strings.Join(issues, ", "))
+}
+
+func (fg *FeedbackGenerator) getNextTradeAction(lastTrade DecisionOutcome) string {
+	actions := []string{}
+
+	if !lastTrade.Success {
+		// Loss-specific actions
+		if lastTrade.HoldDuration < "15m" {
+			actions = append(actions, "Wait for stronger confirmation before entering")
+		}
+		if math.Abs(lastTrade.RealizedPnLPct) > 5 {
+			actions = append(actions, "Set tighter stop-loss (max 3%)")
+		}
+		if lastTrade.Leverage >= 5 {
+			actions = append(actions, "Reduce leverage to 3x maximum")
+		}
+
+		// Always include after loss
+		if len(actions) == 0 {
+			actions = append(actions, "Wait 30+ minutes before next trade to avoid revenge trading")
+		}
+	} else {
+		// Win-specific actions
+		if lastTrade.RealizedPnLPct < 2.0 && lastTrade.HoldDuration > "1h" {
+			actions = append(actions, "Consider taking profits earlier on similar setups")
+		}
+		if lastTrade.Leverage >= 5 {
+			actions = append(actions, "Consider reducing leverage to lock in profits")
+		}
+
+		// Always include after win
+		if len(actions) == 0 {
+			actions = append(actions, "Maintain discipline - don't increase position size")
+		}
+	}
+
+	// Get context-specific action from V2 analysis
+	if lastTrade.RecentOrder != nil {
+		v2Action := fg.getV2SpecificAction(lastTrade.RecentOrder)
+		if v2Action != "" {
+			actions = append([]string{v2Action}, actions...)
+		}
+	}
+
+	return actions[0] // Return the most specific action
+}
+
+func (fg *FeedbackGenerator) getNextTradeActionZH(lastTrade DecisionOutcome) string {
+	actions := []string{}
+
+	if !lastTrade.Success {
+		// 亏损后特定行动
+		if lastTrade.HoldDuration < "15m" {
+			actions = append(actions, "等待更强的确认信号再入场")
+		}
+		if math.Abs(lastTrade.RealizedPnLPct) > 5 {
+			actions = append(actions, "设置更紧的止损（最大3%）")
+		}
+		if lastTrade.Leverage >= 5 {
+			actions = append(actions, "降低杠杆至最高3倍")
+		}
+
+		// 亏损后总是包含的
+		if len(actions) == 0 {
+			actions = append(actions, "等待30分钟以上再进行下一笔交易，避免报复性交易")
+		}
+	} else {
+		// 盈利后特定行动
+		if lastTrade.RealizedPnLPct < 2.0 && lastTrade.HoldDuration > "1h" {
+			actions = append(actions, "考虑在类似设置中更早获利了结")
+		}
+		if lastTrade.Leverage >= 5 {
+			actions = append(actions, "考虑降低杠杆以锁定利润")
+		}
+
+		// 盈利后总是包含的
+		if len(actions) == 0 {
+			actions = append(actions, "保持纪律 - 不要增加仓位大小")
+		}
+	}
+
+	// 从V2分析获取特定行动
+	if lastTrade.RecentOrder != nil {
+		v2Action := fg.getV2SpecificActionZH(lastTrade.RecentOrder)
+		if v2Action != "" {
+			actions = append([]string{v2Action}, actions...)
+		}
+	}
+
+	return actions[0]
+}
+
+func (fg *FeedbackGenerator) getV2SpecificAction(order *decision.RecentOrder) string {
+	if order == nil {
+		return ""
+	}
+
+	failure := decision.AnalyzeFailedTrade(order)
+	if failure == nil {
+		return ""
+	}
+
+	switch failure.PrimaryReason {
+	case decision.ReasonChasingEntry:
+		return "Use limit orders instead of market orders for entries"
+	case decision.ReasonStopTooTight:
+		return "Set stop-loss at least 1.5x ATR from entry"
+	case decision.ReasonSlippageExceeded:
+		return "Reduce position size or trade during higher liquidity"
+	case decision.ReasonRegimeMismatch:
+		return "Check market regime before entering (avoid chop)"
+	case decision.ReasonLiquidityRiskHigh:
+		return "Avoid trading during low-volume periods"
+	case decision.ReasonLateExitGiveBack:
+		return "Set profit targets and stick to them"
+	default:
+		return ""
+	}
+}
+
+func (fg *FeedbackGenerator) getV2SpecificActionZH(order *decision.RecentOrder) string {
+	if order == nil {
+		return ""
+	}
+
+	failure := decision.AnalyzeFailedTrade(order)
+	if failure == nil {
+		return ""
+	}
+
+	switch failure.PrimaryReason {
+	case decision.ReasonChasingEntry:
+		return "使用限价单而非市价单入场"
+	case decision.ReasonStopTooTight:
+		return "设置止损至少距离入场价1.5倍ATR"
+	case decision.ReasonSlippageExceeded:
+		return "减小仓位或在高流动性时段交易"
+	case decision.ReasonRegimeMismatch:
+		return "入场前检查市场状态（避免震荡市）"
+	case decision.ReasonLiquidityRiskHigh:
+		return "避免在低成交量时段交易"
+	case decision.ReasonLateExitGiveBack:
+		return "设置盈利目标并严格执行"
+	default:
+		return ""
+	}
 }

@@ -1037,7 +1037,7 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 			calibrator.DepthReductionThreshold = r.failureThresholds.DepthReductionThreshold
 			// Use callCount as approximation for number of trades
 			calibrator.SampleSize = callCount
-			ctx.CalibratedThresholds = calibrator.FormatThresholdsForPrompt(lang)
+			ctx.CalibratedThresholds = calibrator.GetThresholdsForLLM(lang, 35)
 		}
 	}
 

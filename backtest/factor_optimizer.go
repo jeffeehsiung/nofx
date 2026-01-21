@@ -56,9 +56,9 @@ type OptimizationRecord struct {
 func DefaultFactorOptimizerConfig() *FactorOptimizerConfig {
 	return &FactorOptimizerConfig{
 		EnableOptimization:   true,
-		OptimizationCycles:   15,
+		OptimizationCycles:   10,
 		ParameterSearchWidth: 0.2,
-		MinTradesForUpdate:   20,
+		MinTradesForUpdate:   10,
 		AdaptationRate:       0.15,
 	}
 }

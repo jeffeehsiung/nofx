@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const calibrationFilePath = "data/calibrated_thresholds.json"
@@ -19,8 +20,25 @@ type CalibratedThresholds struct {
 	OIDecayThreshold         float64 `json:"oi_decay_threshold"`
 	SpreadWorseningMultiple  float64 `json:"spread_worsening_multiple"`
 	DepthReductionThreshold  float64 `json:"depth_reduction_threshold"`
-	CalibratedAt             string  `json:"calibrated_at"`
-	SampleSize               int     `json:"sample_size"`
+
+	// Bayesian models serialization
+	BayesianModels map[string]*SerializedBayesianModel `json:"bayesian_models,omitempty"`
+
+	// Metadata
+	CalibratedAt     string             `json:"calibrated_at"`
+	SampleSize       int                `json:"sample_size"`
+	ConfidenceScores map[string]float64 `json:"confidence_scores,omitempty"`
+	Metadata         map[string]string  `json:"metadata,omitempty"`
+}
+
+// SerializedBayesianModel is a serializable version of BayesianThreshold
+type SerializedBayesianModel struct {
+	PriorAlpha       float64 `json:"prior_alpha"`
+	PriorBeta        float64 `json:"prior_beta"`
+	PosteriorAlpha   float64 `json:"posterior_alpha"`
+	PosteriorBeta    float64 `json:"posterior_beta"`
+	CurrentThreshold float64 `json:"current_threshold"`
+	Confidence       float64 `json:"confidence"`
 }
 
 // SaveCalibratedThresholds persists calibrated thresholds to disk
@@ -71,4 +89,28 @@ func LoadCalibratedThresholds() (*CalibratedThresholds, error) {
 func HasCalibratedThresholds() bool {
 	_, err := os.Stat(calibrationFilePath)
 	return err == nil
+}
+
+// GetDefaultCalibratedThresholds returns default thresholds for first-time use
+func GetDefaultCalibratedThresholds() *CalibratedThresholds {
+	return &CalibratedThresholds{
+		WeakVolumeThreshold:      0.90,
+		WeakOIThreshold:          0.30,
+		PrematureVolumeThreshold: 0.90,
+		PrematureOIThreshold:     0.50,
+		VolumeDecayThreshold:     -0.30,
+		OIDecayThreshold:         -0.20,
+		SpreadWorseningMultiple:  2.0,
+		DepthReductionThreshold:  0.50,
+		CalibratedAt:             time.Now().Format(time.RFC3339),
+		SampleSize:               0,
+		ConfidenceScores:         make(map[string]float64),
+		BayesianModels:           make(map[string]*SerializedBayesianModel),
+		Metadata: map[string]string{
+			"quality_score":      "0.0",
+			"reliable":           "false",
+			"calibration_method": "defaults",
+			"source":             "hardcoded_defaults",
+		},
+	}
 }

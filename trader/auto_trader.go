@@ -1327,7 +1327,7 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 					calibrator.SpreadWorseningMultiple = at.failureThresholds.SpreadWorseningMultiple
 					calibrator.DepthReductionThreshold = at.failureThresholds.DepthReductionThreshold
 					calibrator.SampleSize = stats.TotalTrades
-					ctx.CalibratedThresholds = calibrator.FormatThresholdsForPrompt(strategyLang)
+					ctx.CalibratedThresholds = calibrator.GetThresholdsForLLM(strategyLang, 35)
 				}
 			}
 
