@@ -1112,6 +1112,7 @@ func (c *StrategyConfig) AvailableIndicatorsString(sb *strings.Builder, lang str
 			sb.WriteString("- 量化数据（机构/散户资金流向、持仓变化、多周期价格变化）\n")
 		}
 	} else {
+		sb.WriteString("You will have the following data for your disposal:\n")
 		sb.WriteString(fmt.Sprintf("- %s price series", kline.PrimaryTimeframe))
 		if kline.EnableMultiTimeframe {
 			sb.WriteString(fmt.Sprintf(" + %s K-line series\n", kline.LongerTimeframe))
@@ -1119,7 +1120,6 @@ func (c *StrategyConfig) AvailableIndicatorsString(sb *strings.Builder, lang str
 			sb.WriteString("\n")
 		}
 		if indicators.EnableEMA {
-			sb.WriteString("You will have the following data for your disposal:\n")
 			sb.WriteString("- EMA indicators")
 			if len(indicators.EMAPeriods) > 0 {
 				sb.WriteString(fmt.Sprintf(" (periods: %v)", indicators.EMAPeriods))
