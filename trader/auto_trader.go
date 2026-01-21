@@ -1117,6 +1117,11 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 
 	// 7. Add recent closed trades (if store is available)
 	if at.store != nil {
+		// Feed the feedback to LLM
+		lang := "en"
+		if strings.Contains(strings.ToLower(at.strategyEngine.GetConfig().PromptSections.RoleDefinition), "交易") {
+			lang = "zh"
+		}
 		// Get recent 10 closed trades for AI context
 		recentTrades, err := at.store.Position().GetRecentTrades(at.id, 10)
 		if err != nil {
@@ -1183,34 +1188,6 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 						}
 						logger.Infof("✅ [%s] Generated feedback analysis at cycle %d: Total Return %.2f%%, Win Rate %.1f%%",
 							at.name, stats.TotalTrades, feedback.TotalReturnPct, feedback.WinRate)
-						// Feed the feedback to LLM
-						lang := "en"
-						if strings.Contains(strings.ToLower(at.strategyEngine.GetConfig().PromptSections.RoleDefinition), "交易") {
-							lang = "zh"
-						}
-						userPrompt := at.feedbackGenerator.FormatFeedbackForPrompt(feedback, lang, false)
-						var systemPrompt string
-						if lang == "zh" {
-							systemPrompt = "你是一个经验丰富的加密货币交易策略顾问。根据以下反馈，帮助改进交易决策。"
-						} else {
-							systemPrompt = "You are an experienced crypto trading strategy advisor. Help improve trading decisions based on the following feedback."
-						}
-						if response, err := at.mcpClient.CallWithMessages(systemPrompt, userPrompt); err != nil {
-							logger.Warnf("⚠️ [%s] Error calling AI feedback advisor: %v", at.name, err)
-						} else {
-							logger.Infof("💡 [%s] AI feedback advisor response: %s", at.name, response)
-							// if lang == "zh" {
-							// 	systemPrompt = "基于以下反馈建议，改进你的交易策略和决策过程。"
-							// } else {
-							// 	systemPrompt = "Improve your trading strategy and decision-making process based on the below feedback suggestions."
-							// }
-							// response, err := at.mcpClient.CallWithMessages(systemPrompt, response)
-							// if err != nil {
-							// 	logger.Warnf("⚠️ [%s] Error calling AI feedback advisor (2nd pass): %v", at.name, err)
-							// } else {
-							// 	logger.Infof("💡 [%s] AI feedback advisor 2nd pass response: %s", at.name, response)
-							// }
-						}
 						// Calibrate failure thresholds from trading history (every 5 trades)
 						if stats.TotalTrades >= 10 {
 							if recentTrades, err := at.store.Position().GetRecentTrades(at.id, 500); err == nil && len(recentTrades) > 0 {
@@ -1296,7 +1273,7 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 
 			// Attach feedback to context
 			if at.lastFeedback != nil {
-				ctx.PerformanceFeedback = at.lastFeedback
+				ctx.PerformanceFeedback = at.feedbackGenerator.FormatFeedbackForPrompt(at.lastFeedback, lang, false)
 
 				// Attach optimized factor weights
 				if at.factorOptimizer != nil {

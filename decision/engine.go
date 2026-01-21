@@ -174,7 +174,7 @@ type Context struct {
 	PromptVariant          string                                  `json:"prompt_variant,omitempty"`
 	TradingStats           *TradingStats                           `json:"trading_stats,omitempty"`
 	RecentOrders           []RecentOrder                           `json:"recent_orders,omitempty"`
-	PerformanceFeedback    interface{}                             `json:"-"` // *backtest.FeedbackAnalysis - avoiding circular dependency
+	PerformanceFeedback    string                                  `json:"-"` // *backtest.FeedbackAnalysis - avoiding circular dependency
 	OptimizedWeights       interface{}                             `json:"-"` // *store.RiskControlConfig - optimized parameters
 	ComplianceFeedback     string                                  `json:"-"` // Reinforcement learning: compliance with recommendations
 	PromptEvolutionSummary string                                  `json:"-"` // Prompt optimizer evolution history and learnings
@@ -1027,12 +1027,9 @@ func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 		sb.WriteString(formatAccountEN(ctx))
 	}
 	// 2. 性能反馈
-	if ctx.PerformanceFeedback != nil {
-		if lang == LangChinese {
-			sb.WriteString(formatPerformanceFeedbackZH(ctx.PerformanceFeedback))
-		} else {
-			sb.WriteString(formatPerformanceFeedbackEN(ctx.PerformanceFeedback))
-		}
+	if ctx.PerformanceFeedback != "" {
+		sb.WriteString(ctx.PerformanceFeedback)
+		sb.WriteString("\n")
 	}
 	// 3. 合规反馈（强化学习：展示LLM遵循建议的程度）
 	if ctx.ComplianceFeedback != "" {

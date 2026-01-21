@@ -942,30 +942,6 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 				}
 				logger.Infof("✅ Generated feedback analysis at cycle %d: Total Return %.2f%%, Win Rate %.1f%%",
 					callCount, feedback.TotalReturnPct, feedback.WinRate)
-				// Feed feedback to LLM
-				userPrompt := r.feedbackGenerator.FormatFeedbackForPrompt(feedback, lang, false)
-				var systemPrompt string
-				if lang == "zh" {
-					systemPrompt = "你是一个经验丰富的加密货币交易策略顾问。根据以下反馈，帮助改进交易决策。"
-				} else {
-					systemPrompt = "You are an experienced crypto trading strategy advisor. Help improve trading decisions based on the following feedback."
-				}
-				if response, err := r.mcpClient.CallWithMessages(systemPrompt, userPrompt); err != nil {
-					logger.Warnf("⚠️ [%s] Error calling AI feedback advisor: %v", r.cfg.RunID, err)
-				} else {
-					logger.Infof("💡 [%s] AI feedback advisor response: %s", r.cfg.RunID, response)
-					// if lang == "zh" {
-					// 	systemPrompt = "基于以下反馈建议，改进你的交易策略和决策过程。"
-					// } else {
-					// 	systemPrompt = "Improve your trading strategy and decision-making process based on the below feedback suggestions."
-					// }
-					// response, err := r.mcpClient.CallWithMessages(systemPrompt, response)
-					// if err != nil {
-					// 	logger.Warnf("⚠️ [%s] Error calling AI feedback advisor (2nd pass): %v", r.cfg.RunID, err)
-					// } else {
-					// 	logger.Infof("💡 [%s] AI feedback advisor 2nd pass response: %s", r.cfg.RunID, response)
-					// }
-				}
 				// Optimize factor weights based on feedback
 				if r.factorOptimizer.ShouldOptimize(callCount, len(r.account.Positions())) {
 					if err := r.factorOptimizer.OptimizeWeights(feedback, callCount); err != nil {
@@ -1016,7 +992,7 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 
 		// Attach feedback to context
 		if r.lastFeedback != nil {
-			ctx.PerformanceFeedback = r.lastFeedback
+			ctx.PerformanceFeedback = r.feedbackGenerator.FormatFeedbackForPrompt(r.lastFeedback, lang, false)
 
 			// Attach optimized factor weights
 			ctx.OptimizedWeights = r.factorOptimizer.GetCurrentWeights()

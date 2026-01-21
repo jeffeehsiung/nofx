@@ -1844,7 +1844,7 @@ func (fg *FeedbackGenerator) analyzeMarketConditions(metrics *Metrics, outcomes 
 }
 
 // FormatFeedbackForPrompt formats the feedback analysis for inclusion in AI prompts
-func (fg *FeedbackGenerator) FormatFeedbackForPrompt(analysis *FeedbackAnalysis, lang string, detailed bool) string {
+func (fg *FeedbackGenerator) FormatForPrompt(analysis *FeedbackAnalysis, lang string, detailed bool) string {
 	if analysis == nil {
 		return ""
 	}
@@ -1853,7 +1853,7 @@ func (fg *FeedbackGenerator) FormatFeedbackForPrompt(analysis *FeedbackAnalysis,
 }
 
 // FormatForPrompt formats feedback for LLM consumption - CONCISE VERSION
-func (fg *FeedbackGenerator) FormatForPrompt(analysis *FeedbackAnalysis, lang string, detailed bool) string {
+func (fg *FeedbackGenerator) FormatFeedbackForPrompt(analysis *FeedbackAnalysis, lang string, detailed bool) string {
 	if analysis == nil {
 		return "NO_FEEDBACK_AVAILABLE"
 	}
