@@ -147,12 +147,6 @@ func (cfg *BacktestConfig) Validate() error {
 	}
 	cfg.CustomPrompt = strings.TrimSpace(cfg.CustomPrompt)
 
-	// Default to enabled for analysis and prompt lab (can be disabled via config)
-	if !cfg.EnableAnalysis && !cfg.EnablePromptLab {
-		cfg.EnableAnalysis = true
-		cfg.EnablePromptLab = true
-	}
-
 	if cfg.AICfg.Provider == "" {
 		cfg.AICfg.Provider = "inherit"
 	}
