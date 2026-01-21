@@ -1199,17 +1199,17 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 							logger.Warnf("⚠️ [%s] Error calling AI feedback advisor: %v", at.name, err)
 						} else {
 							logger.Infof("💡 [%s] AI feedback advisor response: %s", at.name, response)
-							if lang == "zh" {
-								systemPrompt = "基于以下反馈建议，改进你的交易策略和决策过程。"
-							} else {
-								systemPrompt = "Improve your trading strategy and decision-making process based on the below feedback suggestions."
-							}
-							response, err := at.mcpClient.CallWithMessages(systemPrompt, response)
-							if err != nil {
-								logger.Warnf("⚠️ [%s] Error calling AI feedback advisor (2nd pass): %v", at.name, err)
-							} else {
-								logger.Infof("💡 [%s] AI feedback advisor 2nd pass response: %s", at.name, response)
-							}
+							// if lang == "zh" {
+							// 	systemPrompt = "基于以下反馈建议，改进你的交易策略和决策过程。"
+							// } else {
+							// 	systemPrompt = "Improve your trading strategy and decision-making process based on the below feedback suggestions."
+							// }
+							// response, err := at.mcpClient.CallWithMessages(systemPrompt, response)
+							// if err != nil {
+							// 	logger.Warnf("⚠️ [%s] Error calling AI feedback advisor (2nd pass): %v", at.name, err)
+							// } else {
+							// 	logger.Infof("💡 [%s] AI feedback advisor 2nd pass response: %s", at.name, response)
+							// }
 						}
 						// Calibrate failure thresholds from trading history (every 5 trades)
 						if stats.TotalTrades >= 10 {

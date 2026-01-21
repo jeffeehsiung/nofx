@@ -947,17 +947,17 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 					logger.Warnf("⚠️ [%s] Error calling AI feedback advisor: %v", r.cfg.RunID, err)
 				} else {
 					logger.Infof("💡 [%s] AI feedback advisor response: %s", r.cfg.RunID, response)
-					if lang == "zh" {
-						systemPrompt = "基于以下反馈建议，改进你的交易策略和决策过程。"
-					} else {
-						systemPrompt = "Improve your trading strategy and decision-making process based on the below feedback suggestions."
-					}
-					response, err := r.mcpClient.CallWithMessages(systemPrompt, response)
-					if err != nil {
-						logger.Warnf("⚠️ [%s] Error calling AI feedback advisor (2nd pass): %v", r.cfg.RunID, err)
-					} else {
-						logger.Infof("💡 [%s] AI feedback advisor 2nd pass response: %s", r.cfg.RunID, response)
-					}
+					// if lang == "zh" {
+					// 	systemPrompt = "基于以下反馈建议，改进你的交易策略和决策过程。"
+					// } else {
+					// 	systemPrompt = "Improve your trading strategy and decision-making process based on the below feedback suggestions."
+					// }
+					// response, err := r.mcpClient.CallWithMessages(systemPrompt, response)
+					// if err != nil {
+					// 	logger.Warnf("⚠️ [%s] Error calling AI feedback advisor (2nd pass): %v", r.cfg.RunID, err)
+					// } else {
+					// 	logger.Infof("💡 [%s] AI feedback advisor 2nd pass response: %s", r.cfg.RunID, response)
+					// }
 				}
 				// Optimize factor weights based on feedback
 				if r.factorOptimizer.ShouldOptimize(callCount, len(r.account.Positions())) {
