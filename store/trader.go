@@ -52,26 +52,30 @@ type TraderFullConfig struct {
 
 func (s *TraderStore) initTables() error {
 	_, err := s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS traders (
-			id TEXT PRIMARY KEY,
-			user_id TEXT NOT NULL DEFAULT 'default',
-			name TEXT NOT NULL,
-			ai_model_id TEXT NOT NULL,
-			exchange_id TEXT NOT NULL,
-			initial_balance REAL NOT NULL,
-			scan_interval_minutes INTEGER DEFAULT 3,
-			is_running BOOLEAN DEFAULT 0,
-			btc_eth_leverage INTEGER DEFAULT 5,
-			altcoin_leverage INTEGER DEFAULT 5,
-			trading_symbols TEXT DEFAULT '',
-			use_coin_pool BOOLEAN DEFAULT 0,
-			use_oi_top BOOLEAN DEFAULT 0,
-			custom_prompt TEXT DEFAULT '',
-			override_base_prompt BOOLEAN DEFAULT 0,
-			system_prompt_template TEXT DEFAULT 'default',
-			is_cross_margin BOOLEAN DEFAULT 1,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    CREATE TABLE IF NOT EXISTS traders (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT 'default',
+        name TEXT NOT NULL,
+        ai_model_id TEXT NOT NULL,
+        exchange_id TEXT NOT NULL,
+        initial_balance REAL NOT NULL,
+        scan_interval_minutes INTEGER DEFAULT 3,
+		trading_mode TEXT DEFAULT '',
+        is_running BOOLEAN DEFAULT 0,
+        btc_eth_leverage INTEGER DEFAULT 5,
+        altcoin_leverage INTEGER DEFAULT 5,
+        trading_symbols TEXT DEFAULT '',
+        use_coin_pool BOOLEAN DEFAULT 0,
+        use_oi_top BOOLEAN DEFAULT 0,
+        custom_prompt TEXT DEFAULT '',
+        override_base_prompt BOOLEAN DEFAULT 0,
+        system_prompt_template TEXT DEFAULT 'default',
+        is_cross_margin BOOLEAN DEFAULT 1,
+        strategy_id TEXT DEFAULT '',
+        show_in_competition BOOLEAN DEFAULT 1,
+        paper_trading BOOLEAN DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)
 	`)
 	if err != nil {

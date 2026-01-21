@@ -321,17 +321,14 @@ func (s *ExchangeStore) Create(userID, exchangeType, accountName string, enabled
 
 	logger.Debugf("🔧 ExchangeStore.Create: userID=%s, exchangeType=%s, accountName=%s, id=%s",
 		userID, exchangeType, accountName, id)
-
 	_, err := s.db.Exec(`
 		INSERT INTO exchanges (id, exchange_type, account_name, user_id, name, type, enabled,
-		                       api_key, secret_key, passphrase, testnet,
-		                       hyperliquid_wallet_addr, aster_user, aster_signer, aster_private_key,
-		                       created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+							api_key, secret_key, passphrase, testnet,
+							hyperliquid_wallet_addr, aster_user, aster_signer, aster_private_key)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id, exchangeType, accountName, userID, name, typ, enabled,
 		s.encrypt(apiKey), s.encrypt(secretKey), s.encrypt(passphrase), testnet,
 		hyperliquidWalletAddr, asterUser, asterSigner, s.encrypt(asterPrivateKey))
-
 	if err != nil {
 		return "", err
 	}

@@ -647,7 +647,7 @@ func (s *BacktestStore) SavePromptVariant(variant *PromptVariantData) error {
 			id, run_id, variant_id, generation, is_active, prompt_role_definition, prompt_trading_frequency, prompt_entry_standards, prompt_decision_process,
 			total_decisions, total_return, win_rate, profit_factor,
 			sharpe_ratio, max_drawdown, fitness_score, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			is_active = excluded.is_active,
 			total_decisions = excluded.total_decisions,

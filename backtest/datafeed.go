@@ -104,7 +104,14 @@ func (df *DataFeed) loadAll() error {
 
 	// Generate backtest progress timeline using the primary timeframe of the first symbol
 	firstSymbol := df.symbols[0]
-	primarySeries := df.symbolSeries[firstSymbol].byTF[df.primaryTF]
+	ss, ok := df.symbolSeries[firstSymbol]
+	if !ok || ss == nil {
+		return fmt.Errorf("no data for first symbol %s", firstSymbol)
+	}
+	primarySeries, ok := ss.byTF[df.primaryTF]
+	if !ok || primarySeries == nil {
+		return fmt.Errorf("primary timeframe %s not found for symbol %s", df.primaryTF, firstSymbol)
+	}
 	startMs := start.UnixMilli()
 	endMs := end.UnixMilli()
 	for _, ts := range primarySeries.closeTimes {
