@@ -57,6 +57,8 @@ type BacktestConfig struct {
 	CheckpointIntervalSeconds int    `json:"checkpoint_interval_seconds,omitempty"`
 	ReplayDecisionDir         string `json:"replay_decision_dir,omitempty"`
 
+	Language string `json:"language,omitempty"`
+
 	// Feature flags for A/B testing and gradual rollout
 	UseSmartHeuristics bool `json:"use_smart_heuristics"` // SMART 1.1-1.4: Use market-aware position sizing (default: false for backward compatibility)
 
@@ -232,6 +234,14 @@ func (cfg *BacktestConfig) ToStrategyConfig() *store.StrategyConfig {
 		// Override custom prompt if provided in backtest config
 		if cfg.CustomPrompt != "" {
 			result.CustomPrompt = cfg.CustomPrompt
+		}
+
+		if cfg.PromptVariant != "" {
+			lang := cfg.Language
+			if lang == "" {
+				lang = "en" // fallback
+			}
+			result.SetConfigPromptSectionsByModeAndLang(cfg.PromptVariant, lang)
 		}
 
 		return &result

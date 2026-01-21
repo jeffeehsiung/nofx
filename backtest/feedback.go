@@ -122,8 +122,8 @@ type FeedbackConfig struct {
 func DefaultFeedbackConfig() FeedbackConfig {
 	return FeedbackConfig{
 		EnableFeedback:          false,
-		MinDecisionsForFeedback: 64,
-		FeedbackWindowCycles:    32,
+		MinDecisionsForFeedback: 32,
+		FeedbackWindowCycles:    20,
 		TopTradesCount:          3,
 		MinPatternFrequency:     10,
 	}

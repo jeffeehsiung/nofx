@@ -335,6 +335,11 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		return nil, fmt.Errorf("[%s] strategy not configured", config.Name)
 	}
 	strategyEngine := decision.NewStrategyEngine(config.StrategyConfig)
+	strategyLang := "en"
+	if strings.Contains(strings.ToLower(config.StrategyConfig.PromptSections.RoleDefinition), "交易") {
+		strategyLang = "zh"
+	}
+	config.StrategyConfig.SetConfigPromptSectionsByModeAndLang(config.TradingMode, strategyLang)
 	logger.Infof("✓ [%s] Using strategy engine (strategy configuration loaded)", config.Name)
 
 	at := &AutoTrader{
@@ -793,11 +798,7 @@ func (at *AutoTrader) runCycle() error {
 
 	// 5. Use strategy engine to call AI for decision
 	logger.Infof("🤖 Requesting AI analysis and decision... [Strategy Engine]")
-	tradingMode := at.config.TradingMode
-	if tradingMode == "" {
-		tradingMode = "balanced" // Default to balanced if not specified
-	}
-	aiDecision, err := decision.GetFullDecisionWithStrategy(ctx, at.mcpClient, at.strategyEngine, tradingMode)
+	aiDecision, err := decision.GetFullDecisionWithStrategy(ctx, at.mcpClient, at.strategyEngine, at.config.TradingMode)
 
 	if aiDecision != nil && aiDecision.AIRequestDurationMs > 0 {
 		record.AIRequestDurationMs = aiDecision.AIRequestDurationMs

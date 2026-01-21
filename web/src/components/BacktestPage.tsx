@@ -41,6 +41,7 @@ import {
 import { api } from '../lib/api'
 import { useLanguage } from '../contexts/LanguageContext'
 import { t } from '../i18n/translations'
+import { franc } from 'franc'
 import { confirmToast } from '../lib/notify'
 import { DecisionCard } from './DecisionCard'
 import { MetricTooltip } from './MetricTooltip'
@@ -71,6 +72,13 @@ const toLocalInput = (date: Date) => {
   return local.toISOString().slice(0, 16)
 }
 
+export function detectLanguage(text: string): string {
+  const langCode = franc(text)
+  // 'cmn' is Mandarin Chinese, 'eng' is English, etc.
+  if (langCode === 'cmn') return 'zh'
+  if (langCode === 'eng') return 'en'
+  return langCode // fallback to ISO 639-3 code
+}
 
 // ============ Sub Components ============
 
@@ -935,7 +943,7 @@ export function BacktestPage() {
 
       // Only send empty symbols if user deliberately cleared them and strategy has dynamic coin source
       const symbolsToSend = (userSymbols.length === 0 && strategyHasDynamicCoins) ? [] : userSymbols
-
+      const detectedLang = detectLanguage(formState.customPrompt || formState.promptTemplate || '')
       const payload = await api.startBacktest({
         run_id: formState.runId.trim() || undefined,
         strategy_id: formState.strategyId || undefined, // Use saved strategy from Strategy Studio
@@ -958,6 +966,7 @@ export function BacktestPage() {
         enable_analysis: formState.enableAnalysis,
         enable_prompt_lab: formState.enablePromptLab,
         ai_model_id: formState.aiModelId,
+        language: detectedLang,
         leverage: {
           btc_eth_leverage: formState.btcEthLeverage,
           altcoin_leverage: formState.altcoinLeverage,

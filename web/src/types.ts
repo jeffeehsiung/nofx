@@ -441,6 +441,7 @@ export interface BacktestStartConfig {
   checkpoint_interval_seconds?: number;
   replay_decision_dir?: string;
   shared_ai_cache_path?: string;
+  language?: string;
   ai?: {
     provider?: string;
     model?: string;
@@ -498,6 +499,7 @@ export interface StrategyConfig {
   indicators: IndicatorConfig;
   custom_prompt?: string;
   risk_control: RiskControlConfig;
+  trading_mode: string;
   prompt_sections?: PromptSectionsConfig;
 }
 
