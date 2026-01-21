@@ -859,21 +859,8 @@ func (e *StrategyEngine) BuildSystemPromptWithContext(accountEquity float64, var
 	var sb strings.Builder
 	riskControl := e.config.RiskControl
 	promptSections := e.config.PromptSections
-
-	// 0. Data Dictionary ,Header, & Schema (ensure AI understands all fields)
 	lang := detectLanguage(promptSections.RoleDefinition)
 	defaultConfig := store.GetDefaultStrategyConfig(string(lang))
-
-	if lang == LangChinese {
-		sb.WriteString(formatHeaderZH(ctx))
-	} else {
-		sb.WriteString(formatHeaderEN(ctx))
-	}
-
-	schemaPrompt := GetSchemaPrompt(lang)
-	sb.WriteString(schemaPrompt)
-	sb.WriteString("\n\n")
-	sb.WriteString("---\n\n")
 
 	// 1. Role definition (editable) - USE EVOLVED ROLE IF AVAILABLE
 	roleToUse := promptSections.RoleDefinition
@@ -889,29 +876,35 @@ func (e *StrategyEngine) BuildSystemPromptWithContext(accountEquity float64, var
 		sb.WriteString("\n\n")
 	}
 
-	// 2. Trading mode variant
-	switch strings.ToLower(strings.TrimSpace(variant)) {
-	case "aggressive":
-		if lang == LangChinese {
-			sb.WriteString(fmt.Sprintf("## 模式：激进型\n- 优先捕捉趋势突破，信心≥%d时可分批建仓\n- 允许更高仓位，但必须严格设置止损并说明风险收益比\n\n", config.ConfidenceMediumMin))
-		} else {
-			sb.WriteString(fmt.Sprintf("## Mode: Aggressive\n- Prioritize capturing trend breakouts, can build positions in batches when confidence ≥ %d\n- Allow higher positions, but must strictly set stop-loss and explain risk-reward ratio\n\n", config.ConfidenceMediumMin))
-		}
-	case "conservative":
-		if lang == LangChinese {
-			sb.WriteString("## 模式：保守型\n- 仅在多重信号共振时开仓\n- 优先考虑资金保全，连续亏损后必须暂停多个周期\n\n")
-		} else {
-			sb.WriteString("## Mode: Conservative\n- Only open positions when multiple signals resonate\n- Prioritize cash preservation, must pause for multiple periods after consecutive losses\n\n")
-		}
-	case "scalping":
-		if lang == LangChinese {
-			sb.WriteString("## 模式：超短线\n- 关注短期动量，目标利润较小但要求快速行动\n- 若价格在两根K线内未按预期移动，立即减仓或止损\n\n")
-		} else {
-			sb.WriteString("## Mode: Scalping\n- Focus on short-term momentum, smaller profit targets but require quick action\n- If price doesn't move as expected within two bars, immediately reduce position or stop-loss\n\n")
-		}
+	// 2. Trading frequency (editable)
+	if promptSections.TradingFrequency != "" {
+		sb.WriteString(promptSections.TradingFrequency)
+		sb.WriteString("\n\n")
+	} else {
+		sb.WriteString(defaultConfig.PromptSections.TradingFrequency)
+		sb.WriteString("\n\n")
 	}
 
-	// 3. Hard constraints (risk control)
+	// 3. Entry standards (editable)
+	if promptSections.EntryStandards != "" {
+		sb.WriteString(promptSections.EntryStandards)
+	} else {
+		sb.WriteString(defaultConfig.PromptSections.EntryStandards)
+	}
+
+	// 4. Decision process (editable)
+	if promptSections.DecisionProcess != "" {
+		sb.WriteString(promptSections.DecisionProcess)
+		sb.WriteString("\n\n")
+	} else {
+		sb.WriteString(defaultConfig.PromptSections.DecisionProcess)
+		sb.WriteString("\n\n")
+	}
+
+	// 5. Available indicators
+	e.config.AvailableIndicatorsString(&sb, string(lang))
+
+	// 6. Hard constraints (risk control)
 	btcEthPosValueRatio := riskControl.BTCETHMaxPositionValueRatio
 	if btcEthPosValueRatio <= 0 {
 		btcEthPosValueRatio = config.DefaultBTCETHPosRatio
@@ -947,32 +940,10 @@ func (e *StrategyEngine) BuildSystemPromptWithContext(accountEquity float64, var
 		accountEquity, btcEthPosValueRatio, accountEquity*btcEthPosValueRatio))
 	sb.WriteString("- **DO NOT** just use available_balance as position_size_usd. Use the Position Value Limits!\n\n")
 
-	// 4. Trading frequency (editable)
-	if promptSections.TradingFrequency != "" {
-		sb.WriteString(promptSections.TradingFrequency)
-		sb.WriteString("\n\n")
-	} else {
-		sb.WriteString(defaultConfig.PromptSections.TradingFrequency)
-		sb.WriteString("\n\n")
-	}
-
-	// 5. Entry standards (editable)
-	if promptSections.EntryStandards != "" {
-		sb.WriteString(promptSections.EntryStandards)
-		e.config.AvailableIndicatorsString(&sb, string(lang))
-	} else {
-		sb.WriteString(defaultConfig.PromptSections.EntryStandards)
-		e.config.AvailableIndicatorsString(&sb, string(lang))
-	}
-
-	// 6. Decision process (editable)
-	if promptSections.DecisionProcess != "" {
-		sb.WriteString(promptSections.DecisionProcess)
-		sb.WriteString("\n\n")
-	} else {
-		sb.WriteString(defaultConfig.PromptSections.DecisionProcess)
-		sb.WriteString("\n\n")
-	}
+	// 7. Schema prompt (Explain the fields defined in the schema)
+	schemaPrompt := GetSchemaPrompt(lang)
+	sb.WriteString(schemaPrompt)
+	sb.WriteString("\n\n")
 
 	// 7. Output format
 	sb.WriteString("# Additional Output Format (Strictly Follow)\n\n")
@@ -1078,10 +1049,10 @@ func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 		sb.WriteString(ctx.PromptEvolutionSummary)
 		sb.WriteString("\n")
 	}
-	// 10. 连续学习反馈（强化学习：基于历史交易表现的改进建议）
-	if ctx.TradingStats != nil && ctx.TradingStats.TotalTrades >= 3 {
-		e.buildContinuousLearningFeedback(&sb, ctx, lang)
-	}
+	// 10. 连续学习反馈（强化学习：基于历史交易表现的改进建议）(暂时禁用）)
+	// if ctx.TradingStats != nil && ctx.TradingStats.TotalTrades >= 3 {
+	// 	e.buildContinuousLearningFeedback(&sb, ctx, lang)
+	// }
 	// 11. 元提示（强化学习：基于最近交易表现的总结）
 	if ctx.TradingStats != nil && len(ctx.RecentOrders) > 0 {
 		var wins, losses []interface{}
@@ -1482,7 +1453,8 @@ func buildMetaPromptEN(stats interface{}, wins, losses []interface{}) string {
 	sb.WriteString("1. What patterns differentiate the winning trades from the losing ones?\n")
 	sb.WriteString("2. Can you identify specific entry/exit rules that would eliminate the recent losses?\n")
 	sb.WriteString("3. Are there conditions (market regime, time, volatility) where your approach breaks down?\n")
-	sb.WriteString("4. How could you adjust your strategy to maintain wins while reducing losses?\n\n")
+	sb.WriteString("4. How could you adjust your strategy to maintain wins while reducing losses?\n")
+	sb.WriteString("Please analyze rationally step by step and think carefully before placing the next 5 trades, and review carefully after trading.\n\n")
 
 	return sb.String()
 }
@@ -1533,10 +1505,11 @@ func buildMetaPromptZH(stats interface{}, wins, losses []interface{}) string {
 	}
 
 	sb.WriteString("\n**自我改进问题：**\n")
-	sb.WriteString("1. 盈利交易和亏损交易之间有什么关键差异？\n")
+	sb.WriteString("1. 盈利交易和亏损交易之间有什么关键差异？ \n")
 	sb.WriteString("2. 你能识别哪些具体的进出场规则可以避免最近的亏损吗？\n")
 	sb.WriteString("3. 有没有某些条件（市场态势、时间、波动率）会导致你的方法失效？\n")
-	sb.WriteString("4. 你如何调整策略来保持赢利同时减少亏损？\n\n")
+	sb.WriteString("4. 你如何调整策略来保持赢利同时减少亏损？\n")
+	sb.WriteString("请理性一步步分析且再下5个交易前仔细思考，交易后仔细复盘。\n\n")
 
 	return sb.String()
 }

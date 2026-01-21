@@ -1058,6 +1058,7 @@ func (c *StrategyConfig) AvailableIndicatorsString(sb *strings.Builder, lang str
 	indicators := c.Indicators
 	kline := indicators.Klines
 	if lang == "zh" {
+		sb.WriteString("你会有以下数据可用：\n")
 		sb.WriteString(fmt.Sprintf("- %s K线序列", kline.PrimaryTimeframe))
 		if kline.EnableMultiTimeframe {
 			sb.WriteString(fmt.Sprintf(" + %s K线序列\n", kline.LongerTimeframe))
@@ -1118,6 +1119,7 @@ func (c *StrategyConfig) AvailableIndicatorsString(sb *strings.Builder, lang str
 			sb.WriteString("\n")
 		}
 		if indicators.EnableEMA {
+			sb.WriteString("You will have the following data for your disposal:\n")
 			sb.WriteString("- EMA indicators")
 			if len(indicators.EMAPeriods) > 0 {
 				sb.WriteString(fmt.Sprintf(" (periods: %v)", indicators.EMAPeriods))
