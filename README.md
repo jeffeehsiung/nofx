@@ -3,7 +3,7 @@
 ## 🚀 From NOFX to NOFX+ - The Production Evolution
 
 **NOFX+** is a **production-hardened fork** of the original NOFX trading system that:
-- Fixes **17 critical issues**
+- Fixes **17 critical issues** [See Merge Request Logs](docs/nofx-issue-fixed-logs.md)
 - Adds **six algorithmic enhancements**
 - Delivers **institutional-grade trading performance**
 
