@@ -408,7 +408,7 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
                         {language === 'zh' ? '胜率' : 'Win Rate'}
                       </div>
                       <div className="font-mono text-sm font-bold text-blue-400">
-                        {(variant.WinRate * 100).toFixed(1)}%
+                        {variant.WinRate !== undefined ? variant.WinRate.toFixed(1) : '--'}%
                       </div>
                     </div>
 
@@ -462,7 +462,7 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
                         {language === 'zh' ? '最大回撤' : 'Max DD'}
                       </div>
                       <div className="font-mono text-sm font-bold text-red-400">
-                        {(selectedVariant.MaxDrawdown * 100).toFixed(2)}%
+                        {selectedVariant.MaxDrawdown !== undefined ? selectedVariant.MaxDrawdown.toFixed(2) : '--'}%
                       </div>
                     </div>
 
@@ -471,7 +471,7 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
                         {language === 'zh' ? '盈亏比' : 'Profit Factor'}
                       </div>
                       <div className="font-mono text-sm font-bold text-green-400">
-                        {selectedVariant.ProfitFactor.toFixed(2)}
+                        {selectedVariant.ProfitFactor !== undefined ? selectedVariant.ProfitFactor.toFixed(2) : '--'}
                       </div>
                     </div>
 
@@ -480,7 +480,7 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
                         {language === 'zh' ? '胜率' : 'Win Rate'}
                       </div>
                       <div className="font-mono text-sm font-bold text-blue-400">
-                        {(selectedVariant.WinRate * 100).toFixed(1)}%
+                        {(selectedVariant.WinRate !== undefined ? selectedVariant.WinRate.toFixed(1) : '--') + '%'}
                       </div>
                     </div>
                   </div>

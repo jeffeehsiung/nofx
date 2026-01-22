@@ -1088,8 +1088,10 @@ func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 	}
 	sb.WriteString("---\n\n")
 	if lang == LangChinese {
+		sb.WriteString("- 你的JSON输出中的所有数字必须是纯数字，不能有千分位分隔符或逗号。\n")
 		sb.WriteString("现在请分析并输出你的决策（思维链 + JSON）\n")
 	} else {
+		sb.WriteString("- All numbers in your JSON output must be plain numbers, without any thousand separators or commas.\n")
 		sb.WriteString("Now please analyze and output your decision (Chain of Thought + JSON)\n")
 	}
 
