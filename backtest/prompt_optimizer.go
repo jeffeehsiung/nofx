@@ -86,7 +86,7 @@ func DefaultPromptOptimizerConfig() *PromptOptimizerConfig {
 		EnableOptimization:  false,
 		PopulationSize:      5,
 		MutationRate:        0.3,
-		EvaluationCycles:    20,
+		EvaluationCycles:    30,
 		TopVariantsToKeep:   2,
 		MinDecisionsPerTest: 15,
 	}
@@ -334,10 +334,10 @@ func (po *PromptOptimizer) ShouldEvolve(currentCycle int) bool {
 		logger.Warnf("[PromptOptimizer] ShouldEvolve called with nil PerformanceData")
 		return false
 	}
-	if !po.Config.EnableOptimization {
-		logger.Infof("[PromptOptimizer] Optimization disabled, skipping evolution: ID=%s, Cycle=%d", po.RunID, currentCycle)
-		return false
-	}
+	// if !po.Config.EnableOptimization {
+	// 	logger.Infof("[PromptOptimizer] Optimization disabled, skipping evolution: ID=%s, Cycle=%d", po.RunID, currentCycle)
+	// 	return false
+	// }
 	// Evolve every EvaluationCycles
 	if currentCycle%po.Config.EvaluationCycles != 0 {
 		logger.Infof("[PromptOptimizer] Not evaluation cycle yet, skipping evolution: ID=%s, Cycle=%d", po.RunID, currentCycle)
