@@ -926,15 +926,10 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 		record.CandidateCoins = append(record.CandidateCoins, coin.Symbol)
 	}
 	record.Timestamp = time.UnixMilli(ts).UTC()
-	var promptOptimizerCycleOffset int
 	// Generate feedback if enabled and enough decisions have been made
 	if r.feedbackConfig.EnableFeedback && callCount >= r.feedbackConfig.MinDecisionsForFeedback {
 		// Regenerate feedback every FeedbackWindowCycles cycles
 		if r.lastFeedback == nil || (callCount-r.feedbackCycle) >= r.feedbackConfig.FeedbackWindowCycles {
-			// Set optimizer offset for logging
-			if callCount > r.promptOptimizer.Config.EvaluationCycles && callCount < r.promptOptimizer.Config.EvaluationCycles*2 {
-				promptOptimizerCycleOffset = callCount % r.promptOptimizer.Config.EvaluationCycles
-			}
 			feedback, err := r.feedbackGenerator.GenerateFeedback()
 			if err != nil {
 				logger.Infof("Failed to generate feedback: %v", err)
@@ -969,7 +964,7 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 				}
 				r.cfg.PromptVariant = r.promptOptimizer.GetCurrentVariant().ID
 				r.promptOptimizer.RecordDecisionOutcome(r.cfg.PromptVariant, metrics)
-				if r.promptOptimizer.ShouldEvolve(callCount - promptOptimizerCycleOffset) {
+				if r.promptOptimizer.ShouldEvolve(callCount) {
 					// Use the generic EvolvePrompts method for backtest
 					// (Live trading uses meta-prompting via EvolvePromptsWithMetaLearning)
 					if err := r.promptOptimizer.EvolvePrompts(r.cfg.PromptVariant, &strategyConfig.PromptSections); err != nil {

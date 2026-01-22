@@ -1175,7 +1175,6 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 
 			// Generate feedback if enabled and enough trades have been made
 			// Regenerate feedback every FeedbackWindowCycles cycles to avoid constant recalculation
-			var promptOptimizerCycleOffset int
 			if at.feedbackGenerator != nil && stats.TotalTrades >= backtest.DefaultFeedbackConfig().FeedbackWindowCycles {
 				if at.lastFeedback == nil || (stats.TotalTrades-at.feedbackCycle) >= backtest.DefaultFeedbackConfig().FeedbackWindowCycles {
 					feedback, err := at.feedbackGenerator.GenerateFeedback()
@@ -1246,10 +1245,7 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 							MaxDrawdownPct: feedback.MaxDrawdown,
 						}
 						at.promptOptimizer.RecordDecisionOutcome(at.promptVariantID, metrics)
-						if stats.TotalTrades > at.promptOptimizer.Config.EvaluationCycles && stats.TotalTrades < at.promptOptimizer.Config.EvaluationCycles*2 {
-							promptOptimizerCycleOffset = stats.TotalTrades % at.promptOptimizer.Config.EvaluationCycles
-						}
-						if at.promptOptimizer != nil && at.promptOptimizer.ShouldEvolve(stats.TotalTrades-promptOptimizerCycleOffset) {
+						if at.promptOptimizer != nil && at.promptOptimizer.ShouldEvolve(stats.TotalTrades) {
 
 							if err := at.promptOptimizer.EvolvePrompts(at.promptVariantID, &strategyConfig.PromptSections); err != nil {
 								logger.Infof("⚠️ [%s] Failed to evolve prompts: %v", at.name, err)

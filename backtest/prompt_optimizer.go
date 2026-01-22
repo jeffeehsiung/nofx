@@ -46,13 +46,14 @@ type PromptVariant struct {
 
 // PromptOptimizer manages prompt evolution and A/B testing
 type PromptOptimizer struct {
-	RunID          string // Backtest run ID for database persistence
-	BasePrompt     *store.PromptSectionsConfig
-	Variants       []*PromptVariant
-	CurrentVariant *PromptVariant
-	Generation     int
-	PopulationSize int
-	MutationRate   float64
+	RunID                  string // Backtest run ID for database persistence
+	BasePrompt             *store.PromptSectionsConfig
+	Variants               []*PromptVariant
+	CurrentVariant         *PromptVariant
+	Generation             int
+	PopulationSize         int
+	MutationRate           float64
+	FirstShouldEvolveCycle int
 
 	// Configuration
 	Config *PromptOptimizerConfig
@@ -322,6 +323,10 @@ func (po *PromptOptimizer) RecordDecisionOutcome(variantID string, metrics *Metr
 
 // ShouldEvolve determines if it's time to evolve prompts
 func (po *PromptOptimizer) ShouldEvolve(currentCycle int) bool {
+	if po.FirstShouldEvolveCycle == -1 {
+		po.FirstShouldEvolveCycle = currentCycle
+		logger.Infof("[PromptOptimizer] First ShouldEvolve call at cycle %d", currentCycle)
+	}
 	if !po.Config.EnableOptimization {
 		logger.Infof("[PromptOptimizer] Optimization disabled, skipping evolution: ID=%s, Cycle=%d", po.RunID, currentCycle)
 		return false
@@ -334,13 +339,9 @@ func (po *PromptOptimizer) ShouldEvolve(currentCycle int) bool {
 		logger.Warnf("[PromptOptimizer] ShouldEvolve called with nil PerformanceData")
 		return false
 	}
-	// if !po.Config.EnableOptimization {
-	// 	logger.Infof("[PromptOptimizer] Optimization disabled, skipping evolution: ID=%s, Cycle=%d", po.RunID, currentCycle)
-	// 	return false
-	// }
 	// Evolve every EvaluationCycles
-	if currentCycle%po.Config.EvaluationCycles != 0 {
-		logger.Infof("[PromptOptimizer] Not evaluation cycle yet, skipping evolution: ID=%s, Cycle=%d", po.RunID, currentCycle)
+	if ((currentCycle - po.FirstShouldEvolveCycle) % po.Config.EvaluationCycles) != 0 {
+		logger.Infof("[PromptOptimizer] Not evaluation cycle yet (offset logic), skipping evolution: ID=%s, Cycle=%d", po.RunID, currentCycle)
 		return false
 	}
 
