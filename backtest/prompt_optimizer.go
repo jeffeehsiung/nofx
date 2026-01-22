@@ -107,17 +107,18 @@ func NewPromptOptimizerWithAI(basePrompt *store.PromptSectionsConfig, config *Pr
 	}
 
 	po := &PromptOptimizer{
-		RunID:           runID,
-		BasePrompt:      basePrompt,
-		Variants:        make([]*PromptVariant, 0),
-		Generation:      1,
-		PopulationSize:  config.PopulationSize,
-		MutationRate:    config.MutationRate,
-		Config:          config,
-		DecisionCounts:  make(map[string]int),
-		PerformanceData: make(map[string]*Metrics),
-		AIClient:        aiClient,
-		Storage:         storage,
+		RunID:                  runID,
+		BasePrompt:             basePrompt,
+		Variants:               make([]*PromptVariant, 0),
+		Generation:             1,
+		PopulationSize:         config.PopulationSize,
+		MutationRate:           config.MutationRate,
+		Config:                 config,
+		DecisionCounts:         make(map[string]int),
+		PerformanceData:        make(map[string]*Metrics),
+		AIClient:               aiClient,
+		Storage:                storage,
+		FirstShouldEvolveCycle: -1,
 	}
 
 	// Create initial variant (base prompt) with consistent naming: gen1-v1
