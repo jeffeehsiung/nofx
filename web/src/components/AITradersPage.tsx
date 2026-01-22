@@ -17,6 +17,7 @@ import { TraderConfigModal } from './TraderConfigModal'
 import { ExchangeConfigModal } from './traders/ExchangeConfigModal'
 import { TraderSettingsModal } from './TraderSettingsModal'
 import { PunkAvatar, getTraderAvatar } from './PunkAvatar'
+import { LiveTraderPromptLab } from './LiveTraderPromptLab'
 import {
   Bot,
   Brain,
@@ -32,6 +33,7 @@ import {
   Copy,
   Check,
   Settings,
+  Sparkles,
 } from 'lucide-react'
 import { confirmToast } from '../lib/notify'
 import { toast } from 'sonner'
@@ -160,7 +162,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
   const [visibleTraderAddresses, setVisibleTraderAddresses] = useState<Set<string>>(new Set())
   const [visibleExchangeAddresses, setVisibleExchangeAddresses] = useState<Set<string>>(new Set())
   const [copiedId, setCopiedId] = useState<string | null>(null)
-
+  const [promptLabTraderId, setPromptLabTraderId] = useState<string | null>(null)
   // Toggle wallet address visibility for a trader
   const toggleTraderAddressVisibility = (traderId: string) => {
     setVisibleTraderAddresses(prev => {
@@ -1367,7 +1369,17 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
                         ? t('stop', language)
                         : t('start', language)}
                     </button>
-
+                    <button
+                      onClick={() => setPromptLabTraderId(trader.trader_id)}
+                      className="px-2 md:px-3 py-1.5 md:py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105 flex items-center gap-1 whitespace-nowrap"
+                      style={{
+                        background: 'rgba(99, 102, 241, 0.1)',
+                        color: '#6366F1',
+                      }}
+                    >
+                      <Sparkles className="w-3 h-3 md:w-4 md:h-4" />
+                      {t('promptLab', language) /* or your own label */}
+                    </button>
                     <button
                       onClick={() => handleToggleCompetition(trader.trader_id, trader.show_in_competition ?? true)}
                       className="px-2 md:px-3 py-1.5 md:py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105 whitespace-nowrap flex items-center gap-1"
@@ -1523,6 +1535,22 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
             toast.success(language === 'zh' ? '设置已保存' : 'Settings saved')
           }}
         />
+      )}
+
+      {/* Prompt Lab Modal */}
+      {promptLabTraderId && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center">
+          <div className="bg-slate-900 rounded-lg shadow-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 relative">
+            <button
+              className="absolute top-4 right-4 text-slate-400 hover:text-white text-2xl"
+              onClick={() => setPromptLabTraderId(null)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <LiveTraderPromptLab traderId={promptLabTraderId} />
+          </div>
+        </div>
       )}
     </div>
   )

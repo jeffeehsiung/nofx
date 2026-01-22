@@ -18,10 +18,10 @@ import { useLanguage } from '../contexts/LanguageContext'
 
 interface PromptVariant {
   ID: string
-  VariantID: string
-  Generation: number
-  IsActive: boolean
-  Prompt: string
+  PromptRoleDefinition?: string
+  PromptTradingFrequency?: string
+  PromptEntryStandards?: string
+  PromptDecisionProcess?: string
   CreatedAt: string
   TotalDecisions: number
   TotalReturn: number
@@ -30,14 +30,23 @@ interface PromptVariant {
   SharpeRatio: number
   MaxDrawdown: number
   FitnessScore: number
+  Generation: number
+  IsActive: boolean
 }
 
-interface TraderPromptVariantsResponse {
+export interface TraderPromptVariantsResponse {
   trader_id: string
   variants: PromptVariant[]
   total: number
   generation: number
   active: PromptVariant
+  timestamp: string
+  message?: string
+}
+
+export interface TraderPromptVariantResponse {
+  trader_id: string
+  variant: PromptVariant
   timestamp: string
   message?: string
 }
@@ -53,30 +62,23 @@ export function LiveTraderPromptLab({ traderId }: LiveTraderPromptLabProps) {
 
   const { data, error, mutate } = useSWR<TraderPromptVariantsResponse>(
     traderId ? `trader-prompt-variants-${traderId}` : null,
-    async () => {
-      if (!traderId) return undefined
-      console.log('[LiveTraderPromptLab] Fetching variants for trader:', traderId)
-      const result = await api.getTraderPromptVariants(traderId)
-      console.log('[LiveTraderPromptLab] Response:', result)
-      return result
-    },
+    traderId ? () => api.getTraderPromptVariants(traderId) : null,
     {
-      refreshInterval: 5000, // Refresh every 5 seconds during live trading
+      refreshInterval: 10000,
       onError: (err) => {
         console.error('[LiveTraderPromptLab] SWR Error:', err)
       }
     }
   )
 
-  // Add this SWR for performance data
-  const { data: performance, error: perfError } = useSWR(
+  const { data: performanceData, error: performanceError } = useSWR<TraderPromptVariantResponse>(
     traderId ? `trader-prompt-performance-${traderId}` : null,
-    () => traderId ? api.getTraderPromptPerformance(traderId) : undefined,
+    traderId ? () => api.getTraderPromptPerformance(traderId) : null,
     { refreshInterval: 10000 }
   )
 
   const variants = Array.isArray(data?.variants)
-    ? data.variants.filter((v) => v && typeof v.VariantID === 'string')
+    ? data.variants.filter((v) => v && typeof v.ID === 'string')
     : []
   const activeVariant = variants.length > 0 ? variants.find((v) => v.IsActive) : undefined
 
@@ -227,7 +229,7 @@ export function LiveTraderPromptLab({ traderId }: LiveTraderPromptLabProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {variants.map((variant, idx) => (
               <motion.div
-                key={variant.VariantID}
+                key={variant.ID}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.05 }}
@@ -235,7 +237,7 @@ export function LiveTraderPromptLab({ traderId }: LiveTraderPromptLabProps) {
                 className={`cursor-pointer rounded-lg border transition-all ${
                   variant.IsActive
                     ? 'border-green-500/50 bg-green-950/20 ring-2 ring-green-500/30'
-                    : selectedVariant?.VariantID === variant.VariantID
+                    : selectedVariant?.ID === variant.ID
                     ? 'border-blue-500/50 bg-blue-950/20'
                     : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
                 } p-4`}
@@ -309,11 +311,11 @@ export function LiveTraderPromptLab({ traderId }: LiveTraderPromptLabProps) {
                 {/* Activate Button */}
                 {!variant.IsActive && (
                   <button
-                    onClick={() => handleActivate(variant.VariantID)}
+                    onClick={() => handleActivate(variant.ID)}
                     disabled={activating !== null}
                     className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 text-white text-sm font-medium rounded transition-colors flex items-center justify-center gap-2"
                   >
-                    {activating === variant.VariantID ? (
+                    {activating === variant.ID ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
                         {language === 'zh' ? '激活中...' : 'Activating...'}
@@ -379,10 +381,39 @@ export function LiveTraderPromptLab({ traderId }: LiveTraderPromptLabProps) {
             <div className="text-sm text-slate-400 mb-2">
               {language === 'zh' ? '系统提示词' : 'System Prompt'}
             </div>
-            <div className="bg-slate-900/50 rounded p-3 border border-slate-700 max-h-48 overflow-y-auto">
-              <p className="text-sm text-slate-300 whitespace-pre-wrap font-mono">
-                {selectedVariant.Prompt || (language === 'zh' ? '无' : 'N/A')}
-              </p>
+            <div className="bg-slate-900/50 rounded p-3 border border-slate-700 max-h-48 overflow-y-auto space-y-4">
+              <div>
+                <div className="font-bold text-blue-400 mb-1">
+                  {language === 'zh' ? '角色定义' : 'Role Definition'}
+                </div>
+                <p className="text-sm text-slate-300 whitespace-pre-wrap font-mono">
+                  {selectedVariant.PromptRoleDefinition || (language === 'zh' ? '无' : 'N/A')}
+                </p>
+              </div>
+              <div>
+                <div className="font-bold text-purple-400 mb-1">
+                  {language === 'zh' ? '交易频率' : 'Trading Frequency'}
+                </div>
+                <p className="text-sm text-slate-300 whitespace-pre-wrap font-mono">
+                  {selectedVariant.PromptTradingFrequency || (language === 'zh' ? '无' : 'N/A')}
+                </p>
+              </div>
+              <div>
+                <div className="font-bold text-pink-400 mb-1">
+                  {language === 'zh' ? '入场标准' : 'Entry Standards'}
+                </div>
+                <p className="text-sm text-slate-300 whitespace-pre-wrap font-mono">
+                  {selectedVariant.PromptEntryStandards || (language === 'zh' ? '无' : 'N/A')}
+                </p>
+              </div>
+              <div>
+                <div className="font-bold text-orange-400 mb-1">
+                  {language === 'zh' ? '决策流程' : 'Decision Process'}
+                </div>
+                <p className="text-sm text-slate-300 whitespace-pre-wrap font-mono">
+                  {selectedVariant.PromptDecisionProcess || (language === 'zh' ? '无' : 'N/A')}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -394,26 +425,25 @@ export function LiveTraderPromptLab({ traderId }: LiveTraderPromptLabProps) {
           <BarChart3 className="h-5 w-5 text-orange-400" />
           {language === 'zh' ? '提示词变体表现' : 'Prompt Variant Performance'}
         </h3>
-        {perfError && (
+        {performanceError && (
           <div className="text-red-400 text-sm mb-2">
             {language === 'zh' ? '加载表现数据失败' : 'Failed to load performance data'}
           </div>
         )}
-        {!performance ? (
+        {!performanceData ? (
           <div className="flex items-center gap-2 text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" />
             {language === 'zh' ? '加载中...' : 'Loading...'}
           </div>
         ) : (
           <div className="bg-slate-800/50 rounded-lg border border-slate-700 p-4 mb-6">
-            {/* Render your performance data here. Adjust fields as needed */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <div className="text-xs text-slate-400 mb-1">
                   {language === 'zh' ? '总收益率' : 'Total Return'}
                 </div>
                 <div className="text-xl font-bold text-green-400">
-                  {(performance.total_return * 100).toFixed(2)}%
+                  {(performanceData.variant.TotalReturn * 100).toFixed(2)}%
                 </div>
               </div>
               <div>
@@ -421,7 +451,7 @@ export function LiveTraderPromptLab({ traderId }: LiveTraderPromptLabProps) {
                   {language === 'zh' ? '胜率' : 'Win Rate'}
                 </div>
                 <div className="text-xl font-bold text-blue-400">
-                  {(performance.win_rate * 100).toFixed(1)}%
+                  {(performanceData.variant.WinRate * 100).toFixed(1)}%
                 </div>
               </div>
               <div>
@@ -429,7 +459,7 @@ export function LiveTraderPromptLab({ traderId }: LiveTraderPromptLabProps) {
                   {language === 'zh' ? '最大回撤' : 'Max Drawdown'}
                 </div>
                 <div className="text-xl font-bold text-red-400">
-                  {(performance.max_drawdown * 100).toFixed(1)}%
+                  {(performanceData.variant.MaxDrawdown * 100).toFixed(1)}%
                 </div>
               </div>
               <div>
@@ -437,7 +467,7 @@ export function LiveTraderPromptLab({ traderId }: LiveTraderPromptLabProps) {
                   {language === 'zh' ? '夏普比率' : 'Sharpe Ratio'}
                 </div>
                 <div className="text-xl font-bold text-yellow-400">
-                  {performance.sharpe_ratio?.toFixed(2)}
+                  {performanceData.variant.SharpeRatio?.toFixed(2)}
                 </div>
               </div>
             </div>

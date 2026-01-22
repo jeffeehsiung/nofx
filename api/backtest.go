@@ -944,7 +944,7 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 			"total":      len(variants),
 			"generation": runner.GetPromptOptimizer().GetGeneration(),
 			"active":     runner.GetPromptOptimizer().GetCurrentVariant(),
-			"timestamp":  time.Now(),
+			"timestamp":  time.Now().Format("2006-01-02 15:04:05"),
 		})
 		return
 	}
@@ -1043,52 +1043,58 @@ func (s *Server) handleGetPromptPerformance(c *gin.Context) {
 	variants := runner.GetPromptOptimizer().GetAllVariants()
 
 	type VariantPerformance struct {
-		ID           string  `json:"id"`
-		Generation   int     `json:"generation"`
-		IsActive     bool    `json:"is_active"`
-		Decisions    int     `json:"decisions"`
-		TotalReturn  float64 `json:"total_return"`
-		WinRate      float64 `json:"win_rate"`
-		ProfitFactor float64 `json:"profit_factor"`
-		SharpeRatio  float64 `json:"sharpe_ratio"`
-		MaxDrawdown  float64 `json:"max_drawdown"`
-		FitnessScore float64 `json:"fitness_score"`
-		CreatedAt    string  `json:"created_at"`
+		ID                     string  `json:"ID"`
+		PromptRoleDefinition   string  `json:"PromptRoleDefinition"`
+		PromptTradingFrequency string  `json:"PromptTradingFrequency"`
+		PromptEntryStandards   string  `json:"PromptEntryStandards"`
+		PromptDecisionProcess  string  `json:"PromptDecisionProcess"`
+		CreatedAt              string  `json:"CreatedAt"`
+		TotalDecisions         int     `json:"TotalDecisions"`
+		TotalReturn            float64 `json:"TotalReturn"`
+		WinRate                float64 `json:"WinRate"`
+		ProfitFactor           float64 `json:"ProfitFactor"`
+		SharpeRatio            float64 `json:"SharpeRatio"`
+		MaxDrawdown            float64 `json:"MaxDrawdown"`
+		FitnessScore           float64 `json:"FitnessScore"`
+		Generation             int     `json:"Generation"`
+		IsActive               bool    `json:"IsActive"`
 	}
 
-	var performance []VariantPerformance
+	var performances []VariantPerformance
 	for _, v := range variants {
-		performance = append(performance, VariantPerformance{
-			ID:           v.ID,
-			Generation:   v.Generation,
-			IsActive:     v.IsActive,
-			Decisions:    v.TotalDecisions,
-			TotalReturn:  v.TotalReturn,
-			WinRate:      v.WinRate,
-			ProfitFactor: v.ProfitFactor,
-			SharpeRatio:  v.SharpeRatio,
-			MaxDrawdown:  v.MaxDrawdown,
-			FitnessScore: v.FitnessScore,
-			CreatedAt:    v.CreatedAt.Format(time.RFC3339),
+		performances = append(performances, VariantPerformance{
+			ID:                     v.ID,
+			PromptRoleDefinition:   v.PromptRoleDefinition,
+			PromptTradingFrequency: v.PromptTradingFrequency,
+			PromptEntryStandards:   v.PromptEntryStandards,
+			PromptDecisionProcess:  v.PromptDecisionProcess,
+			CreatedAt:              v.CreatedAt.Format("2006-01-02 15:04:05"),
+			TotalDecisions:         v.TotalDecisions,
+			TotalReturn:            v.TotalReturn,
+			WinRate:                v.WinRate,
+			ProfitFactor:           v.ProfitFactor,
+			SharpeRatio:            v.SharpeRatio,
+			MaxDrawdown:            v.MaxDrawdown,
+			FitnessScore:           v.FitnessScore,
+			Generation:             v.Generation,
+			IsActive:               v.IsActive,
 		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"run_id":      runID,
-		"performance": performance,
-		"total":       len(performance),
-		"timestamp":   time.Now(),
+		"run_id":    runID,
+		"variants":  performances,
+		"total":     len(performances),
+		"timestamp": time.Now(),
 	})
-}
-
-type activatePromptRequest struct {
-	RunID     string `json:"run_id"`
-	VariantID string `json:"variant_id"`
 }
 
 // handleActivatePrompt activates a specific prompt variant
 func (s *Server) handleActivatePrompt(c *gin.Context) {
-	var req activatePromptRequest
+	var req struct {
+		RunID     string `json:"run_id"`
+		VariantID string `json:"variant_id"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

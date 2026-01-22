@@ -17,7 +17,7 @@ import {
 import { api } from '../lib/api'
 import { useLanguage } from '../contexts/LanguageContext'
 
-interface PromptVariant {
+export interface PromptVariant {
   ID: string
   PromptRoleDefinition?: string
   PromptTradingFrequency?: string
@@ -96,7 +96,7 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
       ? () => fetchPromptVariants(runID!)
       : null,
     {
-      refreshInterval: 5000,
+      refreshInterval: 10000,
       onError: (err) => {
         console.error('[PromptLabPage] SWR Error:', err);
       },

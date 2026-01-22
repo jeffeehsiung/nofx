@@ -1,4 +1,6 @@
 import {PromptVariantsResponse} from '../components/PromptLabPage'
+import {TraderPromptVariantResponse} from '../components/LiveTraderPromptLab'
+import {TraderPromptVariantsResponse} from '../components/LiveTraderPromptLab'
 import type {
   SystemStatus,
   AccountInfo,
@@ -599,13 +601,6 @@ export const api = {
     return handleJSONResponse<any>(res)
   },
 
-  async getPromptPerformance(runId: string): Promise<any> {
-    const res = await fetch(`${API_BASE}/backtest/prompt-performance?run_id=${runId}`, {
-      headers: getAuthHeaders(),
-    })
-    return handleJSONResponse<any>(res)
-  },
-
   async activatePromptVariant(runId: string, variantId: string): Promise<any> {
     const res = await fetch(`${API_BASE}/backtest/prompt-activate`, {
       method: 'POST',
@@ -823,14 +818,14 @@ export const api = {
   },
 
   // Trader Prompt Optimization APIs
-  async getTraderPromptVariants(traderId: string): Promise<any> {
+  async getTraderPromptVariants(traderId: string): Promise<TraderPromptVariantsResponse> {
     const res = await fetch(`${API_BASE}/traders/${traderId}/prompt-variants`, {
       headers: getAuthHeaders(),
     })
     return handleJSONResponse<any>(res)
   },
 
-  async getTraderPromptPerformance(traderId: string): Promise<any> {
+  async getTraderPromptPerformance(traderId: string): Promise<TraderPromptVariantResponse> {
     const res = await fetch(`${API_BASE}/traders/${traderId}/prompt-performance`, {
       headers: getAuthHeaders(),
     })

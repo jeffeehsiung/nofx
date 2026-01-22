@@ -153,6 +153,9 @@ func (s *Server) setupRoutes() {
 			protected.POST("/traders/:id/start", s.handleStartTrader)
 			protected.POST("/traders/:id/stop", s.handleStopTrader)
 			protected.PUT("/traders/:id/prompt", s.handleUpdateTraderPrompt)
+			protected.GET("/traders/:id/prompt-variants", s.handleGetTraderPromptVariants)
+			protected.GET("/traders/:id/prompt-performance", s.handleGetTraderPromptPerformance)
+			protected.POST("/traders/:id/prompt-activate", s.handleActivateTraderPromptVariant)
 			protected.POST("/traders/:id/sync-balance", s.handleSyncBalance)
 			protected.POST("/traders/:id/close-position", s.handleClosePosition)
 			protected.PUT("/traders/:id/competition", s.handleToggleCompetition)
@@ -1074,6 +1077,111 @@ func (s *Server) handleUpdateTraderPrompt(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Custom prompt updated"})
+}
+
+func (s *Server) handleGetTraderPromptVariants(c *gin.Context) {
+	traderID := c.Param("id")
+	if traderID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Trader ID is required"})
+		return
+	}
+
+	trader, err := s.traderManager.GetTrader(traderID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Trader error: %v", err)})
+		return
+	}
+
+	variants := trader.GetPromptOptimizer().GetAllVariants()
+	c.JSON(http.StatusOK, gin.H{
+		"trader_id":  traderID,
+		"variants":   variants,
+		"total":      len(variants),
+		"generation": trader.GetPromptOptimizer().GetGeneration(),
+		"active":     trader.GetPromptOptimizer().GetCurrentVariant(),
+		"timestamp":  time.Now().Format("2006-01-02 15:04:05"),
+	})
+}
+
+func (s *Server) handleGetTraderPromptPerformance(c *gin.Context) {
+	traderID := c.Param("id")
+	if traderID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Trader ID is required"})
+		return
+	}
+
+	trader, err := s.traderManager.GetTrader(traderID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Trader error: %v", err)})
+		return
+	}
+
+	variant := trader.GetPromptOptimizer().GetCurrentVariant()
+
+	// Convert variant to API format
+	type APIVariant struct {
+		ID                     string  `json:"ID"`
+		PromptRoleDefinition   string  `json:"PromptRoleDefinition"`
+		PromptTradingFrequency string  `json:"PromptTradingFrequency"`
+		PromptEntryStandards   string  `json:"PromptEntryStandards"`
+		PromptDecisionProcess  string  `json:"PromptDecisionProcess"`
+		CreatedAt              string  `json:"CreatedAt"`
+		TotalDecisions         int     `json:"TotalDecisions"`
+		TotalReturn            float64 `json:"TotalReturn"`
+		WinRate                float64 `json:"WinRate"`
+		ProfitFactor           float64 `json:"ProfitFactor"`
+		SharpeRatio            float64 `json:"SharpeRatio"`
+		MaxDrawdown            float64 `json:"MaxDrawdown"`
+		FitnessScore           float64 `json:"FitnessScore"`
+		Generation             int     `json:"Generation"`
+		IsActive               bool    `json:"IsActive"`
+	}
+	apiVariant := APIVariant{
+		ID:                     variant.ID,
+		PromptRoleDefinition:   variant.PromptRoleDefinition,
+		PromptTradingFrequency: variant.PromptTradingFrequency,
+		PromptEntryStandards:   variant.PromptEntryStandards,
+		PromptDecisionProcess:  variant.PromptDecisionProcess,
+		CreatedAt:              variant.CreatedAt.Format("2006-01-02 15:04:05"),
+		TotalDecisions:         variant.TotalDecisions,
+		TotalReturn:            variant.TotalReturn,
+		WinRate:                variant.WinRate,
+		ProfitFactor:           variant.ProfitFactor,
+		SharpeRatio:            variant.SharpeRatio,
+		MaxDrawdown:            variant.MaxDrawdown,
+		FitnessScore:           variant.FitnessScore,
+		Generation:             variant.Generation,
+		IsActive:               variant.IsActive,
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"trader_id": traderID,
+		"variant":   apiVariant,
+		"timestamp": time.Now().Format("2006-01-02 15:04:05"),
+		"message":   "Prompt variant performance retrieved successfully",
+	})
+}
+
+func (s *Server) handleActivateTraderPromptVariant(c *gin.Context) {
+	traderID := c.Param("id")
+	var req struct {
+		VariantID string `json:"variant_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.VariantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Variant ID is required"})
+		return
+	}
+
+	trader, err := s.traderManager.GetTrader(traderID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Trader error: %v", err)})
+		return
+	}
+	err = trader.GetPromptOptimizer().ActivateVariant(req.VariantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to activate variant: %v", err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Variant activated successfully"})
 }
 
 // handleToggleCompetition Toggle trader competition visibility
