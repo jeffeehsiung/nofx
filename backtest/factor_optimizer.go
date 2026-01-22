@@ -138,6 +138,7 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 	if feedback == nil {
 		return fmt.Errorf("feedback is nil")
 	}
+	logger.Infof("[FactorOptimizer] 🔍 Optimizing risk control parameters at cycle %d", cycle)
 
 	oldConfig := *fo.currentConfig
 	newConfig := *fo.currentConfig

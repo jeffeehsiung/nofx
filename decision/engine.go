@@ -279,6 +279,7 @@ func (e *StrategyEngine) SetStrategyPrompt(variant *store.PromptVariantData) {
 	e.config.PromptSections.TradingFrequency = variant.PromptTradingFrequency
 	e.config.PromptSections.EntryStandards = variant.PromptEntryStandards
 	e.config.PromptSections.DecisionProcess = variant.PromptDecisionProcess
+	logger.Infof("✅ StrategyEngine updated strategy prompts for variant: %s", variant.VariantID)
 }
 
 // SetCustomPrompt updates the custom prompt in the strategy configuration

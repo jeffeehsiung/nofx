@@ -323,11 +323,13 @@ func (po *PromptOptimizer) RecordDecisionOutcome(variantID string, metrics *Metr
 // ShouldEvolve determines if it's time to evolve prompts
 func (po *PromptOptimizer) ShouldEvolve(currentCycle int) bool {
 	if !po.Config.EnableOptimization {
+		logger.Infof("[PromptOptimizer] Optimization disabled, skipping evolution: ID=%s, Cycle=%d", po.RunID, currentCycle)
 		return false
 	}
 
 	// Evolve every EvaluationCycles
 	if currentCycle%po.Config.EvaluationCycles != 0 {
+		logger.Infof("[PromptOptimizer] Not evaluation cycle yet, skipping evolution: ID=%s, Cycle=%d", po.RunID, currentCycle)
 		return false
 	}
 
