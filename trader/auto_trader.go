@@ -1237,15 +1237,15 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 						}
 
 						// Evolve prompts based on performance
+						metrics := &backtest.Metrics{
+							TotalReturnPct: feedback.TotalReturnPct,
+							WinRate:        feedback.WinRate,
+							ProfitFactor:   feedback.ProfitFactor,
+							SharpeRatio:    feedback.SharpeRatio,
+							MaxDrawdownPct: feedback.MaxDrawdown,
+						}
+						at.promptOptimizer.RecordDecisionOutcome(at.promptVariantID, metrics)
 						if at.promptOptimizer != nil && at.promptOptimizer.ShouldEvolve(stats.TotalTrades) {
-							metrics := &backtest.Metrics{
-								TotalReturnPct: feedback.TotalReturnPct,
-								WinRate:        feedback.WinRate,
-								ProfitFactor:   feedback.ProfitFactor,
-								SharpeRatio:    feedback.SharpeRatio,
-								MaxDrawdownPct: feedback.MaxDrawdown,
-							}
-							at.promptOptimizer.RecordDecisionOutcome(at.promptVariantID, metrics)
 
 							if err := at.promptOptimizer.EvolvePrompts(at.promptVariantID, &strategyConfig.PromptSections); err != nil {
 								logger.Infof("⚠️ [%s] Failed to evolve prompts: %v", at.name, err)

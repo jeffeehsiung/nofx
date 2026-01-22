@@ -955,16 +955,15 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 				}
 
 				// Evolve prompts based on performance
+				metrics := &Metrics{
+					TotalReturnPct: feedback.TotalReturnPct,
+					WinRate:        feedback.WinRate,
+					ProfitFactor:   feedback.ProfitFactor,
+					SharpeRatio:    feedback.SharpeRatio,
+					MaxDrawdownPct: feedback.MaxDrawdown,
+				}
+				r.promptOptimizer.RecordDecisionOutcome(r.cfg.PromptVariant, metrics)
 				if r.promptOptimizer.ShouldEvolve(callCount) {
-					metrics := &Metrics{
-						TotalReturnPct: feedback.TotalReturnPct,
-						WinRate:        feedback.WinRate,
-						ProfitFactor:   feedback.ProfitFactor,
-						SharpeRatio:    feedback.SharpeRatio,
-						MaxDrawdownPct: feedback.MaxDrawdown,
-					}
-					r.promptOptimizer.RecordDecisionOutcome(r.cfg.PromptVariant, metrics)
-
 					// Use the generic EvolvePrompts method for backtest
 					// (Live trading uses meta-prompting via EvolvePromptsWithMetaLearning)
 					if err := r.promptOptimizer.EvolvePrompts(r.cfg.PromptVariant, &strategyConfig.PromptSections); err != nil {

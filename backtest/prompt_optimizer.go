@@ -337,6 +337,18 @@ func (po *PromptOptimizer) ShouldEvolve(currentCycle int) bool {
 		totalDecisions += count
 	}
 
+	// Performance check: only evolve if current variant is underperforming
+	if po.CurrentVariant != nil {
+		currentMetrics := po.PerformanceData[po.CurrentVariant.ID]
+		if currentMetrics != nil && currentMetrics.WinRate >= 60.0 && currentMetrics.TotalReturnPct >= 10.0 {
+			logger.Infof("[PromptOptimizer] Current variant %s is performing well (WinRate=%.1f%%, Return=%.2f%%), skipping evolution",
+				po.CurrentVariant.ID, currentMetrics.WinRate, currentMetrics.TotalReturnPct)
+			return false
+		} else {
+			logger.Infof("[PromptOptimizer] Current variant %s is underperforming (WinRate=%.1f%%, Return=%.2f%%), considering evolution",
+				po.CurrentVariant.ID, currentMetrics.WinRate, currentMetrics.TotalReturnPct)
+		}
+	}
 	return totalDecisions >= po.Config.MinDecisionsPerTest
 }
 
