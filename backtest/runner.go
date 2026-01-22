@@ -962,6 +962,7 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 					SharpeRatio:    feedback.SharpeRatio,
 					MaxDrawdownPct: feedback.MaxDrawdown,
 				}
+				r.cfg.PromptVariant = r.promptOptimizer.GetCurrentVariant().ID
 				r.promptOptimizer.RecordDecisionOutcome(r.cfg.PromptVariant, metrics)
 				if r.promptOptimizer.ShouldEvolve(callCount) {
 					// Use the generic EvolvePrompts method for backtest
@@ -977,7 +978,7 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 						// CRITICAL: Update strategy engine with the evolved prompt
 						evolvedPrompt := r.promptOptimizer.GetCurrentPrompt()
 						r.strategyEngine.SetStrategyPrompt(evolvedPrompt)
-						// CRITICAL: Updtae current prompt variant to evolved one
+						// CRITICAL: Update current prompt variant to evolved one
 						r.cfg.PromptVariant = r.promptOptimizer.GetCurrentVariant().ID
 						logger.Infof("✅ Applied evolved prompt variant to strategy engine (gen %d)", r.promptOptimizer.GetGeneration())
 					}

@@ -326,7 +326,18 @@ func (po *PromptOptimizer) ShouldEvolve(currentCycle int) bool {
 		logger.Infof("[PromptOptimizer] Optimization disabled, skipping evolution: ID=%s, Cycle=%d", po.RunID, currentCycle)
 		return false
 	}
-
+	if po == nil || po.Config == nil {
+		logger.Warnf("[PromptOptimizer] ShouldEvolve called with nil optimizer or config")
+		return false
+	}
+	if po.PerformanceData == nil {
+		logger.Warnf("[PromptOptimizer] ShouldEvolve called with nil PerformanceData")
+		return false
+	}
+	if !po.Config.EnableOptimization {
+		logger.Infof("[PromptOptimizer] Optimization disabled, skipping evolution: ID=%s, Cycle=%d", po.RunID, currentCycle)
+		return false
+	}
 	// Evolve every EvaluationCycles
 	if currentCycle%po.Config.EvaluationCycles != 0 {
 		logger.Infof("[PromptOptimizer] Not evaluation cycle yet, skipping evolution: ID=%s, Cycle=%d", po.RunID, currentCycle)
@@ -342,13 +353,17 @@ func (po *PromptOptimizer) ShouldEvolve(currentCycle int) bool {
 	// Performance check: only evolve if current variant is underperforming
 	if po.CurrentVariant != nil {
 		currentMetrics := po.PerformanceData[po.CurrentVariant.ID]
-		if currentMetrics != nil && currentMetrics.WinRate >= 60.0 && currentMetrics.TotalReturnPct >= 10.0 {
-			logger.Infof("[PromptOptimizer] Current variant %s is performing well (WinRate=%.1f%%, Return=%.2f%%), skipping evolution",
-				po.CurrentVariant.ID, currentMetrics.WinRate, currentMetrics.TotalReturnPct)
-			return false
+		if currentMetrics != nil {
+			if currentMetrics.WinRate >= 60.0 && currentMetrics.TotalReturnPct >= 10.0 {
+				logger.Infof("[PromptOptimizer] Current variant %s is performing well (WinRate=%.1f%%, Return=%.2f%%), skipping evolution",
+					po.CurrentVariant.ID, currentMetrics.WinRate, currentMetrics.TotalReturnPct)
+				return false
+			} else {
+				logger.Infof("[PromptOptimizer] Current variant %s is underperforming (WinRate=%.1f%%, Return=%.2f%%), considering evolution",
+					po.CurrentVariant.ID, currentMetrics.WinRate, currentMetrics.TotalReturnPct)
+			}
 		} else {
-			logger.Infof("[PromptOptimizer] Current variant %s is underperforming (WinRate=%.1f%%, Return=%.2f%%), considering evolution",
-				po.CurrentVariant.ID, currentMetrics.WinRate, currentMetrics.TotalReturnPct)
+			logger.Errorf("[PromptOptimizer] CurrentMetrics is nil for variant %s", po.CurrentVariant.ID)
 		}
 	}
 	return totalDecisions >= po.Config.MinDecisionsPerTest
