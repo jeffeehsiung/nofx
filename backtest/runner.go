@@ -1004,9 +1004,6 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 			}
 			ctx.ComplianceFeedback = r.complianceTracker.GetComplianceFeedback(lang)
 
-			// Attach prompt evolution summary (show what prompt strategies work best)
-			ctx.PromptEvolutionSummary = r.promptOptimizer.GetEvolutionSummary(lang)
-
 			// Attach calibrated thresholds (learned risk detection thresholds)
 			// Create calibrator from current thresholds
 			calibrator := decision.NewThresholdCalibrator()

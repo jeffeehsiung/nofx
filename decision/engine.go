@@ -1046,16 +1046,11 @@ func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 			sb.WriteString(formatTradingStatsEN(ctx.TradingStats))
 		}
 	}
-	// 9. 进化总结（强化学习：展示LLM自我改进的总结）
-	if ctx.PromptEvolutionSummary != "" {
-		sb.WriteString(ctx.PromptEvolutionSummary)
-		sb.WriteString("\n")
-	}
-	// 10. 连续学习反馈（强化学习：基于历史交易表现的改进建议）(暂时禁用）)
+	// 9. 连续学习反馈（强化学习：基于历史交易表现的改进建议）(暂时禁用）)
 	// if ctx.TradingStats != nil && ctx.TradingStats.TotalTrades >= 3 {
 	// 	e.buildContinuousLearningFeedback(&sb, ctx, lang)
 	// }
-	// 11. 元提示（强化学习：基于最近交易表现的总结）
+	// 10. 元提示（强化学习：基于最近交易表现的总结）
 	if ctx.TradingStats != nil && len(ctx.RecentOrders) > 0 {
 		var wins, losses []interface{}
 		for _, order := range ctx.RecentOrders {
@@ -1074,7 +1069,7 @@ func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 		sb.WriteString(metaPrompt)
 		sb.WriteString("\n")
 	}
-	// 12. 候选币种（带市场数据）
+	// 11. 候选币种（带市场数据）
 	if len(ctx.CandidateCoins) > 0 {
 		if lang == LangChinese {
 			sb.WriteString(formatCandidateCoinsZH(ctx))
@@ -1082,7 +1077,7 @@ func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 			sb.WriteString(formatCandidateCoinsEN(ctx))
 		}
 	}
-	// 13. OI排名数据（如果有）
+	// 12. OI排名数据（如果有）
 	if ctx.OIRankingData != nil {
 		if lang == LangChinese {
 			sb.WriteString(formatOIRankingZH(ctx.OIRankingData))

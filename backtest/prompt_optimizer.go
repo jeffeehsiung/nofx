@@ -497,13 +497,14 @@ func (po *PromptOptimizer) evolvePromptsWithLLM(variantID string, strategy_promp
 // buildEvolutionMetaPrompt creates a prompt for the LLM to evolve the system prompt
 func (po *PromptOptimizer) buildEvolutionMetaPromptEN(prompt string, variant *PromptVariant, metrics *Metrics) string {
 	var sb strings.Builder
-	sb.WriteString("You are an expert in prompt engineering for trading systems. Your task is to improve trading prompts based on performance analysis.")
+	sb.WriteString("You are an expert in prompt engineering for trading systems. Your task is to improve trading prompts based on performance analysis.\n")
 	sb.WriteString("# System Prompt Evolution Task\n\n")
 	sb.WriteString("## Current System Prompt\n```\n")
 	sb.WriteString(prompt)
 	sb.WriteString("\n```\n\n")
 
 	sb.WriteString("## Performance Analysis\n")
+	sb.WriteString(fmt.Sprintf("- **Prompt Evolution History:** %s\n", po.GetEvolutionSummary("en")))
 	sb.WriteString(fmt.Sprintf("- **Total Return:** %.2f%%\n", metrics.TotalReturnPct))
 	sb.WriteString(fmt.Sprintf("- **Win Rate:** %.1f%%\n", metrics.WinRate))
 	sb.WriteString(fmt.Sprintf("- **Profit Factor:** %.2f\n", metrics.ProfitFactor))
@@ -517,16 +518,16 @@ func (po *PromptOptimizer) buildEvolutionMetaPromptEN(prompt string, variant *Pr
 		sb.WriteString("- ⚠️ **Low Win Rate (<45%):** The strategy is too aggressive or lacks proper entry criteria.\n")
 	}
 	if metrics.ProfitFactor < 1.5 {
-		sb.WriteString("- ⚠️ **Low Profit Factor (<1.5):** Losses are too large relative to wins. Need better risk management.\n")
+		sb.WriteString("- ⚠️ **Low Profit Factor (<1.5):** Losses are too large relative to wins. Needs better risk management.\n")
 	}
 	if metrics.MaxDrawdownPct > 20 {
-		sb.WriteString("- ⚠️ **High Drawdown (>20%):** Position sizing is too aggressive or stop losses are too wide.\n")
+		sb.WriteString("- ⚠️ **High Drawdown (>20%):** Position sizing is too aggressive or stop losses are too wide. Please define mathematically clear and quantitative aggressive or stop-loss strategies based on trading history, and calculate precise numeric indicators. Provide formulas if necessary.\n")
 	}
 	if metrics.SharpeRatio < 0.5 {
-		sb.WriteString("- ⚠️ **Low Sharpe Ratio (<0.5):** Returns don't justify the risk. Need higher quality trades.\n")
+		sb.WriteString("- ⚠️ **Low Sharpe Ratio (<0.5):** Returns don't justify the risk. Needs higher quality trades. Please define mathematically clear and quantitative return or risk strategies based on trading history, and calculate precise numeric indicators. Provide formulas if necessary.\n")
 	}
 	if metrics.TotalReturnPct < 0 {
-		sb.WriteString("- ⚠️ **Negative Returns:** The strategy is losing money. Fundamental approach needs revision.\n")
+		sb.WriteString("- ⚠️ **Negative Returns:** The strategy is losing money. Fundamental approach needs revision. Please define mathematically clear and quantitative entry and (especially) exit strategies based on trading history, and calculate precise numeric indicators. Provide formulas if necessary.\n")
 	}
 	sb.WriteString("\n")
 
@@ -534,10 +535,10 @@ func (po *PromptOptimizer) buildEvolutionMetaPromptEN(prompt string, variant *Pr
 	sb.WriteString("## Learning Requirements\n")
 	sb.WriteString("The evolved prompt should:\n")
 	sb.WriteString("1. **Learn from mistakes:** Address the specific issues identified above\n")
-	sb.WriteString("2. **Market adaptation:** Consider market sentiment, volatility regimes, and trending vs ranging conditions\n")
-	sb.WriteString("3. **Risk awareness:** Emphasize capital preservation and proper position sizing\n")
-	sb.WriteString("4. **Pattern recognition:** Encourage identifying high-probability setups based on market structure\n")
-	sb.WriteString("5. **Continuous improvement:** Build in self-reflection and adaptation mindset\n\n")
+	sb.WriteString("2. **Market adaptation:** Use mathematical modeling to quantitatively consider market sentiment, volatility regimes, and trending vs ranging conditions. Use low-pass filtering to distinguish noise from real trend changes.\n")
+	sb.WriteString("3. **Risk awareness:** Emphasize capital preservation and proper position sizing, with precise numeric indicators and formulas where needed. Strictly enforce these rules.\n")
+	sb.WriteString("4. **Pattern recognition:** Encourage identifying high-probability setups based on market structure, with quantitative indicators and formulas. Strictly judge whether probability conditions are met and calculate confidence values.\n")
+	sb.WriteString("5. **Continuous monitoring**\n\n")
 
 	// Skillset enhancement
 	sb.WriteString("## Skillset Enhancement\n")
@@ -582,10 +583,7 @@ func (po *PromptOptimizer) buildEvolutionMetaPromptEN(prompt string, variant *Pr
 	sb.WriteString("- Knowing when NOT to trade (low liquidity, high uncertainty, choppy conditions)\n\n")
 
 	sb.WriteString("**Self-Awareness & Metacognition:**\n")
-	sb.WriteString("- Recognizing own biases (recency bias, confirmation bias, overconfidence)\n")
-	sb.WriteString("- Learning from both wins and losses (what was luck vs skill?)\n")
-	sb.WriteString("- Adapting strategy based on changing market conditions\n")
-	sb.WriteString("- Keeping detailed mental models of why trades work or fail\n\n")
+	sb.WriteString("- Maintain detailed mathematical models of why trades succeed or fail\n\n")
 
 	sb.WriteString("## Self-Diagnosis: What Skills Are Missing?\n")
 	sb.WriteString("**Critical Task:** Analyze the current prompt and identify what capabilities it lacks.\n\n")
@@ -596,16 +594,13 @@ func (po *PromptOptimizer) buildEvolutionMetaPromptEN(prompt string, variant *Pr
 	sb.WriteString("4. What domain knowledge (crypto-specific, macro, derivatives) is missing?\n")
 	sb.WriteString("5. What statistical, mathematical, or computational techniques would be valuable?\n")
 	sb.WriteString("6. What psychological or behavioral finance concepts should be integrated?\n\n")
-	sb.WriteString("**Be creative and comprehensive.** Don't just address the issues above - think about what a world-class trader would know that this prompt doesn't capture.\n\n")
+	sb.WriteString("**Be comprehensive.** Don't just address the issues above—think about what a world-class trader would know that this prompt doesn't capture.\n\n")
 
 	sb.WriteString("## Your Task\n")
 	sb.WriteString("Rewrite the system prompt to:\n")
-	sb.WriteString("1. Address the performance issues identified\n")
-	sb.WriteString("2. Integrate the missing/weak skills listed above\n")
-	sb.WriteString("3. **Add capabilities you identified as missing through self-diagnosis**\n")
-	sb.WriteString("4. Make the role more sophisticated and market-aware\n")
+	sb.WriteString("2. Integrate the items listed above\n")
 	sb.WriteString("5. Preserve what's currently working well\n\n")
-	sb.WriteString("Output ONLY the improved system prompt, no explanations or commentary.\n")
+	sb.WriteString("Output ONLY the improved system prompt as a mathematical model, with no explanations or commentary.\n")
 
 	return sb.String()
 }
@@ -620,6 +615,7 @@ func (po *PromptOptimizer) buildEvolutionMetaPromptZH(prompt string, variant *Pr
 	sb.WriteString("\n```\n\n")
 
 	sb.WriteString("## 表现分析\n")
+	sb.WriteString(fmt.Sprintf("- **总的提示词历史记录：** %s\n", po.GetEvolutionSummary("zh")))
 	sb.WriteString(fmt.Sprintf("- **总收益:** %.2f%%\n", metrics.TotalReturnPct))
 	sb.WriteString(fmt.Sprintf("- **胜率:** %.1f%%\n", metrics.WinRate))
 	sb.WriteString(fmt.Sprintf("- **利润因子:** %.2f\n", metrics.ProfitFactor))
@@ -636,13 +632,13 @@ func (po *PromptOptimizer) buildEvolutionMetaPromptZH(prompt string, variant *Pr
 		sb.WriteString("- ⚠️ **低利润因子 (<1.5):** 相对于盈利，亏损过大。需要更好的风险管理。\n")
 	}
 	if metrics.MaxDrawdownPct > 20 {
-		sb.WriteString("- ⚠️ **高回撤 (>20%):** 仓位规模过于激进或止损过宽。\n")
+		sb.WriteString("- ⚠️ **高回撤 (>20%):** 仓位规模过于激进或止损过宽。请根据交易历史定义数学模型量化且清晰的激进或止损策略，计算好的数字化指标。必要时给出公式。\n")
 	}
 	if metrics.SharpeRatio < 0.5 {
-		sb.WriteString("- ⚠️ **低夏普比率 (<0.5):** 收益无法证明风险。需要更高质量的交易。\n")
+		sb.WriteString("- ⚠️ **低夏普比率 (<0.5):** 收益无法证明风险。需要更高质量的交易。请根据交易历史定义数学模型量化且清晰的收益或风险策略，计算好的数字化指标。必要时给出公式。\n")
 	}
 	if metrics.TotalReturnPct < 0 {
-		sb.WriteString("- ⚠️ **负收益:** 策略正在亏损。基本方法需要修订。\n")
+		sb.WriteString("- ⚠️ **负收益:** 策略正在亏损。基本方法需要修订。请根据交易历史定义数学模型量化且清晰的入场和（特别是）出场策略，计算好的数字化指标。必要时给出公式。\n")
 	}
 	sb.WriteString("\n")
 
@@ -650,10 +646,10 @@ func (po *PromptOptimizer) buildEvolutionMetaPromptZH(prompt string, variant *Pr
 	sb.WriteString("## 学习要求\n")
 	sb.WriteString("进化后的提示词应该:\n")
 	sb.WriteString("1. **从错误中学习:** 解决上述识别的具体问题\n")
-	sb.WriteString("2. **市场适应:** 考虑市场情绪、波动率状态、趋势vs震荡条件\n")
-	sb.WriteString("3. **风险意识:** 强调资本保护和合理的仓位规模\n")
-	sb.WriteString("4. **模式识别:** 鼓励基于市场结构识别高概率设置\n")
-	sb.WriteString("5. **持续改进:** 建立自我反思和适应心态\n\n")
+	sb.WriteString("2. **市场适应:** 数学模型量化的考虑市场情绪、波动率状态、趋势vs震荡条件。以低频滤波来看的话是否只是噪音。还是真的趋势改变了\n")
+	sb.WriteString("3. **风险意识:** 强调资本保护和合理的仓位规模，计算好的数字化指标。必要时给出公式。且根据此严格执行。\n")
+	sb.WriteString("4. **模式识别:** 鼓励基于市场结构识别高概率设置，计算好的数字化指标。必要时给出公式。且根据此严格判断是否满足概率条件，计算信心价值。\n")
+	sb.WriteString("5. **持续监测** \n\n")
 
 	// Skillset enhancement
 	sb.WriteString("## 技能增强\n")
@@ -698,10 +694,7 @@ func (po *PromptOptimizer) buildEvolutionMetaPromptZH(prompt string, variant *Pr
 	sb.WriteString("- 知道何时不交易 (低流动性、高不确定性、震荡条件)\n\n")
 
 	sb.WriteString("**自我意识与元认知:**\n")
-	sb.WriteString("- 识别自身偏见 (近期偏见、确认偏见、过度自信)\n")
-	sb.WriteString("- 从盈利和亏损中学习 (什么是运气 vs 技能?)\n")
-	sb.WriteString("- 基于变化的市场条件调整策略\n")
-	sb.WriteString("- 保持关于交易成功或失败原因的详细心智模型\n\n")
+	sb.WriteString("- 保持关于交易成功或失败原因的详细数学模型\n\n")
 
 	sb.WriteString("## 自我诊断: 缺少什么技能?\n")
 	sb.WriteString("**关键任务:** 分析当前提示词并识别它缺乏什么能力。\n\n")
@@ -712,16 +705,13 @@ func (po *PromptOptimizer) buildEvolutionMetaPromptZH(prompt string, variant *Pr
 	sb.WriteString("4. 缺少哪些领域知识 (加密货币特定、宏观、衍生品)?\n")
 	sb.WriteString("5. 哪些统计、数学或计算技术会有价值?\n")
 	sb.WriteString("6. 应该整合哪些心理或行为金融概念?\n\n")
-	sb.WriteString("**要有创意和全面性。** 不要只解决上述问题 - 思考世界级交易员知道而此提示词未捕捉的内容。\n\n")
+	sb.WriteString("**要有全面性。** 不要只解决上述问题 - 思考世界级交易员知道而此提示词未捕捉的内容。\n\n")
 
 	sb.WriteString("## 你的任务\n")
 	sb.WriteString("重写系统提示词以:\n")
-	sb.WriteString("1. 解决识别的表现问题\n")
-	sb.WriteString("2. 整合上述列出的缺失/弱技能\n")
-	sb.WriteString("3. **添加你通过自我诊断识别的缺失能力**\n")
-	sb.WriteString("4. 使角色更加复杂和具有市场意识\n")
+	sb.WriteString("2. 整合上述列出项目\n")
 	sb.WriteString("5. 保留当前运作良好的部分\n\n")
-	sb.WriteString("只输出改进的系统提示词，不要解释或评论。\n")
+	sb.WriteString("只以数学模型输出改进的系统提示词，不要解释或评论。\n")
 
 	return sb.String()
 }
@@ -833,7 +823,6 @@ func (po *PromptOptimizer) GetEvolutionSummary(lang string) string {
 					v.FitnessScore, v.TotalReturn, v.WinRate, v.TotalDecisions))
 			}
 		}
-		sb.WriteString("\n💡 系统正在通过遗传算法不断优化提示词策略，以提高交易表现。\n")
 		return sb.String()
 	}
 
@@ -856,6 +845,5 @@ func (po *PromptOptimizer) GetEvolutionSummary(lang string) string {
 				v.FitnessScore, v.TotalReturn, v.WinRate, v.TotalDecisions))
 		}
 	}
-	sb.WriteString("\n💡 The system is continuously optimizing prompt strategies through genetic algorithms to improve trading performance.\n")
 	return sb.String()
 }

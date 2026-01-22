@@ -17,12 +17,12 @@ import {
 import { api } from '../lib/api'
 import { useLanguage } from '../contexts/LanguageContext'
 
-export interface PromptVariant {
+interface PromptVariant {
   ID: string
-  VariantID: string
-  Generation: number
-  IsActive: boolean
-  Prompt: string
+  PromptRoleDefinition?: string
+  PromptTradingFrequency?: string
+  PromptEntryStandards?: string
+  PromptDecisionProcess?: string
   CreatedAt: string
   TotalDecisions: number
   TotalReturn: number
@@ -31,6 +31,8 @@ export interface PromptVariant {
   SharpeRatio: number
   MaxDrawdown: number
   FitnessScore: number
+  Generation: number
+  IsActive: boolean
 }
 
 export interface PromptVariantsResponse {
@@ -52,6 +54,22 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
   const { language } = useLanguage()
   const [selectedVariant, setSelectedVariant] = useState<PromptVariant | null>(null)
   const [activating, setActivating] = useState<string | null>(null)
+  const [lastNonEmptyVariants, setLastNonEmptyVariants] = useState<PromptVariant[]>([])
+
+  // Load cached variants from sessionStorage on mount or runID change
+  useEffect(() => {
+    if (runID) {
+      const cached = sessionStorage.getItem(`promptlab-variants-${runID}`)
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setLastNonEmptyVariants(parsed)
+          }
+        } catch {}
+      }
+    }
+  }, [runID])
 
   // Debug: Log runID to console
   if (typeof window !== 'undefined' && runID) {
@@ -90,23 +108,22 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
     }
   );
 
+  // Save variants to sessionStorage when fetched
+  useEffect(() => {
+    if (data?.variants && data.variants.length > 0 && runID) {
+      setLastNonEmptyVariants(data.variants)
+      sessionStorage.setItem(`promptlab-variants-${runID}`, JSON.stringify(data.variants))
+    }
+  }, [data?.variants, runID])
+
   // Debug: Log loading states
   if (runID && !data && !error) {
     console.log('[PromptLabPage] Loading...')
   }
 
-  // Cache the last non-empty variants, only show 'not enabled' if never had any
-  const [lastNonEmptyVariants, setLastNonEmptyVariants] = useState<PromptVariant[]>([]);
   const variants = Array.isArray(data?.variants)
-    ? data.variants.filter((v) => v && typeof v.VariantID === 'string')
+    ? data.variants.filter((v) => v && typeof v.ID === 'string')
     : [];
-  useEffect(() => {
-    if (variants.length > 0) {
-      setLastNonEmptyVariants(variants);
-    }
-    // If runID changes, reset cache
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runID, data?.timestamp]);
   const showVariants = variants.length > 0 ? variants : lastNonEmptyVariants;
   const everHadVariants = lastNonEmptyVariants.length > 0;
   const activeVariant = showVariants.length > 0 ? showVariants.find((v) => v.IsActive) : undefined
@@ -118,12 +135,12 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
     }
   }, [activeVariant, selectedVariant])
 
-  const handleActivate = async (variantID: string) => {
+  const handleActivate = async (ID: string) => {
     if (!runID || activating) return
 
-    setActivating(variantID)
+    setActivating(ID)
     try {
-      await api.activatePromptVariant(runID, variantID)
+      await api.activatePromptVariant(runID, ID)
       mutate() // Refresh data
     } catch (err: any) {
       console.error('Failed to activate variant:', err)
@@ -284,7 +301,7 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
 
             {showVariants.map((variant) => (
               <motion.div
-                key={variant.VariantID || variant.ID || Math.random().toString(36).slice(2)}
+                key={variant.ID || variant.ID || Math.random().toString(36).slice(2)}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className={`
@@ -292,7 +309,7 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
                   ${
                     variant.IsActive
                       ? 'border-green-500/50 bg-green-500/5'
-                      : selectedVariant?.VariantID === variant.VariantID
+                      : selectedVariant?.ID === variant.ID
                         ? 'border-blue-500/50 bg-blue-500/5'
                         : 'border-slate-700/50 bg-slate-800/50 hover:border-slate-600/50'
                   }
@@ -316,7 +333,7 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-sm text-slate-400">
-                            {(variant.VariantID || variant.ID || '').substring(0, 8) || '—'}
+                            {(variant.ID || variant.ID || '').substring(0, 8) || '—'}
                           </span>
                           <span
                             className={`text-xs font-bold ${getGenerationColor(variant.Generation)}`}
@@ -334,21 +351,21 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleActivate(variant.VariantID || variant.ID)
+                          handleActivate(variant.ID || variant.ID)
                         }}
                         disabled={!!activating}
                         className={`
                           flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium
                           transition-colors
                           ${
-                            activating === variant.VariantID
+                            activating === variant.ID
                               ? 'bg-blue-500/20 text-blue-400 cursor-not-allowed'
                               : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'
                           }
                         `}
                       >
                         <PlayCircle className="h-3 w-3" />
-                        {activating === variant.VariantID
+                        {activating === variant.ID
                           ? language === 'zh'
                             ? '激活中...'
                             : 'Activating...'
@@ -426,7 +443,7 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
                       {language === 'zh' ? '变体 ID' : 'Variant ID'}
                     </div>
                     <div className="font-mono text-sm break-all">
-                      {selectedVariant.VariantID}
+                      {selectedVariant.ID}
                     </div>
                   </div>
 
@@ -472,12 +489,23 @@ export function PromptLabPage({ runID, onBack }: PromptLabPageProps) {
                     <div className="text-xs text-slate-500 mb-2">
                       {language === 'zh' ? '提示词内容' : 'Prompt Content'}
                     </div>
-                    <div className="max-h-96 overflow-y-auto rounded bg-slate-900/50 p-3 text-xs font-mono whitespace-pre-wrap border border-slate-700/30">
-                      {selectedVariant.Prompt || (
-                        <span className="text-slate-500">
-                          {language === 'zh' ? '默认提示词' : 'Default prompt'}
-                        </span>
-                      )}
+                    <div className="max-h-96 overflow-y-auto rounded bg-slate-900/50 p-3 text-xs font-mono whitespace-pre-wrap border border-slate-700/30 space-y-4">
+                      <div>
+                        <div className="font-bold text-blue-300 mb-1">{language === 'zh' ? '角色定义' : 'Role Definition'}</div>
+                        <div>{(selectedVariant as any).PromptRoleDefinition || <span className="text-slate-500">—</span>}</div>
+                      </div>
+                      <div>
+                        <div className="font-bold text-blue-300 mb-1">{language === 'zh' ? '交易频率' : 'Trading Frequency'}</div>
+                        <div>{(selectedVariant as any).PromptTradingFrequency || <span className="text-slate-500">—</span>}</div>
+                      </div>
+                      <div>
+                        <div className="font-bold text-blue-300 mb-1">{language === 'zh' ? '入场标准' : 'Entry Standards'}</div>
+                        <div>{(selectedVariant as any).PromptEntryStandards || <span className="text-slate-500">—</span>}</div>
+                      </div>
+                      <div>
+                        <div className="font-bold text-blue-300 mb-1">{language === 'zh' ? '决策流程' : 'Decision Process'}</div>
+                        <div>{(selectedVariant as any).PromptDecisionProcess || <span className="text-slate-500">—</span>}</div>
+                      </div>
                     </div>
                   </div>
 

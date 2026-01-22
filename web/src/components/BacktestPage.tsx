@@ -45,7 +45,7 @@ import { franc } from 'franc'
 import { confirmToast } from '../lib/notify'
 import { DecisionCard } from './DecisionCard'
 import { MetricTooltip } from './MetricTooltip'
-import { PromptLabPage } from '../pages/PromptLabPage'
+import { PromptLabPage } from './PromptLabPage'
 import type {
   BacktestStatusPayload,
   BacktestPositionStatus,

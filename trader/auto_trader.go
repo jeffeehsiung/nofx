@@ -1288,11 +1288,6 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 					ctx.ComplianceFeedback = at.complianceTracker.GetComplianceFeedback(strategyLang)
 				}
 
-				// Attach prompt evolution summary (show what prompt strategies work best)
-				if at.promptOptimizer != nil {
-					ctx.PromptEvolutionSummary = at.promptOptimizer.GetEvolutionSummary(strategyLang)
-				}
-
 				// Attach calibrated thresholds (learned risk detection thresholds)
 				if at.failureThresholds != (decision.FailureThresholds{}) {
 					calibrator := decision.NewThresholdCalibrator()
@@ -1307,11 +1302,6 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 					calibrator.SampleSize = stats.TotalTrades
 					ctx.CalibratedThresholds = calibrator.GetThresholdsForLLM(strategyLang, 35)
 				}
-			}
-
-			// Add prompt evolution summary (shared with backtest prompt optimizer)
-			if at.promptOptimizer != nil {
-				ctx.PromptEvolutionSummary = at.promptOptimizer.GetEvolutionSummary(strategyLang)
 			}
 
 			logger.Infof("📈 [%s] Trading stats: %d trades, %.1f%% win rate, PF=%.2f, Sharpe=%.2f, DD=%.1f%%",

@@ -964,9 +964,6 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 	// Convert database format to API format
 	type APIVariant struct {
 		ID                     string  `json:"ID"`
-		VariantID              string  `json:"VariantID"`
-		Generation             int     `json:"Generation"`
-		IsActive               bool    `json:"IsActive"`
 		PromptRoleDefinition   string  `json:"PromptRoleDefinition"`
 		PromptTradingFrequency string  `json:"PromptTradingFrequency"`
 		PromptEntryStandards   string  `json:"PromptEntryStandards"`
@@ -979,6 +976,8 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 		SharpeRatio            float64 `json:"SharpeRatio"`
 		MaxDrawdown            float64 `json:"MaxDrawdown"`
 		FitnessScore           float64 `json:"FitnessScore"`
+		Generation             int     `json:"Generation"`
+		IsActive               bool    `json:"IsActive"`
 	}
 
 	variants := make([]APIVariant, 0, len(variantsData))
@@ -988,9 +987,6 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 	for _, v := range variantsData {
 		apiV := APIVariant{
 			ID:                     v.ID,
-			VariantID:              v.VariantID,
-			Generation:             v.Generation,
-			IsActive:               v.IsActive,
 			PromptRoleDefinition:   v.PromptRoleDefinition,
 			PromptTradingFrequency: v.PromptTradingFrequency,
 			PromptEntryStandards:   v.PromptEntryStandards,
@@ -1003,6 +999,8 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 			SharpeRatio:            v.SharpeRatio,
 			MaxDrawdown:            v.MaxDrawdown,
 			FitnessScore:           v.FitnessScore,
+			Generation:             v.Generation,
+			IsActive:               v.IsActive,
 		}
 		variants = append(variants, apiV)
 		if v.IsActive {
