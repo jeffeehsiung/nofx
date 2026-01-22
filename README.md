@@ -94,57 +94,55 @@ nofx/
 │   ├── trader_manager.go     # Multi-trader coordination
 │   └── trader_manager_test.go
 ├── trader/                    # Trading execution engine
-│   ├── trader.go             # Core trader loop
-│   ├── trader_*.go           # Exchange-specific implementations
+│   ├── trader.go             # Core trader loop 🚀 OPTIMIZED
+│   ├── trader_*.go           # Exchange-specific implementations 🚀 OPTIMIZED
 │   └── trader_papertrading.go # Paper trading mode
 ├── decision/                  # AI decision making ⭐ KEY MODULE
-│   ├── engine.go             # Decision orchestration
-│   ├── prompt_builder.go     # AI prompt construction
-│   ├── schema.go             # Response validation
-│   ├── formatter.go          # Response parsing
+│   ├── engine.go             # Decision orchestration 🚀 OPTIMIZED
+│   ├── schema.go             # AI system prompt construction 🔥 NEW
+│   ├── formatter.go          # AI user prompt construction 🔥 NEW
 │   ├── trade_failure.go      # Failure analysis 🔥 NEW
 │   └── threshold_calibrator.go # Data-driven thresholds 🔥 NEW
 ├── market/                    # Market data & microstructure ⭐ KEY MODULE
 │   ├── api_client.go         # Exchange API client
-│   ├── data.go               # Market data aggregation
+│   ├── data.go               # Market data aggregation 🚀 OPTIMIZED
 │   ├── microstructure.go     # Order book analysis 🔥 OPTIMIZED
 │   ├── timeframe.go          # Multi-timeframe logic
 │   ├── *_websocket.go        # Real-time data streams
-│   └── order_book_monitor.go # Liquidity monitoring
+│   └── order_book_monitor.go # Liquidity monitoring 🚀 OPTIMIZED
 ├── backtest/                  # Backtesting engine ⭐ KEY MODULE
 │   ├── manager.go            # Backtest orchestration
-│   ├── runner.go             # Simulation execution
-│   ├── account.go            # Position & PnL tracking
-│   ├── metrics.go            # Performance metrics
+│   ├── runner.go             # Simulation execution 🚀 OPTIMIZED
+│   ├── account.go            # Position & PnL tracking 🚀 OPTIMIZED
+│   ├── metrics.go            # Performance metrics 🚀 OPTIMIZED
 │   └── persistence_db.go     # Results storage
 ├── store/                     # Database layer
-│   ├── store.go              # Main store interface
-│   ├── trader.go             # Trader persistence
-│   ├── position.go           # Position tracking
+│   ├── store.go              # Main store interface 🚀 OPTIMIZED
+│   ├── trader.go             # Trader persistence 🚀 OPTIMIZED
+│   ├── position.go           # Position tracking 🚀 OPTIMIZED
 │   └── position_builder.go   # Position lifecycle
 ├── api/                       # REST API server
-│   ├── server.go             # API routes
-│   ├── strategy.go           # Strategy endpoints
-│   ├── backtest.go           # Backtest endpoints
+│   ├── server.go             # API routes and handlers
+│   ├── strategy.go           # Strategy endpoints 🚀 OPTIMIZED
+│   ├── backtest.go           # Backtest endpoints 🚀 OPTIMIZED
 │   └── debate.go             # Debate arena endpoints
 ├── mcp/                       # AI provider clients
 │   ├── claude_client.go      # Anthropic Claude
 │   ├── deepseek_client.go    # DeepSeek
 │   └── openai_client.go      # OpenAI/compatible
 ├── debate/                    # Multi-AI debate system
-│   └── engine.go             # Debate orchestration
+│   └── engine.go             # Debate orchestration 🚀 OPTIMIZED
 ├── web/                       # Frontend (React/TypeScript)
 │   ├── src/
 │   │   ├── App.tsx           # Main app component
-│   │   ├── components/       # UI components
+│   │   ├── components/       # UI components 🚀 OPTIMIZED
 │   │   ├── lib/              # API client
-│   │   └── stores/           # State management
+│   │   └── stores/           # State management 🚀 OPTIMIZED
 │   └── package.json
 └── docs/                      # Documentation
     ├── architecture/          # Architecture docs
     ├── getting-started/       # Deployment guides
     ├── guides/                # User guides
-    └── threshold-calibration.md # New calibration system 🔥
 ```
 
 ---
