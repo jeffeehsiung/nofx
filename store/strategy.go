@@ -41,7 +41,6 @@ type StrategyConfig struct {
 	// editable sections of System Prompt
 	PromptSections PromptSectionsConfig `json:"prompt_sections,omitempty"`
 }
-
 // PromptTemplates holds prompt sections for each trading mode
 var PromptTemplates = map[string]map[string]PromptSectionsConfig{
 	"balanced": {

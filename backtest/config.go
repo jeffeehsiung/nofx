@@ -141,11 +141,11 @@ func (cfg *BacktestConfig) Validate() error {
 
 	cfg.PromptVariant = strings.TrimSpace(cfg.PromptVariant)
 	if cfg.PromptVariant == "" {
-		cfg.PromptVariant = "baseline"
+		cfg.PromptVariant = "gen1"
 	}
 	cfg.PromptTemplate = strings.TrimSpace(cfg.PromptTemplate)
 	if cfg.PromptTemplate == "" {
-		cfg.PromptTemplate = "default"
+		cfg.PromptTemplate = "gen1"
 	}
 	cfg.CustomPrompt = strings.TrimSpace(cfg.CustomPrompt)
 

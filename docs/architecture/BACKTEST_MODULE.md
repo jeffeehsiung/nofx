@@ -67,7 +67,7 @@ This document describes the complete technical implementation of the NOFX backte
 | `FeeBps` | float64 | 5 | Trading fee (basis points) |
 | `SlippageBps` | float64 | 2 | Slippage (basis points) |
 | `FillPolicy` | string | "next_open" | Fill policy |
-| `PromptVariant` | string | "baseline" | AI prompt variant |
+| `PromptVariant` | string | "gen1" | AI prompt variant |
 | `CacheAI` | bool | false | Cache AI decisions |
 | `Leverage` | LeverageConfig | BTC/ETH:5, Altcoin:5 | Leverage settings |
 

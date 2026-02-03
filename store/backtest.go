@@ -580,28 +580,28 @@ func (s *BacktestStore) DeleteRun(runID string) error {
 }
 
 // SaveConfig saves config
-func (s *BacktestStore) SaveConfig(runID, userID, template, customPrompt, provider, model string, override bool, configJSON []byte) error {
+func (s *BacktestStore) SaveConfig(runID, userID, variant, customPrompt, provider, model string, override bool, configJSON []byte) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if userID == "" {
 		userID = "default"
 	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO backtest_runs (run_id, user_id, config_json, prompt_template, custom_prompt,
+		INSERT INTO backtest_runs (run_id, user_id, config_json, prompt_variant, custom_prompt,
 		                           override_prompt, ai_provider, ai_model, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(run_id) DO NOTHING
-	`, runID, userID, configJSON, template, customPrompt, override, provider, model, now, now)
+	`, runID, userID, configJSON, variant, customPrompt, override, provider, model, now, now)
 	if err != nil {
 		return err
 	}
 
 	_, err = s.db.Exec(`
 		UPDATE backtest_runs
-		SET user_id = ?, config_json = ?, prompt_template = ?, custom_prompt = ?,
+		SET user_id = ?, config_json = ?, prompt_variant = ?, custom_prompt = ?,
 		    override_prompt = ?, ai_provider = ?, ai_model = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE run_id = ?
-	`, userID, configJSON, template, customPrompt, override, provider, model, runID)
+	`, userID, configJSON, variant, customPrompt, override, provider, model, runID)
 	return err
 }
 

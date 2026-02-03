@@ -1988,13 +1988,10 @@ func (at *AutoTrader) SetOverrideBasePrompt(override bool) {
 
 // GetSystemPromptTemplate gets current system prompt template name (from strategy config)
 func (at *AutoTrader) GetSystemPromptTemplate() string {
-	if at.strategyEngine != nil {
-		config := at.strategyEngine.GetConfig()
-		if config.CustomPrompt != "" {
-			return "custom"
-		}
+	if at.promptOptimizer != nil {
+		return at.promptVariantID
 	}
-	return "strategy"
+	return "gen1"
 }
 
 // saveEquitySnapshot saves equity snapshot independently (for drawing profit curve, decoupled from AI decision)
@@ -2832,14 +2829,14 @@ func (at *AutoTrader) saveLiveTradingConfig() {
 	}
 
 	// Get strategy prompt if available
-	promptTemplate := "default"
+	promptVariantID := "gen1"
 	customPrompt := ""
 	overridePrompt := false
 	if at.strategyEngine != nil {
 		strategyConfig := at.strategyEngine.GetConfig()
 		if strategyConfig != nil && strategyConfig.PromptSections.RoleDefinition != "" {
-			promptTemplate = "live_strategy"
-			customPrompt = strategyConfig.PromptSections.RoleDefinition
+			promptVariantID = at.promptVariantID
+			customPrompt = at.customPrompt
 		}
 	}
 
@@ -2847,14 +2844,14 @@ func (at *AutoTrader) saveLiveTradingConfig() {
 
 	// Save to backtest_runs table (using trader ID as runID)
 	if err := at.store.Backtest().SaveConfig(
-		at.id,          // runID = trader ID for live trading
-		at.userID,      // userID
-		promptTemplate, // template
-		customPrompt,   // custom prompt
-		provider,       // AI provider
-		at.aiModel,     // AI model
-		overridePrompt, // override flag
-		configJSON,     // config JSON
+		at.id,           // runID = trader ID for live trading
+		at.userID,       // userID
+		promptVariantID, // variant
+		customPrompt,    // custom prompt
+		provider,        // AI provider
+		at.aiModel,      // AI model
+		overridePrompt,  // override flag
+		configJSON,      // config JSON
 	); err != nil {
 		logger.Warnf("⚠️ Failed to save live trading config: %v", err)
 	} else {

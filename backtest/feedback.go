@@ -20,6 +20,10 @@ import (
 // ============================================================================
 // This module implements a feedback loop that analyzes past trading decisions
 // and their outcomes to help the LLM learn from mistakes and improve profitability.
+// TODO: Integrate with LLM for prompt rewriting based on feedback analysis. The feedback itself is now hardcoded and hsould also be based on LLM analysis and evolvement.
+// TODO: Consider evolve feedbakc with LLM based on recorded trading outcomes, not just hardcoded rules,
+// enforce quantified numbers instead of qualitative phrases,
+// and then parse the analysis and feedback into rules to be checked compliance by compliance tracker (backtest/compliance_tracker.go)
 // ============================================================================
 
 // Add to FeedbackGenerator struct

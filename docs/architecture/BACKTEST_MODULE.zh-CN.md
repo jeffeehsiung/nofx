@@ -67,7 +67,7 @@
 | `FeeBps` | float64 | 5 | 手续费 (基点) |
 | `SlippageBps` | float64 | 2 | 滑点 (基点) |
 | `FillPolicy` | string | "next_open" | 成交策略 |
-| `PromptVariant` | string | "baseline" | AI 提示词变体 |
+| `PromptVariant` | string | "gen1" | AI 提示词变体 |
 | `CacheAI` | bool | false | 是否缓存 AI 决策 |
 | `Leverage` | LeverageConfig | BTC/ETH:5, Altcoin:5 | 杠杆设置 |
 

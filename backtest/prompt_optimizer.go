@@ -18,6 +18,9 @@ import (
 // ============================================================================
 // Automatically evolves system prompts based on performance feedback
 // Implements A/B testing and evolutionary algorithms to improve prompt quality
+// TODO: Integrate with LLM for prompt rewriting but only rewrite underperforming prompts in store/strategy.go configured to PromptVariant
+// TODO: Current prompt LLM evovlution is operated by iterating through role defition to decision process,
+// consider changing it to request rewrote from LLM once and then parse the results into sections
 // ============================================================================
 
 // PromptVariant represents a specific version of a system prompt
@@ -121,9 +124,9 @@ func NewPromptOptimizerWithAI(basePrompt *store.PromptSectionsConfig, config *Pr
 		FirstShouldEvolveCycle: -1,
 	}
 
-	// Create initial variant (base prompt) with consistent naming: gen1-v1
+	// Create initial variant (base prompt) with consistent naming: gen1
 	baseVariant := &PromptVariant{
-		ID:                     "gen1-v1",
+		ID:                     "gen1",
 		PromptRoleDefinition:   basePrompt.RoleDefinition,
 		PromptTradingFrequency: basePrompt.TradingFrequency,
 		PromptEntryStandards:   basePrompt.EntryStandards,
@@ -143,7 +146,7 @@ func NewPromptOptimizerWithAI(basePrompt *store.PromptSectionsConfig, config *Pr
 		logger.Errorf("[PromptOptimizer] Failed to save base variant: %v", err)
 	}
 
-	logger.Infof("[PromptOptimizer] Initialized with base prompt: gen1-v1 (generation: 1)")
+	logger.Infof("[PromptOptimizer] Initialized with base prompt: gen1 (generation: 1)")
 
 	return po
 }
@@ -490,7 +493,7 @@ func (po *PromptOptimizer) evolvePromptsWithLLM(variantID string, strategy_promp
 
 	// Create new evolved variant
 	evolvedVariant := &PromptVariant{
-		ID:                     fmt.Sprintf("gen%d-v1", po.Generation+1),
+		ID:                     fmt.Sprintf("gen%d", po.Generation+1),
 		PromptRoleDefinition:   role_definition,
 		PromptTradingFrequency: trading_frequency,
 		PromptEntryStandards:   entry_standards,

@@ -46,7 +46,7 @@ func TestUpdateTraderRequest_SystemPromptTemplate(t *testing.T) {
 				"custom_prompt": "test",
 				"override_base_prompt": false,
 				"is_cross_margin": true,
-				"system_prompt_template": "default"
+				"system_prompt_template": "gen1"
 			}`,
 			expectedPromptTemplate: "default",
 		},
@@ -139,7 +139,7 @@ func TestGetTraderConfigResponse_SystemPromptTemplate(t *testing.T) {
 				TradingSymbols:       "BTC",
 				CustomPrompt:         "",
 				OverrideBasePrompt:   false,
-				SystemPromptTemplate: "default",
+				SystemPromptTemplate: "gen1",
 				IsCrossMargin:        false,
 				IsRunning:            false,
 			},
@@ -275,7 +275,7 @@ func TestPublicTraderListResponse_SystemPromptTemplate(t *testing.T) {
 		"position_count":         3,
 		"margin_used_pct":        25.0,
 		"is_running":             true,
-		"system_prompt_template": "default",
+		"system_prompt_template": "gen1",
 	}
 
 	// Construct API response object (consistent with logic in api/server.go handlePublicTraderList)
@@ -298,7 +298,7 @@ func TestPublicTraderListResponse_SystemPromptTemplate(t *testing.T) {
 	}
 
 	// Verify system_prompt_template value is correct
-	if response["system_prompt_template"] != "default" {
-		t.Errorf("Expected system_prompt_template='default', got %v", response["system_prompt_template"])
+	if response["system_prompt_template"] != "gen1" {
+		t.Errorf("Expected system_prompt_template='gen1', got %v", response["system_prompt_template"])
 	}
 }

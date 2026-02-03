@@ -598,7 +598,7 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 	}
 
 	// Set system prompt template default value
-	systemPromptTemplate := "default"
+	systemPromptTemplate := "gen1"
 	if req.SystemPromptTemplate != "" {
 		systemPromptTemplate = req.SystemPromptTemplate
 	}

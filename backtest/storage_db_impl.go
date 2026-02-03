@@ -50,7 +50,7 @@ func saveConfigDB(runID string, cfg *BacktestConfig) error {
 	}
 	template := cfg.PromptTemplate
 	if template == "" {
-		template = "default"
+		template = "gen1"
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	userID := cfg.UserID
