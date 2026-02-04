@@ -767,7 +767,7 @@ func (c *ThresholdCalibrator) formatThresholdsConcise(lang string) string {
 	}
 
 	return fmt.Sprintf(`📊 Risk Thresholds (from %d trades):
-• Weak Volume: %.2f | Weak OI: %.2f  
+• Weak Volume: %.2f | Weak OI: %.2f
 • Momentum Decay: Volume%.2f | OI%.2f
 • Liquidity: Spread>%.1fx | Depth<%.2f`,
 		c.SampleSize,

@@ -550,7 +550,7 @@ export function TraderConfigModal({
                   </label>
                 </div>
                 <p className="text-xs text-[#848E9C] mt-1">
-                  {language === 'zh' 
+                  {language === 'zh'
                     ? '反馈分析: 学习过往交易决策; 提示词进化: 自动优化交易提示词'
                     : 'Feedback: Learn from past trading decisions; Evolution: Auto-optimize prompts'}
                 </p>

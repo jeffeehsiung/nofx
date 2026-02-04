@@ -88,31 +88,31 @@ func IntegrationWithBacktest() {
 	fmt.Println(`
 	Calibration Pipeline:
 	=====================
-	
+
 	Step 1: Initial Backtest
 	  - Run with DefaultFailureThresholds()
 	  - Log all trade outcomes to database
-	
+
 	Step 2: Data Collection
 	  - Query last 500+ closed trades
 	  - Extract entry/exit metrics (volume, OI, spread, depth)
 	  - Label trades as profitable/unprofitable
-	
+
 	Step 3: Threshold Calibration
 	  - calibrator := NewThresholdCalibrator()
 	  - calibrator.CalibrateFromHistory(trades)
 	  - thresholds := calibrator.ApplyToAnalyzer()
-	
+
 	Step 4: Validation Backtest
 	  - Run backtest with calibrated thresholds
 	  - Measure false positive/false negative rates
 	  - Compare to baseline (default thresholds)
-	
+
 	Step 5: Deployment
 	  - If metrics improved: save thresholds to config
 	  - Use calibrated thresholds in live trading
 	  - Monitor and re-calibrate monthly
-	
+
 	Key Metrics to Track:
 	  - True Positive Rate: % of losers correctly identified
 	  - False Positive Rate: % of winners incorrectly flagged

@@ -58,11 +58,11 @@ print_separator() {
 
 check_api_health() {
     log_info "Checking API health..."
-    
+
     response=$(curl -s -w "%{http_code}" -o /tmp/health.json \
         -X GET "${API_BASE}/backtest/runs?limit=1" \
         -H "Authorization: Bearer ${TOKEN}")
-    
+
     if [ "$response" = "200" ]; then
         log_success "API is healthy"
         return 0
@@ -75,9 +75,9 @@ check_api_health() {
 start_backtest() {
     local run_id=$1
     local use_smart=$2
-    
+
     log_info "Starting backtest: $run_id (use_smart_heuristics=$use_smart)"
-    
+
     config=$(cat <<EOF
 {
   "config": {
@@ -104,15 +104,15 @@ start_backtest() {
 }
 EOF
 )
-    
+
     response=$(curl -s -w "\n%{http_code}" -X POST "${API_BASE}/backtest/start" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer ${TOKEN}" \
         -d "$config")
-    
+
     http_code=$(echo "$response" | tail -n1)
     body=$(echo "$response" | head -n-1)
-    
+
     if [ "$http_code" = "200" ]; then
         log_success "Backtest started: $run_id"
         echo "$body" | jq '.' 2>/dev/null || echo "$body"
@@ -129,16 +129,16 @@ wait_for_backtest() {
     local max_wait=14400  # 4 hours max
     local interval=30     # Check every 30 seconds
     local elapsed=0
-    
+
     log_info "Waiting for backtest to complete: $run_id (max wait: 4 hours)"
-    
+
     while [ $elapsed -lt $max_wait ]; do
         response=$(curl -s -X GET "${API_BASE}/backtest/status?run_id=$run_id" \
             -H "Authorization: Bearer ${TOKEN}")
-        
+
         state=$(echo "$response" | jq -r '.state' 2>/dev/null)
         progress=$(echo "$response" | jq -r '.progress' 2>/dev/null)
-        
+
         if [ "$state" = "COMPLETED" ]; then
             log_success "Backtest completed: $run_id"
             return 0
@@ -147,36 +147,36 @@ wait_for_backtest() {
             log_error "Error: $(echo "$response" | jq -r '.error' 2>/dev/null)"
             return 1
         fi
-        
+
         echo -ne "\rProgress: $progress (elapsed: ${elapsed}s)\033[K"
-        
+
         sleep $interval
         elapsed=$((elapsed + interval))
     done
-    
+
     log_error "Backtest timeout after $max_wait seconds"
     return 1
 }
 
 get_metrics() {
     local run_id=$1
-    
+
     log_info "Fetching metrics for: $run_id"
-    
+
     response=$(curl -s -X GET "${API_BASE}/backtest/metrics?run_id=$run_id" \
         -H "Authorization: Bearer ${TOKEN}")
-    
+
     echo "$response"
 }
 
 get_trades() {
     local run_id=$1
-    
+
     log_info "Fetching trades for: $run_id"
-    
+
     response=$(curl -s -X GET "${API_BASE}/backtest/trades?run_id=$run_id&limit=1000" \
         -H "Authorization: Bearer ${TOKEN}")
-    
+
     echo "$response"
 }
 
@@ -187,36 +187,36 @@ get_trades() {
 compare_metrics() {
     local baseline_metrics=$1
     local treatment_metrics=$2
-    
+
     print_separator
     log_info "A/B TEST COMPARISON ANALYSIS"
     print_separator
-    
+
     # Extract key metrics
     baseline_wr=$(echo "$baseline_metrics" | jq -r '.win_rate' 2>/dev/null | awk '{printf "%.2f%%", $1*100}')
     treatment_wr=$(echo "$treatment_metrics" | jq -r '.win_rate' 2>/dev/null | awk '{printf "%.2f%%", $1*100}')
-    
+
     baseline_sharpe=$(echo "$baseline_metrics" | jq -r '.sharpe_ratio' 2>/dev/null)
     treatment_sharpe=$(echo "$treatment_metrics" | jq -r '.sharpe_ratio' 2>/dev/null)
-    
+
     baseline_dd=$(echo "$baseline_metrics" | jq -r '.max_drawdown' 2>/dev/null | awk '{printf "%.2f%%", $1*100}')
     treatment_dd=$(echo "$treatment_metrics" | jq -r '.max_drawdown' 2>/dev/null | awk '{printf "%.2f%%", $1*100}')
-    
+
     baseline_pnl=$(echo "$baseline_metrics" | jq -r '.total_pnl' 2>/dev/null | awk '{printf "$%.2f", $1}')
     treatment_pnl=$(echo "$treatment_metrics" | jq -r '.total_pnl' 2>/dev/null | awk '{printf "$%.2f", $1}')
-    
+
     # Print comparison
     echo ""
     echo "METRIC COMPARISON:"
     echo "  Metric              │  Baseline  │  Treatment │  Change"
     echo "  ─────────────────────┼────────────┼────────────┼─────────────"
-    
+
     printf "  Win Rate            │  %8s  │  %8s  │ " "$baseline_wr" "$treatment_wr"
     baseline_wr_num=$(echo "$baseline_metrics" | jq -r '.win_rate' 2>/dev/null)
     treatment_wr_num=$(echo "$treatment_metrics" | jq -r '.win_rate' 2>/dev/null)
     wr_change=$(echo "$treatment_wr_num - $baseline_wr_num" | bc | awk '{printf "%.2f%%", $1*100}')
     echo "$wr_change"
-    
+
     printf "  Sharpe Ratio        │  %8s  │  %8s  │ " "$baseline_sharpe" "$treatment_sharpe"
     sharpe_change=$(echo "$treatment_sharpe - $baseline_sharpe" | bc)
     if [ $(echo "$sharpe_change > 0" | bc) -eq 1 ]; then
@@ -224,23 +224,23 @@ compare_metrics() {
     else
         echo "$sharpe_change ❌"
     fi
-    
+
     printf "  Max Drawdown        │  %8s  │  %8s  │ " "$baseline_dd" "$treatment_dd"
     echo "(lower is better)"
-    
+
     printf "  Total P&L           │  %8s  │  %8s  │ " "$baseline_pnl" "$treatment_pnl"
     baseline_pnl_num=$(echo "$baseline_metrics" | jq -r '.total_pnl' 2>/dev/null)
     treatment_pnl_num=$(echo "$treatment_metrics" | jq -r '.total_pnl' 2>/dev/null)
     pnl_change=$(echo "$treatment_pnl_num - $baseline_pnl_num" | bc | awk '{printf "$%.2f", $1}')
     echo "$pnl_change"
-    
+
     echo ""
     print_separator
-    
+
     # Success criteria
     log_info "CHECKING SUCCESS CRITERIA..."
     echo ""
-    
+
     # Criterion 1: Win rate improvement ≥5%
     wr_improvement=$(echo "$treatment_wr_num - $baseline_wr_num" | bc)
     if [ $(echo "$wr_improvement >= 0.05" | bc) -eq 1 ]; then
@@ -248,25 +248,25 @@ compare_metrics() {
     else
         log_warn "Win Rate Improvement: +$(echo "$wr_improvement" | awk '{printf "%.2f%%", $1*100}') (< 5% target)"
     fi
-    
+
     # Criterion 2: Sharpe ratio improvement
     if [ $(echo "$sharpe_change > 0" | bc) -eq 1 ]; then
         log_success "Sharpe Ratio Improvement: +$sharpe_change"
     else
         log_warn "Sharpe Ratio Degradation: $sharpe_change"
     fi
-    
+
     # Criterion 3: No major drawdown regression
     baseline_dd_num=$(echo "$baseline_metrics" | jq -r '.max_drawdown' 2>/dev/null)
     treatment_dd_num=$(echo "$treatment_metrics" | jq -r '.max_drawdown' 2>/dev/null)
     dd_change=$(echo "$treatment_dd_num - $baseline_dd_num" | bc)
-    
+
     if [ $(echo "$dd_change <= 0.03" | bc) -eq 1 ]; then
         log_success "Max Drawdown No Major Regression: $(echo "$dd_change" | awk '{printf "%.2f%%", $1*100}')"
     else
         log_warn "Max Drawdown Regression: $(echo "$dd_change" | awk '{printf "%.2f%%", $1*100}')"
     fi
-    
+
     echo ""
     print_separator
 }
@@ -274,15 +274,15 @@ compare_metrics() {
 generate_report() {
     local baseline_metrics=$1
     local treatment_metrics=$2
-    
+
     echo ""
     log_info "FINAL DECISION"
     print_separator
-    
+
     baseline_wr=$(echo "$baseline_metrics" | jq -r '.win_rate' 2>/dev/null)
     treatment_wr=$(echo "$treatment_metrics" | jq -r '.win_rate' 2>/dev/null)
     wr_improvement=$(echo "$treatment_wr - $baseline_wr" | bc)
-    
+
     if [ $(echo "$wr_improvement >= 0.05" | bc) -eq 1 ]; then
         log_success "✅ PASS: Win rate improved by $(echo "$wr_improvement" | awk '{printf "%.2f%%", $1*100}')"
         echo ""
@@ -315,14 +315,14 @@ run_baseline() {
     log_info "Config: use_smart_heuristics=false"
     log_info "Period: $DURATION_DAYS days (Jan 11-18, 2026)"
     print_separator
-    
+
     check_api_health || return 1
     start_backtest "$BASELINE_RUN" "false" || return 1
     wait_for_backtest "$BASELINE_RUN" || return 1
-    
+
     baseline_metrics=$(get_metrics "$BASELINE_RUN")
     echo "$baseline_metrics" | jq '.' > /tmp/baseline_metrics.json
-    
+
     log_success "Baseline metrics saved to /tmp/baseline_metrics.json"
     echo ""
     echo "$baseline_metrics" | jq '.'
@@ -334,14 +334,14 @@ run_treatment() {
     log_info "Config: use_smart_heuristics=true"
     log_info "Period: $DURATION_DAYS days (Jan 11-18, 2026)"
     print_separator
-    
+
     check_api_health || return 1
     start_backtest "$TREATMENT_RUN" "true" || return 1
     wait_for_backtest "$TREATMENT_RUN" || return 1
-    
+
     treatment_metrics=$(get_metrics "$TREATMENT_RUN")
     echo "$treatment_metrics" | jq '.' > /tmp/treatment_metrics.json
-    
+
     log_success "Treatment metrics saved to /tmp/treatment_metrics.json"
     echo ""
     echo "$treatment_metrics" | jq '.'
@@ -359,15 +359,15 @@ analyze_results() {
     print_separator
     log_info "ANALYZING RESULTS"
     print_separator
-    
+
     if [ ! -f /tmp/baseline_metrics.json ] || [ ! -f /tmp/treatment_metrics.json ]; then
         log_error "Missing metrics files. Run baseline and treatment tests first."
         return 1
     fi
-    
+
     baseline_metrics=$(cat /tmp/baseline_metrics.json)
     treatment_metrics=$(cat /tmp/treatment_metrics.json)
-    
+
     compare_metrics "$baseline_metrics" "$treatment_metrics"
     generate_report "$baseline_metrics" "$treatment_metrics"
 }
@@ -378,7 +378,7 @@ analyze_results() {
 
 main() {
     local cmd="${1:-both}"
-    
+
     case "$cmd" in
         baseline)
             run_baseline
