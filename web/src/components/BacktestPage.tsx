@@ -783,8 +783,9 @@ export function BacktestPage() {
     btcEthLeverage: 5,
     altcoinLeverage: 5,
     fill: 'next_open',
-    prompt: 'gen1',
-    promptTemplate: 'gen1',
+    tradingMode: 'balanced',
+    promptVariant: 'gen1',
+    promptTemplate: 'balanced',
     customPrompt: '',
     overridePrompt: false,
     cacheAI: true,
@@ -923,7 +924,12 @@ export function BacktestPage() {
 
   // Handlers
   const handleFormChange = (key: string, value: string | number | boolean | string[]) => {
-    setFormState((prev) => ({ ...prev, [key]: value }))
+    setFormState((prev) => {
+      if (key === 'tradingMode' && typeof value === 'string') {
+        return { ...prev, tradingMode: value, promptTemplate: value }
+      }
+      return { ...prev, [key]: value }
+    })
   }
 
   const handleStart = async (event: FormEvent) => {
@@ -958,7 +964,8 @@ export function BacktestPage() {
         fee_bps: formState.fee,
         slippage_bps: formState.slippage,
         fill_policy: formState.fill,
-        prompt_variant: formState.prompt,
+        trading_mode: formState.tradingMode,
+        prompt_variant: formState.promptVariant,
         prompt_template: formState.promptTemplate,
         custom_prompt: formState.customPrompt.trim() || undefined,
         override_prompt: formState.overridePrompt,
@@ -1547,25 +1554,39 @@ export function BacktestPage() {
 
                     <div>
                       <label className="block text-xs mb-1" style={{ color: '#848E9C' }}>
-                        {language === 'zh' ? '策略风格' : 'Strategy Style'}
+                        {language === 'zh' ? '交易模式' : 'Trading Mode'}
                       </label>
                       <div className="flex flex-wrap gap-1">
-                        {['baseline', 'aggressive', 'conservative', 'scalping'].map((p) => (
+                        {['balanced', 'aggressive', 'conservative', 'scalping'].map((p) => (
                           <button
                             key={p}
                             type="button"
-                            onClick={() => handleFormChange('prompt', p)}
+                            onClick={() => handleFormChange('tradingMode', p)}
                             className="px-3 py-1.5 rounded text-xs transition-all"
                             style={{
-                              background: formState.prompt === p ? 'rgba(240,185,11,0.15)' : '#1E2329',
-                              border: `1px solid ${formState.prompt === p ? '#F0B90B' : '#2B3139'}`,
-                              color: formState.prompt === p ? '#F0B90B' : '#848E9C',
+                              background: formState.tradingMode === p ? 'rgba(240,185,11,0.15)' : '#1E2329',
+                              border: `1px solid ${formState.tradingMode === p ? '#F0B90B' : '#2B3139'}`,
+                              color: formState.tradingMode === p ? '#F0B90B' : '#848E9C',
                             }}
                           >
                             {tr(`form.promptPresets.${p}`)}
                           </button>
                         ))}
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs mb-1" style={{ color: '#848E9C' }}>
+                        {language === 'zh' ? '提示词变体' : 'Prompt Variant'}
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full p-2 rounded-lg text-xs"
+                        style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                        value={formState.promptVariant}
+                        onChange={(e) => handleFormChange('promptVariant', e.target.value)}
+                        placeholder={language === 'zh' ? '例如: gen1, gen2' : 'e.g. gen1, gen2'}
+                      />
                     </div>
 
                     <div className="flex flex-wrap gap-4 text-xs" style={{ color: '#848E9C' }}>

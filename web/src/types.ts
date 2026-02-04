@@ -98,7 +98,7 @@ export interface TraderInfo {
   show_in_competition?: boolean
   strategy_id?: string
   strategy_name?: string
-  trading_mode?: string // 交易模式: "" (默认/balanced), "aggressive", "conservative", 或 prompt variant ID
+  trading_mode?: string // 交易模式: "" (默认/balanced), "aggressive", "conservative", "scalping"
   custom_prompt?: string
   use_coin_pool?: boolean
   use_oi_top?: boolean
@@ -164,7 +164,7 @@ export interface CreateTraderRequest {
   strategy_id?: string // 策略ID（新版，使用保存的策略配置）
   initial_balance?: number // 可选：创建时由后端自动获取，编辑时可手动更新
   scan_interval_minutes?: number
-  trading_mode?: string // 交易模式: "" (默认/balanced), "aggressive", "conservative", 或 prompt variant ID
+  trading_mode?: string // 交易模式: "" (默认/balanced), "aggressive", "conservative", "scalping"
   is_cross_margin?: boolean
   show_in_competition?: boolean // 是否在竞技场显示
   enable_feedback?: boolean // Enable feedback analysis (default: true)
@@ -478,6 +478,7 @@ export interface BacktestStartConfig {
   fee_bps: number;
   slippage_bps: number;
   fill_policy: string;
+  trading_mode?: string;
   prompt_variant?: string;
   prompt_template?: string;
   custom_prompt?: string;
@@ -729,7 +730,7 @@ export interface CreateDebateRequest {
   symbol: string;
   max_rounds?: number;
   interval_minutes?: number;  // 5, 15, 30, 60 minutes
-  prompt_variant?: string;    // balanced, aggressive, conservative, scalping
+  prompt_variant?: string;    // prompt template (balanced/aggressive/conservative/scalping)
   auto_execute?: boolean;
   trader_id?: string;         // Trader to use for auto-execute
   // OI Ranking data options

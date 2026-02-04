@@ -42,6 +42,7 @@ type BacktestConfig struct {
 	FillPolicy            string   `json:"fill_policy"`
 	PromptVariant         string   `json:"prompt_variant"`
 	PromptTemplate        string   `json:"prompt_template"`
+	TradingMode           string   `json:"trading_mode"`
 	CustomPrompt          string   `json:"custom_prompt"`
 	OverrideBasePrompt    bool     `json:"override_prompt"`
 	CacheAI               bool     `json:"cache_ai"`
@@ -139,13 +140,27 @@ func (cfg *BacktestConfig) Validate() error {
 		cfg.CheckpointIntervalSeconds = 2
 	}
 
+	cfg.TradingMode = strings.TrimSpace(cfg.TradingMode)
+	if cfg.TradingMode == "" {
+		cfg.TradingMode = "balanced"
+	}
+	if normalized := normalizeTradingMode(cfg.TradingMode); normalized != "" {
+		cfg.TradingMode = normalized
+	}
+
+	cfg.PromptTemplate = strings.TrimSpace(cfg.PromptTemplate)
+	if cfg.PromptTemplate == "" {
+		cfg.PromptTemplate = cfg.TradingMode
+	}
+	if normalized := normalizePromptTemplate(cfg.PromptTemplate); normalized != "" {
+		cfg.PromptTemplate = normalized
+	} else {
+		cfg.PromptTemplate = cfg.TradingMode
+	}
+
 	cfg.PromptVariant = strings.TrimSpace(cfg.PromptVariant)
 	if cfg.PromptVariant == "" {
 		cfg.PromptVariant = "gen1"
-	}
-	cfg.PromptTemplate = strings.TrimSpace(cfg.PromptTemplate)
-	if cfg.PromptTemplate == "" {
-		cfg.PromptTemplate = "gen1"
 	}
 	cfg.CustomPrompt = strings.TrimSpace(cfg.CustomPrompt)
 
@@ -236,13 +251,19 @@ func (cfg *BacktestConfig) ToStrategyConfig() *store.StrategyConfig {
 			result.CustomPrompt = cfg.CustomPrompt
 		}
 
-		if cfg.PromptVariant != "" {
-			lang := cfg.Language
-			if lang == "" {
-				lang = "en" // fallback
-			}
-			result.SetConfigPromptSectionsByModeAndLang(cfg.loadedStrategy.TradingMode, lang)
+		lang := cfg.Language
+		if lang == "" {
+			lang = "en" // fallback
 		}
+		mode := result.TradingMode
+		if cfg.TradingMode != "" {
+			if normalized := normalizeTradingMode(cfg.TradingMode); normalized != "" {
+				mode = normalized
+			}
+			result.TradingMode = mode
+		}
+		template := resolvePromptTemplate(cfg.PromptTemplate, mode)
+		result.SetConfigPromptSectionsByModeAndLang(template, lang)
 
 		return &result
 	}
@@ -258,6 +279,11 @@ func (cfg *BacktestConfig) ToStrategyConfig() *store.StrategyConfig {
 	}
 
 	// Build strategy config from backtest config
+	mode := normalizeTradingMode(cfg.TradingMode)
+	if mode == "" {
+		mode = "balanced"
+	}
+	template := resolvePromptTemplate(cfg.PromptTemplate, mode)
 	strategyConfig := &store.StrategyConfig{
 		CoinSource: store.CoinSourceConfig{
 			SourceType:    "static",
@@ -289,6 +315,7 @@ func (cfg *BacktestConfig) ToStrategyConfig() *store.StrategyConfig {
 			ATRPeriods:        []int{14},
 		},
 		CustomPrompt: cfg.CustomPrompt,
+		TradingMode:  mode,
 		RiskControl: store.RiskControlConfig{
 			MaxPositions:                 3,
 			BTCETHMaxLeverage:            cfg.Leverage.BTCETHLeverage,
@@ -302,12 +329,36 @@ func (cfg *BacktestConfig) ToStrategyConfig() *store.StrategyConfig {
 		},
 	}
 
-	// Set prompt sections based on variant and language
+	// Set prompt sections based on trading mode and language
 	lang := cfg.Language
 	if lang == "" {
 		lang = "en"
 	}
-	strategyConfig.SetConfigPromptSectionsByModeAndLang("balanced", lang)
+	strategyConfig.SetConfigPromptSectionsByModeAndLang(template, lang)
 
 	return strategyConfig
+}
+
+func normalizeTradingMode(mode string) string {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch mode {
+	case "balanced", "aggressive", "conservative", "scalping":
+		return mode
+	default:
+		return ""
+	}
+}
+
+func normalizePromptTemplate(template string) string {
+	return normalizeTradingMode(template)
+}
+
+func resolvePromptTemplate(template, tradingMode string) string {
+	if normalized := normalizePromptTemplate(template); normalized != "" {
+		return normalized
+	}
+	if normalized := normalizeTradingMode(tradingMode); normalized != "" {
+		return normalized
+	}
+	return "balanced"
 }

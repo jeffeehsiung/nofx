@@ -50,7 +50,10 @@ func saveConfigDB(runID string, cfg *BacktestConfig) error {
 	}
 	template := cfg.PromptTemplate
 	if template == "" {
-		template = "gen1"
+		template = cfg.TradingMode
+	}
+	if template == "" {
+		template = "balanced"
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	userID := cfg.UserID

@@ -344,9 +344,9 @@ func (s *Server) handlePreviewPrompt(c *gin.Context) {
 	}
 
 	var req struct {
-		Config        store.StrategyConfig `json:"config" binding:"required"`
-		AccountEquity float64              `json:"account_equity"`
-		PromptVariant string               `json:"prompt_variant"`
+		Config         store.StrategyConfig `json:"config" binding:"required"`
+		AccountEquity  float64              `json:"account_equity"`
+		PromptTemplate string               `json:"prompt_template"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -358,8 +358,21 @@ func (s *Server) handlePreviewPrompt(c *gin.Context) {
 	if req.AccountEquity <= 0 {
 		req.AccountEquity = 1000.0 // Default simulated account equity
 	}
-	if req.PromptVariant == "" {
-		req.PromptVariant = "balanced"
+	if req.PromptTemplate == "" {
+		if req.Config.TradingMode != "" {
+			req.PromptTemplate = req.Config.TradingMode
+		} else {
+			req.PromptTemplate = "balanced"
+		}
+	}
+	if req.Config.TradingMode == "" {
+		req.Config.TradingMode = req.PromptTemplate
+	}
+	if req.Config.PromptSections.RoleDefinition == "" &&
+		req.Config.PromptSections.TradingFrequency == "" &&
+		req.Config.PromptSections.EntryStandards == "" &&
+		req.Config.PromptSections.DecisionProcess == "" {
+		req.Config.PromptSections = store.GetPromptSectionsByModeAndLang(req.PromptTemplate, "en")
 	}
 
 	// Create strategy engine to build prompt
@@ -368,12 +381,12 @@ func (s *Server) handlePreviewPrompt(c *gin.Context) {
 	// Build system prompt (using built-in method from strategy engine)
 	systemPrompt := engine.BuildSystemPromptWithContext(
 		req.AccountEquity,
-		req.PromptVariant,
+		req.PromptTemplate,
 		&decision.Context{})
 
 	c.JSON(http.StatusOK, gin.H{
-		"system_prompt":  systemPrompt,
-		"prompt_variant": req.PromptVariant,
+		"system_prompt":   systemPrompt,
+		"prompt_template": req.PromptTemplate,
 		"config_summary": gin.H{
 			"coin_source":      req.Config.CoinSource.SourceType,
 			"primary_tf":       req.Config.Indicators.Klines.PrimaryTimeframe,
@@ -393,10 +406,10 @@ func (s *Server) handleStrategyTestRun(c *gin.Context) {
 	}
 
 	var req struct {
-		Config        store.StrategyConfig `json:"config" binding:"required"`
-		PromptVariant string               `json:"prompt_variant"`
-		AIModelID     string               `json:"ai_model_id"`
-		RunRealAI     bool                 `json:"run_real_ai"`
+		Config         store.StrategyConfig `json:"config" binding:"required"`
+		PromptTemplate string               `json:"prompt_template"`
+		AIModelID      string               `json:"ai_model_id"`
+		RunRealAI      bool                 `json:"run_real_ai"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -404,8 +417,21 @@ func (s *Server) handleStrategyTestRun(c *gin.Context) {
 		return
 	}
 
-	if req.PromptVariant == "" {
-		req.PromptVariant = "balanced"
+	if req.PromptTemplate == "" {
+		if req.Config.TradingMode != "" {
+			req.PromptTemplate = req.Config.TradingMode
+		} else {
+			req.PromptTemplate = "balanced"
+		}
+	}
+	if req.Config.TradingMode == "" {
+		req.Config.TradingMode = req.PromptTemplate
+	}
+	if req.Config.PromptSections.RoleDefinition == "" &&
+		req.Config.PromptSections.TradingFrequency == "" &&
+		req.Config.PromptSections.EntryStandards == "" &&
+		req.Config.PromptSections.DecisionProcess == "" {
+		req.Config.PromptSections = store.GetPromptSectionsByModeAndLang(req.PromptTemplate, "en")
 	}
 
 	// Create strategy engine to build prompt
@@ -486,14 +512,14 @@ func (s *Server) handleStrategyTestRun(c *gin.Context) {
 		},
 		Positions:      []decision.PositionInfo{},
 		CandidateCoins: candidates,
-		PromptVariant:  req.PromptVariant,
+		PromptVariant:  req.PromptTemplate,
 		MarketDataMap:  marketDataMap,
 		QuantDataMap:   quantDataMap,
 		OIRankingData:  oiRankingData,
 	}
 
 	// Build System Prompt
-	systemPrompt := engine.BuildSystemPromptWithContext(1000.0, req.PromptVariant, testContext)
+	systemPrompt := engine.BuildSystemPromptWithContext(1000.0, req.PromptTemplate, testContext)
 
 	// Build User Prompt (using real market data)
 	userPrompt := engine.BuildUserPrompt(testContext)
@@ -507,7 +533,7 @@ func (s *Server) handleStrategyTestRun(c *gin.Context) {
 				"user_prompt":     userPrompt,
 				"candidate_count": len(candidates),
 				"candidates":      candidates,
-				"prompt_variant":  req.PromptVariant,
+				"prompt_template": req.PromptTemplate,
 				"ai_response":     fmt.Sprintf("❌ AI call failed: %s", aiErr.Error()),
 				"ai_error":        aiErr.Error(),
 				"note":            "AI call error",
@@ -520,7 +546,7 @@ func (s *Server) handleStrategyTestRun(c *gin.Context) {
 			"user_prompt":     userPrompt,
 			"candidate_count": len(candidates),
 			"candidates":      candidates,
-			"prompt_variant":  req.PromptVariant,
+			"prompt_template": req.PromptTemplate,
 			"ai_response":     aiResponse,
 			"note":            "✅ Real AI test run successful",
 		})
@@ -533,7 +559,7 @@ func (s *Server) handleStrategyTestRun(c *gin.Context) {
 		"user_prompt":     userPrompt,
 		"candidate_count": len(candidates),
 		"candidates":      candidates,
-		"prompt_variant":  req.PromptVariant,
+		"prompt_template": req.PromptTemplate,
 		"ai_response":     "Please select an AI model and click 'Run Test' to perform real AI analysis.",
 		"note":            "AI model not selected or real AI call not enabled",
 	})

@@ -147,7 +147,7 @@ export const translations = {
           midPrice: 'Mid price',
         },
         promptPresets: {
-          baseline: 'Baseline',
+          balanced: 'Balanced',
           aggressive: 'Aggressive',
           conservative: 'Conservative',
           scalping: 'Scalping',
@@ -1355,7 +1355,7 @@ export const translations = {
           midPrice: '中间价',
         },
         promptPresets: {
-          baseline: '基础版',
+          balanced: '平衡版',
           aggressive: '激进版',
           conservative: '稳健版',
           scalping: '剥头皮',

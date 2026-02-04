@@ -68,7 +68,7 @@ export function StrategyStudioPage() {
   const [promptPreview, setPromptPreview] = useState<{
     system_prompt: string
     user_prompt?: string
-    prompt_variant: string
+    prompt_template: string
     config_summary: Record<string, unknown>
   } | null>(null)
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(false)
@@ -85,6 +85,13 @@ export function StrategyStudioPage() {
     duration_ms?: number
   } | null>(null)
   const [isRunningAiTest, setIsRunningAiTest] = useState(false)
+
+  const handleTemplateChange = (value: string) => {
+    setSelectedVariant(value)
+    if (editingConfig) {
+      updateConfig('trading_mode', value as StrategyConfig['trading_mode'])
+    }
+  }
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections((prev) => ({
@@ -383,7 +390,7 @@ export function StrategyStudioPage() {
         body: JSON.stringify({
           config: editingConfig,
           account_equity: 1000,
-          prompt_variant: selectedVariant,
+          prompt_template: selectedVariant,
         }),
       })
       if (!response.ok) throw new Error('Failed to fetch prompt preview')
@@ -410,7 +417,7 @@ export function StrategyStudioPage() {
         },
         body: JSON.stringify({
           config: editingConfig,
-          prompt_variant: selectedVariant,
+          prompt_template: selectedVariant,
           ai_model_id: selectedModelId,
           run_real_ai: true,
         }),
@@ -810,7 +817,7 @@ export function StrategyStudioPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <select
                     value={selectedVariant}
-                    onChange={(e) => setSelectedVariant(e.target.value)}
+                    onChange={(e) => handleTemplateChange(e.target.value)}
                     className="px-2 py-1.5 rounded text-xs"
                     style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
                   >
@@ -904,7 +911,7 @@ export function StrategyStudioPage() {
                   <div className="flex items-center gap-2">
                     <select
                       value={selectedVariant}
-                      onChange={(e) => setSelectedVariant(e.target.value)}
+                      onChange={(e) => handleTemplateChange(e.target.value)}
                       className="px-2 py-1.5 rounded text-xs"
                       style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
                     >

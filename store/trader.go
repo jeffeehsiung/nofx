@@ -23,7 +23,7 @@ type Trader struct {
 	StrategyID          string    `json:"strategy_id"` // Associated strategy ID
 	InitialBalance      float64   `json:"initial_balance"`
 	ScanIntervalMinutes int       `json:"scan_interval_minutes"`
-	TradingMode         string    `json:"trading_mode"` // Trading mode: "" (default/balanced), "aggressive", "conservative", or prompt variant ID
+	TradingMode         string    `json:"trading_mode"` // Trading mode: "" (default/balanced), "aggressive", "conservative", "scalping"
 	IsRunning           bool      `json:"is_running"`
 	IsCrossMargin       bool      `json:"is_cross_margin"`
 	ShowInCompetition   bool      `json:"show_in_competition"` // Whether to show in competition page

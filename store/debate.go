@@ -60,7 +60,7 @@ type DebateSession struct {
 	MaxRounds       int               `json:"max_rounds"`
 	CurrentRound    int               `json:"current_round"`
 	IntervalMinutes int               `json:"interval_minutes"`          // Debate interval (5, 15, 30, 60 minutes)
-	PromptVariant   string            `json:"prompt_variant"`            // balanced/aggressive/conservative/scalping
+	PromptVariant   string            `json:"prompt_variant"`            // prompt template (balanced/aggressive/conservative/scalping)
 	FinalDecision   *DebateDecision   `json:"final_decision,omitempty"`  // Single decision (backward compat)
 	FinalDecisions  []*DebateDecision `json:"final_decisions,omitempty"` // Multi-coin decisions
 	AutoExecute     bool              `json:"auto_execute"`

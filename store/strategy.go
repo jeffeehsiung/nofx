@@ -36,7 +36,7 @@ type StrategyConfig struct {
 	CustomPrompt string `json:"custom_prompt,omitempty"`
 	// risk control configuration
 	RiskControl RiskControlConfig `json:"risk_control"`
-	// trading mode: "balanced", "aggressive", "conservative"
+	// trading mode: "balanced", "aggressive", "conservative", "scalping"
 	TradingMode string `json:"trading_mode"`
 	// editable sections of System Prompt
 	PromptSections PromptSectionsConfig `json:"prompt_sections,omitempty"`
