@@ -6,7 +6,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"nofx/provider/coinglass"
 	"nofx/security"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -504,6 +507,295 @@ func GetMergedData(ai500Limit int) (*MergedData, error) {
 	return merged, nil
 }
 
+// ========== Binance Free API Fallback ==========
+
+// BinanceTicker24hr represents Binance 24hr ticker statistics
+type BinanceTicker24hr struct {
+	Symbol             string `json:"symbol"`
+	PriceChange        string `json:"priceChange"`
+	PriceChangePercent string `json:"priceChangePercent"`
+	WeightedAvgPrice   string `json:"weightedAvgPrice"`
+	LastPrice          string `json:"lastPrice"`
+	Volume             string `json:"volume"`
+	QuoteVolume        string `json:"quoteVolume"`
+	OpenTime           int64  `json:"openTime"`
+	CloseTime          int64  `json:"closeTime"`
+	Count              int64  `json:"count"`
+}
+
+// BinanceOITicker represents Binance open interest ticker
+type BinanceOITicker struct {
+	Symbol       string `json:"symbol"`
+	OpenInterest string `json:"openInterest"`
+	Time         int64  `json:"time"`
+}
+
+// GetBinance24hrTickers retrieves all 24hr ticker stats from Binance (free API)
+func GetBinance24hrTickers() ([]BinanceTicker24hr, error) {
+	url := "https://fapi.binance.com/fapi/v1/ticker/24hr"
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("binance ticker request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read ticker response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("binance API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var tickers []BinanceTicker24hr
+	if err := json.Unmarshal(body, &tickers); err != nil {
+		return nil, fmt.Errorf("ticker JSON parsing failed: %w", err)
+	}
+
+	return tickers, nil
+}
+
+// GetBinanceOITickers retrieves all open interest data from Binance (free API)
+func GetBinanceOITickers() ([]BinanceOITicker, error) {
+	url := "https://fapi.binance.com/fapi/v1/openInterest"
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("binance OI request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// The endpoint returns single OI for a symbol if symbol param provided,
+	// but without symbol it returns all symbols
+	// Actually, Binance doesn't have a batch endpoint, so we need to call ticker/24hr
+	// and then call individual OI for each symbol. For simplicity, we'll use volume-based ranking.
+	// Let's return empty and rely on volume ranking instead.
+	return nil, fmt.Errorf("binance OI batch endpoint not available, use volume-based ranking")
+}
+
+// GetTopCoinsByVolume retrieves top N coins by 24hr volume from Binance (free fallback)
+func GetTopCoinsByVolume(limit int) ([]string, error) {
+	log.Printf("🔄 Fetching top coins by volume from Binance free API (fallback)...")
+
+	tickers, err := GetBinance24hrTickers()
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter USDT perpetual futures only
+	var usdtTickers []BinanceTicker24hr
+	for _, ticker := range tickers {
+		if endsWith(ticker.Symbol, "USDT") {
+			usdtTickers = append(usdtTickers, ticker)
+		}
+	}
+
+	// Parse and sort by quote volume (descending)
+	type volumeEntry struct {
+		symbol string
+		volume float64
+	}
+	var entries []volumeEntry
+
+	for _, ticker := range usdtTickers {
+		volume := 0.0
+		if ticker.QuoteVolume != "" {
+			parsed, err := strconv.ParseFloat(ticker.QuoteVolume, 64)
+			if err == nil {
+				volume = parsed
+			}
+		}
+		entries = append(entries, volumeEntry{
+			symbol: ticker.Symbol,
+			volume: volume,
+		})
+	}
+
+	// Sort by volume descending (bubble sort)
+	for i := 0; i < len(entries); i++ {
+		for j := i + 1; j < len(entries); j++ {
+			if entries[i].volume < entries[j].volume {
+				entries[i], entries[j] = entries[j], entries[i]
+			}
+		}
+	}
+
+	// Take top N
+	maxCount := limit
+	if len(entries) < maxCount {
+		maxCount = len(entries)
+	}
+
+	var symbols []string
+	for i := 0; i < maxCount; i++ {
+		symbols = append(symbols, entries[i].symbol)
+	}
+
+	log.Printf("✓ Binance fallback: fetched top %d coins by volume", len(symbols))
+	return symbols, nil
+}
+
+// GetTopCoinsByPriceChange retrieves top N coins by 24hr price change % from Binance (free fallback)
+func GetTopCoinsByPriceChange(limit int) ([]string, error) {
+	log.Printf("🔄 Fetching top coins by price change from Binance free API (fallback)...")
+
+	tickers, err := GetBinance24hrTickers()
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter USDT perpetual futures only
+	var usdtTickers []BinanceTicker24hr
+	for _, ticker := range tickers {
+		if endsWith(ticker.Symbol, "USDT") {
+			usdtTickers = append(usdtTickers, ticker)
+		}
+	}
+
+	// Parse and sort by price change % (descending)
+	type changeEntry struct {
+		symbol        string
+		priceChange   float64
+		volume        float64
+		changePercent float64
+	}
+	var entries []changeEntry
+
+	for _, ticker := range usdtTickers {
+		changePercent := 0.0
+		if ticker.PriceChangePercent != "" {
+			parsed, err := strconv.ParseFloat(ticker.PriceChangePercent, 64)
+			if err == nil {
+				changePercent = parsed
+			}
+		}
+
+		volume := 0.0
+		if ticker.QuoteVolume != "" {
+			parsed, err := strconv.ParseFloat(ticker.QuoteVolume, 64)
+			if err == nil {
+				volume = parsed
+			}
+		}
+
+		// Filter: require positive change and reasonable volume (> $1M)
+		if changePercent > 0 && volume > 1000000 {
+			entries = append(entries, changeEntry{
+				symbol:        ticker.Symbol,
+				changePercent: changePercent,
+				volume:        volume,
+			})
+		}
+	}
+
+	// Sort by price change % descending (bubble sort)
+	for i := 0; i < len(entries); i++ {
+		for j := i + 1; j < len(entries); j++ {
+			if entries[i].changePercent < entries[j].changePercent {
+				entries[i], entries[j] = entries[j], entries[i]
+			}
+		}
+	}
+
+	// Take top N
+	maxCount := limit
+	if len(entries) < maxCount {
+		maxCount = len(entries)
+	}
+
+	var symbols []string
+	for i := 0; i < maxCount; i++ {
+		symbols = append(symbols, entries[i].symbol)
+	}
+
+	log.Printf("✓ Binance fallback: fetched top %d coins by price change (> 0%% with >$1M volume)", len(symbols))
+	return symbols, nil
+}
+
+// GetTopCoinsWithFallback retrieves top coins with automatic fallback
+// Priority: 1) External API (if configured), 2) Binance volume-based ranking
+func GetTopCoinsWithFallback(limit int, useExternalFirst bool) ([]string, string, error) {
+	// Try external API first if requested and configured
+	if useExternalFirst && strings.TrimSpace(ai500Config.APIURL) != "" {
+		symbols, err := GetTopRatedCoins(limit)
+		if err == nil && len(symbols) > 0 {
+			log.Printf("✓ Using external AI500 API data (%d coins)", len(symbols))
+			return symbols, "external_api", nil
+		}
+		log.Printf("⚠️  External API failed or empty: %v, falling back to Binance", err)
+	}
+
+	// Fallback: Binance volume-based ranking
+	symbols, err := GetTopCoinsByVolume(limit)
+	if err != nil {
+		return nil, "", fmt.Errorf("both external API and Binance fallback failed: %w", err)
+	}
+
+	return symbols, "binance_volume", nil
+}
+
+// GetOITopSymbolsWithFallback retrieves OI top symbols with automatic fallback
+// Priority: 1) External OI API, 2) Binance price change % ranking
+func GetOITopSymbolsWithFallback(limit int, useExternalFirst bool) ([]string, string, error) {
+	// Try external OI Top API first if requested and configured
+	if useExternalFirst && strings.TrimSpace(oiTopConfig.APIURL) != "" {
+		symbols, err := GetOITopSymbols()
+		if err == nil && len(symbols) > 0 {
+			log.Printf("✓ Using external OI Top API data (%d coins)", len(symbols))
+			return symbols, "external_oi_api", nil
+		}
+		log.Printf("⚠️  External OI API failed or empty: %v, falling back to Binance", err)
+	}
+
+	// Fallback: Binance price change % ranking (momentum proxy)
+	symbols, err := GetTopCoinsByPriceChange(limit)
+	if err != nil {
+		return nil, "", fmt.Errorf("both external OI API and Binance fallback failed: %w", err)
+	}
+
+	return symbols, "binance_momentum", nil
+}
+
+// GetOIRankingFromCoinGlass retrieves OI ranking from CoinGlass free API
+func GetOIRankingFromCoinGlass(duration string, limit int) (*OIRankingData, error) {
+	apiKey := strings.TrimSpace(os.Getenv("COINGLASS_API_KEY"))
+	client := coinglass.NewClient()
+	if apiKey != "" {
+		client = coinglass.NewClientWithAPIKey(apiKey)
+	}
+	positions, err := client.GetTopOISymbols(duration, limit)
+	if err != nil {
+		return nil, fmt.Errorf("CoinGlass fetch failed: %w", err)
+	}
+
+	// Convert CoinGlass positions to OIPosition format
+	oiPositions := make([]OIPosition, 0, len(positions))
+	for i, pos := range positions {
+		oiPos := OIPosition{
+			Symbol:            pos.Symbol,
+			Rank:              i + 1,
+			CurrentOI:         pos.OpenInterestUsd,
+			OIDelta:           pos.Change,
+			OIDeltaPercent:    pos.ChangePercent,
+			OIDeltaValue:      pos.Change,
+			PriceDeltaPercent: pos.PriceChange,
+			NetLong:           pos.TakerLongRatio * 100,  // Convert ratio to percentage
+			NetShort:          pos.TakerShortRatio * 100, // Convert ratio to percentage
+		}
+		oiPositions = append(oiPositions, oiPos)
+	}
+
+	return &OIRankingData{
+		Duration:     duration,
+		TopPositions: oiPositions,
+		FetchedAt:    time.Now(),
+	}, nil
+}
+
 // ========== Backward Compatibility Aliases ==========
 
 // Deprecated: Use SetAI500API instead
@@ -519,7 +811,7 @@ func GetCoinPool() ([]CoinData, error) {
 // Deprecated: Use MergedData instead
 type MergedCoinPool = MergedData
 
-// Deprecated: Use GetMergedData instead
+// Deprecated: Use GetMergedCoinPool instead
 func GetMergedCoinPool(ai500Limit int) (*MergedData, error) {
 	return GetMergedData(ai500Limit)
 }

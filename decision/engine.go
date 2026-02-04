@@ -578,18 +578,31 @@ func (e *StrategyEngine) getCoinPoolCoins(limit int) ([]CandidateCoin, error) {
 		limit = 30
 	}
 
-	symbols, err := provider.GetTopRatedCoins(limit)
+	// Check if Binance fallback is enabled (default: true)
+	useFallback := true
+	if e.config.CoinSource.EnableBinanceFallback == false {
+		useFallback = false
+	}
+
+	// Use fallback system: external API → Binance volume ranking
+	symbols, source, err := provider.GetTopCoinsWithFallback(limit, useFallback)
 	if err != nil {
 		return nil, err
 	}
 
 	var candidates []CandidateCoin
 	for _, symbol := range symbols {
+		sourceLabel := "ai500"
+		if source == "binance_volume" {
+			sourceLabel = "binance_volume"
+		}
 		candidates = append(candidates, CandidateCoin{
 			Symbol:  symbol,
-			Sources: []string{"ai500"},
+			Sources: []string{sourceLabel},
 		})
 	}
+
+	logger.Infof("✓ Got %d coin pool candidates from source: %s", len(candidates), source)
 	return candidates, nil
 }
 
@@ -598,22 +611,31 @@ func (e *StrategyEngine) getOITopCoins(limit int) ([]CandidateCoin, error) {
 		limit = 20
 	}
 
-	positions, err := provider.GetOITopPositions()
+	// Check if Binance fallback is enabled (default: true)
+	useFallback := true
+	if e.config.CoinSource.EnableBinanceFallback == false {
+		useFallback = false
+	}
+
+	// Use fallback system: external OI API → Binance momentum ranking
+	symbols, source, err := provider.GetOITopSymbolsWithFallback(limit, useFallback)
 	if err != nil {
 		return nil, err
 	}
 
 	var candidates []CandidateCoin
-	for i, pos := range positions {
-		if i >= limit {
-			break
+	for _, symbol := range symbols {
+		sourceLabel := "oi_top"
+		if source == "binance_momentum" {
+			sourceLabel = "binance_momentum"
 		}
-		symbol := market.Normalize(pos.Symbol)
 		candidates = append(candidates, CandidateCoin{
 			Symbol:  symbol,
-			Sources: []string{"oi_top"},
+			Sources: []string{sourceLabel},
 		})
 	}
+
+	logger.Infof("✓ Got %d OI top candidates from source: %s", len(candidates), source)
 	return candidates, nil
 }
 
@@ -743,45 +765,55 @@ func extractJSONPath(data interface{}, path string) interface{} {
 
 // FetchQuantData fetches quantitative data for a single coin
 func (e *StrategyEngine) FetchQuantData(symbol string) (*QuantData, error) {
-	if !e.config.Indicators.EnableQuantData || e.config.Indicators.QuantDataAPIURL == "" {
+	if !e.config.Indicators.EnableQuantData {
 		return nil, nil
 	}
 
-	apiURL := e.config.Indicators.QuantDataAPIURL
-	url := strings.ReplaceAll(apiURL, "{symbol}", symbol)
+	// Try external API first if configured
+	if e.config.Indicators.QuantDataAPIURL != "" {
+		apiURL := e.config.Indicators.QuantDataAPIURL
+		url := strings.ReplaceAll(apiURL, "{symbol}", symbol)
 
-	// SSRF Protection: Validate URL before making request
-	resp, err := security.SafeGet(url, 10*time.Second)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+		// SSRF Protection: Validate URL before making request
+		resp, err := security.SafeGet(url, 10*time.Second)
+		if err == nil {
+			defer func() {
+				_ = resp.Body.Close()
+			}()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP status code: %d", resp.StatusCode)
-	}
+			if resp.StatusCode == http.StatusOK {
+				body, err := io.ReadAll(resp.Body)
+				if err == nil {
+					var apiResp struct {
+						Code int        `json:"code"`
+						Data *QuantData `json:"data"`
+					}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var apiResp struct {
-		Code int        `json:"code"`
-		Data *QuantData `json:"data"`
-	}
-
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	if apiResp.Code != 0 {
-		return nil, fmt.Errorf("API returned error code: %d", apiResp.Code)
+					if err := json.Unmarshal(body, &apiResp); err == nil && apiResp.Code == 0 {
+						// Success - return external API data
+						return apiResp.Data, nil
+					}
+				}
+			}
+		}
+		// External API failed, log and try fallback
+		logger.Infof("⚠️  External quant API failed for %s, trying DIY fallback", symbol)
 	}
 
-	return apiResp.Data, nil
+	// Fallback to DIY calculation if enabled
+	if e.config.CoinSource.EnableBinanceFallback {
+		diyData, err := provider.GetDIYQuantData(symbol)
+		if err != nil {
+			return nil, fmt.Errorf("DIY fallback failed: %w", err)
+		}
+
+		// Convert DIY data to QuantData format
+		quantData := convertDIYToQuantData(diyData)
+		logger.Infof("✓ Using DIY quant data for %s (free fallback)", symbol)
+		return quantData, nil
+	}
+
+	return nil, fmt.Errorf("no quant data source available")
 }
 
 // FetchQuantDataBatch batch fetches quantitative data
@@ -844,6 +876,18 @@ func (e *StrategyEngine) FetchOIRankingData() *provider.OIRankingData {
 	data, err := provider.GetOIRankingData(baseURL, authKey, duration, limit)
 	if err != nil {
 		logger.Warnf("⚠️  Failed to fetch OI ranking data: %v", err)
+
+		// Fallback: CoinGlass (requires COINGLASS_API_KEY to be set)
+		if e.config.CoinSource.EnableBinanceFallback {
+			fallbackData, fallbackErr := provider.GetOIRankingFromCoinGlass(duration, limit)
+			if fallbackErr != nil {
+				logger.Warnf("⚠️  CoinGlass fallback failed: %v", fallbackErr)
+				return nil
+			}
+			logger.Infof("✓ Using CoinGlass OI ranking fallback (%d positions)", len(fallbackData.TopPositions))
+			return fallbackData
+		}
+
 		return nil
 	}
 
@@ -1520,4 +1564,69 @@ func buildMetaPromptZH(stats interface{}, wins, losses []interface{}) string {
 	sb.WriteString("请理性一步步分析且再下5个交易前仔细思考，交易后仔细复盘。\n\n")
 
 	return sb.String()
+}
+
+// convertDIYToQuantData converts DIY quant data to QuantData format
+func convertDIYToQuantData(diy *provider.DIYQuantData) *QuantData {
+	if diy == nil {
+		return nil
+	}
+
+	qd := &QuantData{
+		Symbol: diy.Symbol,
+		Price:  diy.Price.Current,
+	}
+
+	// Convert netflow data
+	if diy.Netflow != nil {
+		// Map taker buy/sell to institutional/personal approximation
+		// High taker buy ratio suggests institutional long positions
+		inst := make(map[string]float64)
+		pers := make(map[string]float64)
+
+		// Estimate institutional vs personal based on taker ratio
+		if diy.Netflow.TakerBuyRatio > 55 {
+			// More institutional buying
+			inst["future"] = diy.Netflow.TakerBuyVolume * 0.7 // 70% attributed to institutions
+			pers["future"] = diy.Netflow.TakerBuyVolume * 0.3 // 30% retail
+		} else if diy.Netflow.TakerBuyRatio < 45 {
+			// More institutional selling
+			inst["future"] = -diy.Netflow.TakerSellVolume * 0.7
+			pers["future"] = -diy.Netflow.TakerSellVolume * 0.3
+		} else {
+			// Balanced - split evenly
+			inst["future"] = (diy.Netflow.TakerBuyVolume - diy.Netflow.TakerSellVolume) * 0.5
+			pers["future"] = (diy.Netflow.TakerBuyVolume - diy.Netflow.TakerSellVolume) * 0.5
+		}
+
+		qd.Netflow = &NetflowData{
+			Institution: &FlowTypeData{Future: inst},
+			Personal:    &FlowTypeData{Future: pers},
+		}
+	}
+
+	// Convert OI data
+	if diy.OI != nil {
+		oiMap := make(map[string]*OIData)
+		oiMap["24h"] = &OIData{
+			CurrentOI: diy.OI.Current,
+			Delta: map[string]*OIDeltaData{
+				"24h": {
+					OIDelta:        diy.OI.Change24h,
+					OIDeltaValue:   diy.OI.Change24h * diy.Price.Current,
+					OIDeltaPercent: diy.OI.ChangePercent24h,
+				},
+			},
+		}
+		qd.OI = oiMap
+	}
+
+	// Convert price data
+	if diy.Price != nil {
+		priceChange := make(map[string]float64)
+		priceChange["24h"] = diy.Price.ChangePercent24h
+		qd.PriceChange = priceChange
+	}
+
+	return qd
 }

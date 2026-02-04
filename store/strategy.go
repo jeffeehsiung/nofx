@@ -895,6 +895,8 @@ type CoinSourceConfig struct {
 	OITopLimit int `json:"oi_top_limit,omitempty"`
 	// OI Top API URL (strategy-level configuration)
 	OITopAPIURL string `json:"oi_top_api_url,omitempty"`
+	// Fallback configuration - automatically use free Binance API when external providers fail
+	EnableBinanceFallback bool `json:"enable_binance_fallback"` // default: true - enables automatic fallback to Binance free API
 }
 
 // IndicatorConfig indicator configuration
@@ -1173,13 +1175,14 @@ func (c *StrategyConfig) AvailableIndicatorsString(sb *strings.Builder, lang str
 func GetDefaultStrategyConfig(lang string) StrategyConfig {
 	config := StrategyConfig{
 		CoinSource: CoinSourceConfig{
-			SourceType:     "coinpool",
-			UseCoinPool:    true,
-			CoinPoolLimit:  10,
-			CoinPoolAPIURL: "http://nofxaios.com:30006/api/ai500/list?auth=cm_568c67eae410d912c54c",
-			UseOITop:       false,
-			OITopLimit:     20,
-			OITopAPIURL:    "http://nofxaios.com:30006/api/oi/top-ranking?limit=20&duration=1h&auth=cm_568c67eae410d912c54c",
+			SourceType:            "coinpool",
+			UseCoinPool:           true,
+			CoinPoolLimit:         10,
+			CoinPoolAPIURL:        "http://nofxaios.com:30006/api/ai500/list?auth=cm_568c67eae410d912c54c",
+			UseOITop:              false,
+			OITopLimit:            20,
+			OITopAPIURL:           "http://nofxaios.com:30006/api/oi/top-ranking?limit=20&duration=1h&auth=cm_568c67eae410d912c54c",
+			EnableBinanceFallback: true, // Enable automatic fallback to Binance free API
 		},
 		Indicators: IndicatorConfig{
 			Klines: KlineConfig{
