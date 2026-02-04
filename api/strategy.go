@@ -123,6 +123,9 @@ func (s *Server) handleCreateStrategy(c *gin.Context) {
 		return
 	}
 
+	// Ensure EnableBinanceFallback defaults to true for all new strategies
+	req.Config.CoinSource.EnableBinanceFallback = true
+
 	// Serialize configuration
 	configJSON, err := json.Marshal(req.Config)
 	if err != nil {

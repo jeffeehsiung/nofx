@@ -1430,6 +1430,21 @@ func (s *StrategyStore) Duplicate(userID, sourceID, newID, newName string) error
 		return fmt.Errorf("failed to get source strategy: %w", err)
 	}
 
+	// Parse source config to ensure EnableBinanceFallback is enabled
+	sourceConfig, err := (&Strategy{Config: source.Config}).ParseConfig()
+	if err != nil {
+		return fmt.Errorf("failed to parse source strategy config: %w", err)
+	}
+
+	// Ensure EnableBinanceFallback is enabled in duplicated strategy
+	sourceConfig.CoinSource.EnableBinanceFallback = true
+
+	// Re-serialize the updated config
+	configJSON, err := json.Marshal(sourceConfig)
+	if err != nil {
+		return fmt.Errorf("failed to serialize config: %w", err)
+	}
+
 	// create new strategy
 	newStrategy := &Strategy{
 		ID:          newID,
@@ -1438,7 +1453,7 @@ func (s *StrategyStore) Duplicate(userID, sourceID, newID, newName string) error
 		Description: "Created based on [" + source.Name + "]",
 		IsActive:    false,
 		IsDefault:   false,
-		Config:      source.Config,
+		Config:      string(configJSON),
 	}
 
 	return s.Create(newStrategy)
