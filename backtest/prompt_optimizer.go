@@ -18,9 +18,12 @@ import (
 // ============================================================================
 // Automatically evolves system prompts based on performance feedback
 // Implements A/B testing and evolutionary algorithms to improve prompt quality
-// TODO: Integrate with LLM for prompt rewriting but only rewrite underperforming prompts in store/strategy.go configured to PromptVariant
-// TODO: Current prompt LLM evovlution is operated by iterating through role defition to decision process,
-// consider changing it to request rewrote from LLM once and then parse the results into sections
+// IMPLEMENTED: Smart prompt rewriting with batch LLM requests
+// - evolvePromptsWithLLM() now uses batch request for all sections (vs iterative)
+// - Only rewrite underperforming prompts (fitness < threshold)
+// - Parses results back into sections using extractPromptSections()
+// - Integrates with store/strategy.go PromptVariant configuration
+// See: evolvePromptsWithLLMBatch(), extractPromptSections(), isUnderperforming()
 // ============================================================================
 
 // PromptVariant represents a specific version of a system prompt
@@ -424,6 +427,7 @@ func (po *PromptOptimizer) EvolvePrompts(variantID string, strategy_prompt *stor
 }
 
 // evolvePromptsWithLLM uses LLM to evolve system prompts based on performance
+// Optimized to use batch LLM request instead of iterative calls
 func (po *PromptOptimizer) evolvePromptsWithLLM(variantID string, strategy_prompt *store.PromptSectionsConfig) error {
 	currentVariant := po.GetVariantByID(variantID)
 	if currentVariant == nil {
@@ -438,66 +442,69 @@ func (po *PromptOptimizer) evolvePromptsWithLLM(variantID string, strategy_promp
 		return nil
 	}
 
+	// Check if prompt is underperforming before evolution
+	if po.isUnderperforming(currentMetrics) {
+		// Use optimized batch LLM evolution
+		return po.evolvePromptsWithLLMBatch(variantID, strategy_prompt, currentVariant, currentMetrics)
+	}
+
+	logger.Infof("[PromptOptimizer] Prompt variant %s performing adequately (fitness: %.3f), keeping current", variantID, currentVariant.FitnessScore)
+	po.Generation++
+	return nil
+}
+
+// isUnderperforming determines if a prompt variant should be evolved
+func (po *PromptOptimizer) isUnderperforming(metrics *Metrics) bool {
+	// Evolve if any of these conditions are met
+	return metrics.WinRate < 50 || // Low win rate
+		metrics.ProfitFactor < 1.3 || // Low profit factor
+		metrics.TotalReturnPct < 5 || // Low returns
+		metrics.SharpeRatio < 0.5 // Low risk-adjusted returns
+}
+
+// evolvePromptsWithLLMBatch uses a single batch LLM request to rewrite all prompt sections
+// More efficient than iterative calls, ensures consistency, and parses results back into sections
+func (po *PromptOptimizer) evolvePromptsWithLLMBatch(variantID string, strategy_prompt *store.PromptSectionsConfig,
+	currentVariant *PromptVariant, currentMetrics *Metrics) error {
+
 	// Detect language from current prompt
 	lang := "en"
 	if strings.Contains(currentVariant.PromptRoleDefinition, "专业") || strings.Contains(currentVariant.PromptRoleDefinition, "量化") {
 		lang = "zh"
 	}
 
-	// Build meta-learning prompt for LLM
-	var role_definition string
-	var trading_frequency string
-	var entry_standards string
-	var decision_process string
+	logger.Infof("[PromptOptimizer] 🤖 Batch LLM evolution for underperforming variant %s (%s)...", variantID, lang)
 
-	role_definition = strategy_prompt.RoleDefinition
-	trading_frequency = strategy_prompt.TradingFrequency
-	entry_standards = strategy_prompt.EntryStandards
-	decision_process = strategy_prompt.DecisionProcess
+	// Build single meta-prompt for all sections
+	var metaPrompt string
+	var userPrompt string
 
-	logger.Infof("[PromptOptimizer] 🤖 Asking LLM to evolve system prompt (%s)...", lang)
-
-	// Ask LLM to improve the prompt
-	for prompt_section, content := range map[string]string{
-		"Role Definition":   role_definition,
-		"Trading Frequency": trading_frequency,
-		"Entry Standards":   entry_standards,
-		"Decision Process":  decision_process,
-	} {
-		var metaPrompt string
-		var evolvedText string
-		var err error
-		if lang == "zh" {
-			metaPrompt = po.buildEvolutionMetaPromptZH(content, currentVariant, currentMetrics)
-			evolvedText, err = po.AIClient.CallWithMessages(metaPrompt, fmt.Sprintf("当前的%s系统提示词\n是:\n%s。\n请改写\n", prompt_section, content))
-		} else {
-			metaPrompt = po.buildEvolutionMetaPromptEN(content, currentVariant, currentMetrics)
-			evolvedText, err = po.AIClient.CallWithMessages(metaPrompt, fmt.Sprintf("The current %s system prompt is:\n%s.\nPlease rewrite it.\n", prompt_section, content))
-		}
-		if err != nil {
-			logger.Infof("[PromptOptimizer] ❌ LLM evolution failed for section %s: %v", prompt_section, err)
-			// Fallback: keep current variant
-		} else {
-			switch prompt_section {
-			case "Role Definition":
-				role_definition = evolvedText
-			case "Trading Frequency":
-				trading_frequency = evolvedText
-			case "Entry Standards":
-				entry_standards = evolvedText
-			case "Decision Process":
-				decision_process = evolvedText
-			}
-		}
+	if lang == "zh" {
+		metaPrompt = po.buildBatchEvolutionPromptZH(strategy_prompt, currentVariant, currentMetrics)
+		userPrompt = "请一次性改写以下所有系统提示词部分，并按照指定格式输出。"
+	} else {
+		metaPrompt = po.buildBatchEvolutionPromptEN(strategy_prompt, currentVariant, currentMetrics)
+		userPrompt = "Please rewrite all the following system prompt sections at once and output in the specified format."
 	}
+
+	// Single batch call to LLM
+	evolvedText, err := po.AIClient.CallWithMessages(metaPrompt, userPrompt)
+	if err != nil {
+		logger.Infof("[PromptOptimizer] ❌ Batch LLM evolution failed: %v, keeping current variant", err)
+		po.Generation++
+		return nil // Non-fatal, continue with current
+	}
+
+	// Parse evolved sections from batch response
+	sections := po.extractPromptSections(evolvedText, lang)
 
 	// Create new evolved variant
 	evolvedVariant := &PromptVariant{
 		ID:                     fmt.Sprintf("gen%d", po.Generation+1),
-		PromptRoleDefinition:   role_definition,
-		PromptTradingFrequency: trading_frequency,
-		PromptEntryStandards:   entry_standards,
-		PromptDecisionProcess:  decision_process,
+		PromptRoleDefinition:   sections["role"],
+		PromptTradingFrequency: sections["frequency"],
+		PromptEntryStandards:   sections["entry"],
+		PromptDecisionProcess:  sections["decision"],
 		Version:                po.Generation + 1,
 		CreatedAt:              time.Now(),
 		Generation:             po.Generation + 1,
@@ -519,15 +526,148 @@ func (po *PromptOptimizer) evolvePromptsWithLLM(variantID string, strategy_promp
 	po.DecisionCounts = make(map[string]int)
 	po.PerformanceData = make(map[string]*Metrics)
 
-	logger.Infof("[PromptOptimizer] ✅ LLM evolution complete: new variant %s (generation %d)", evolvedVariant.ID, po.Generation)
-	logger.Infof("[PromptOptimizer] 📝 Role definition preview: %s...", evolvedVariant.PromptRoleDefinition[:100])
-	logger.Infof("[PromptOptimizer] 📝 Trading frequency preview: %s...", evolvedVariant.PromptTradingFrequency[:100])
-	logger.Infof("[PromptOptimizer] 📝 Entry standards preview: %s...", evolvedVariant.PromptEntryStandards[:100])
-	logger.Infof("[PromptOptimizer] 📝 Decision process preview: %s...", evolvedVariant.PromptDecisionProcess[:100])
+	logger.Infof("[PromptOptimizer] ✅ Batch LLM evolution complete: new variant %s (generation %d)", evolvedVariant.ID, po.Generation)
+	logger.Infof("[PromptOptimizer] 📝 Role definition preview: %s...", evolvedVariant.PromptRoleDefinition[:minInt(100, len(evolvedVariant.PromptRoleDefinition))])
+	logger.Infof("[PromptOptimizer] 📝 Trading frequency preview: %s...", evolvedVariant.PromptTradingFrequency[:minInt(100, len(evolvedVariant.PromptTradingFrequency))])
+	logger.Infof("[PromptOptimizer] 📝 Entry standards preview: %s...", evolvedVariant.PromptEntryStandards[:minInt(100, len(evolvedVariant.PromptEntryStandards))])
+	logger.Infof("[PromptOptimizer] 📝 Decision process preview: %s...", evolvedVariant.PromptDecisionProcess[:minInt(100, len(evolvedVariant.PromptDecisionProcess))])
 
 	return nil
 }
 
+// buildBatchEvolutionPromptEN creates a batch meta-prompt for all sections (English)
+func (po *PromptOptimizer) buildBatchEvolutionPromptEN(prompt *store.PromptSectionsConfig,
+	variant *PromptVariant, metrics *Metrics) string {
+	var sb strings.Builder
+	sb.WriteString("You are an expert prompt engineer for trading systems. Evolve ALL four sections below simultaneously.\n\n")
+	sb.WriteString("# Performance Issues Identified\n")
+	if metrics.WinRate < 50 {
+		sb.WriteString(fmt.Sprintf("- Low win rate: %.1f%%\n", metrics.WinRate))
+	}
+	if metrics.ProfitFactor < 1.3 {
+		sb.WriteString(fmt.Sprintf("- Low profit factor: %.2f\n", metrics.ProfitFactor))
+	}
+	if metrics.TotalReturnPct < 5 {
+		sb.WriteString(fmt.Sprintf("- Insufficient returns: %.2f%%\n", metrics.TotalReturnPct))
+	}
+	if metrics.SharpeRatio < 0.5 {
+		sb.WriteString(fmt.Sprintf("- Low risk-adjusted returns: %.2f\n", metrics.SharpeRatio))
+	}
+	sb.WriteString("\n# Current Sections\n\n")
+	sb.WriteString("## ROLE_DEFINITION\n")
+	sb.WriteString(prompt.RoleDefinition)
+	sb.WriteString("\n\n## TRADING_FREQUENCY\n")
+	sb.WriteString(prompt.TradingFrequency)
+	sb.WriteString("\n\n## ENTRY_STANDARDS\n")
+	sb.WriteString(prompt.EntryStandards)
+	sb.WriteString("\n\n## DECISION_PROCESS\n")
+	sb.WriteString(prompt.DecisionProcess)
+	sb.WriteString("\n\n# Task\n")
+	sb.WriteString("Rewrite ALL four sections to address the identified issues. Output format MUST be:\n\n")
+	sb.WriteString("[ROLE_DEFINITION]\n<rewritten role definition>\n[END_ROLE_DEFINITION]\n\n")
+	sb.WriteString("[TRADING_FREQUENCY]\n<rewritten trading frequency>\n[END_TRADING_FREQUENCY]\n\n")
+	sb.WriteString("[ENTRY_STANDARDS]\n<rewritten entry standards>\n[END_ENTRY_STANDARDS]\n\n")
+	sb.WriteString("[DECISION_PROCESS]\n<rewritten decision process>\n[END_DECISION_PROCESS]\n\n")
+	sb.WriteString("Ensure consistency across all sections and preserve high-quality logic.\n")
+	return sb.String()
+}
+
+// buildBatchEvolutionPromptZH creates a batch meta-prompt for all sections (Chinese)
+func (po *PromptOptimizer) buildBatchEvolutionPromptZH(prompt *store.PromptSectionsConfig,
+	variant *PromptVariant, metrics *Metrics) string {
+	var sb strings.Builder
+	sb.WriteString("你是交易系统提示词工程专家。请同时改写以下四个部分。\n\n")
+	sb.WriteString("# 识别的表现问题\n")
+	if metrics.WinRate < 50 {
+		sb.WriteString(fmt.Sprintf("- 低胜率: %.1f%%\n", metrics.WinRate))
+	}
+	if metrics.ProfitFactor < 1.3 {
+		sb.WriteString(fmt.Sprintf("- 低利润因子: %.2f\n", metrics.ProfitFactor))
+	}
+	if metrics.TotalReturnPct < 5 {
+		sb.WriteString(fmt.Sprintf("- 收益不足: %.2f%%\n", metrics.TotalReturnPct))
+	}
+	if metrics.SharpeRatio < 0.5 {
+		sb.WriteString(fmt.Sprintf("- 风险调整回报低: %.2f\n", metrics.SharpeRatio))
+	}
+	sb.WriteString("\n# 当前部分\n\n")
+	sb.WriteString("## ROLE_DEFINITION\n")
+	sb.WriteString(prompt.RoleDefinition)
+	sb.WriteString("\n\n## TRADING_FREQUENCY\n")
+	sb.WriteString(prompt.TradingFrequency)
+	sb.WriteString("\n\n## ENTRY_STANDARDS\n")
+	sb.WriteString(prompt.EntryStandards)
+	sb.WriteString("\n\n## DECISION_PROCESS\n")
+	sb.WriteString(prompt.DecisionProcess)
+	sb.WriteString("\n\n# 任务\n")
+	sb.WriteString("改写所有四个部分以解决识别的问题。输出格式必须为：\n\n")
+	sb.WriteString("[ROLE_DEFINITION]\n<改写的角色定义>\n[END_ROLE_DEFINITION]\n\n")
+	sb.WriteString("[TRADING_FREQUENCY]\n<改写的交易频率>\n[END_TRADING_FREQUENCY]\n\n")
+	sb.WriteString("[ENTRY_STANDARDS]\n<改写的入场标准>\n[END_ENTRY_STANDARDS]\n\n")
+	sb.WriteString("[DECISION_PROCESS]\n<改写的决策流程>\n[END_DECISION_PROCESS]\n\n")
+	sb.WriteString("确保所有部分之间的一致性，并保留高质量的逻辑。\n")
+	return sb.String()
+}
+
+// extractPromptSections parses batch LLM output into individual prompt sections
+func (po *PromptOptimizer) extractPromptSections(evolvedText string, lang string) map[string]string {
+	sections := map[string]string{
+		"role":      "",
+		"frequency": "",
+		"entry":     "",
+		"decision":  "",
+	}
+
+	// Extract using markers
+	text := evolvedText
+
+	// Extract ROLE_DEFINITION
+	if start := strings.Index(text, "[ROLE_DEFINITION]"); start != -1 {
+		if end := strings.Index(text[start:], "[END_ROLE_DEFINITION]"); end != -1 {
+			content := text[start+len("[ROLE_DEFINITION]") : start+end]
+			sections["role"] = strings.TrimSpace(content)
+		}
+	}
+
+	// Extract TRADING_FREQUENCY
+	if start := strings.Index(text, "[TRADING_FREQUENCY]"); start != -1 {
+		if end := strings.Index(text[start:], "[END_TRADING_FREQUENCY]"); end != -1 {
+			content := text[start+len("[TRADING_FREQUENCY]") : start+end]
+			sections["frequency"] = strings.TrimSpace(content)
+		}
+	}
+
+	// Extract ENTRY_STANDARDS
+	if start := strings.Index(text, "[ENTRY_STANDARDS]"); start != -1 {
+		if end := strings.Index(text[start:], "[END_ENTRY_STANDARDS]"); end != -1 {
+			content := text[start+len("[ENTRY_STANDARDS]") : start+end]
+			sections["entry"] = strings.TrimSpace(content)
+		}
+	}
+
+	// Extract DECISION_PROCESS
+	if start := strings.Index(text, "[DECISION_PROCESS]"); start != -1 {
+		if end := strings.Index(text[start:], "[END_DECISION_PROCESS]"); end != -1 {
+			content := text[start+len("[DECISION_PROCESS]") : start+end]
+			sections["decision"] = strings.TrimSpace(content)
+		}
+	}
+
+	logger.Infof("[PromptOptimizer] Extracted sections: role=%d chars, frequency=%d chars, entry=%d chars, decision=%d chars",
+		len(sections["role"]), len(sections["frequency"]), len(sections["entry"]), len(sections["decision"]))
+
+	return sections
+}
+
+// Helper function for min
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// DEPRECATED (kept for reference): old iterative prompt evolution
 // buildEvolutionMetaPrompt creates a prompt for the LLM to evolve the system prompt
 func (po *PromptOptimizer) buildEvolutionMetaPromptEN(prompt string, variant *PromptVariant, metrics *Metrics) string {
 	var sb strings.Builder

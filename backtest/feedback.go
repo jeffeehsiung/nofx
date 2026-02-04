@@ -20,10 +20,15 @@ import (
 // ============================================================================
 // This module implements a feedback loop that analyzes past trading decisions
 // and their outcomes to help the LLM learn from mistakes and improve profitability.
-// TODO: Integrate with LLM for prompt rewriting based on feedback analysis. The feedback itself is now hardcoded and hsould also be based on LLM analysis and evolvement.
-// TODO: Consider evolve feedbakc with LLM based on recorded trading outcomes, not just hardcoded rules,
-// enforce quantified numbers instead of qualitative phrases,
-// and then parse the analysis and feedback into rules to be checked compliance by compliance tracker (backtest/compliance_tracker.go)
+// IMPLEMENTED: LLM-based feedback generation for AI-driven analysis evolution
+// - FeedbackGenerator now supports AIClient for LLM-powered feedback analysis
+// - GenerateFeedbackWithLLM() method evolves feedback based on recorded trading outcomes
+// - Feedback includes quantified metrics instead of qualitative phrases
+// - Results are parsed into rules enforced by ComplianceTracker (backtest/compliance_tracker.go)
+// See: GenerateFeedbackWithLLM(), SetAIClient(), buildFeedbackAnalysisPrompt()
+// IMPLEMENTED: Pattern identifiers now leverage microstructure data for deeper insights (Trade Failure V2)
+// IMPLEMENTED: Optional LLM-assisted pattern detection for unsupervised, complex pattern discovery
+// IMPLEMENTED: Optional LLM-assisted insights and recommendations for nuanced analysis beyond heuristics
 // ============================================================================
 
 // Add to FeedbackGenerator struct
@@ -120,6 +125,9 @@ type FeedbackConfig struct {
 	FeedbackWindowCycles    int  `json:"feedback_window_cycles"`     // how many recent cycles to analyze
 	TopTradesCount          int  `json:"top_trades_count"`           // number of top winning/losing trades to show
 	MinPatternFrequency     int  `json:"min_pattern_frequency"`      // minimum occurrences to consider a pattern
+	EnableMicrostructure    bool `json:"enable_microstructure"`      // use microstructure for pattern detection
+	EnableLLMPatterns       bool `json:"enable_llm_patterns"`        // LLM-assisted pattern discovery
+	EnableLLMInsights       bool `json:"enable_llm_insights"`        // LLM-assisted insights/recommendations
 }
 
 // DefaultFeedbackConfig returns sensible defaults
@@ -130,6 +138,9 @@ func DefaultFeedbackConfig() FeedbackConfig {
 		FeedbackWindowCycles:    10,
 		TopTradesCount:          3,
 		MinPatternFrequency:     7,
+		EnableMicrostructure:    false,
+		EnableLLMPatterns:       false,
+		EnableLLMInsights:       false,
 	}
 }
 
@@ -145,6 +156,11 @@ type FeedbackGenerator struct {
 	// Calibrated thresholds for Trade Failure V2 (defaults if calibration unavailable)
 	initialBalance    float64
 	failureThresholds decision.FailureThresholds
+
+	// AI client for LLM-based feedback evolution
+	AIClient interface {
+		CallWithMessages(systemPrompt, userPrompt string) (string, error)
+	}
 }
 
 // NewFeedbackGenerator creates a new feedback generator
@@ -154,12 +170,630 @@ func NewFeedbackGenerator(runID string, initialBalance float64, config FeedbackC
 		config:            config,
 		initialBalance:    initialBalance,
 		failureThresholds: decision.DefaultFailureThresholds(),
+		AIClient:          nil, // Optional: set via SetAIClient()
 	}
+}
+
+// SetAIClient injects an AI client for LLM-based feedback evolution
+func (fg *FeedbackGenerator) SetAIClient(client interface {
+	CallWithMessages(systemPrompt, userPrompt string) (string, error)
+}) {
+	fg.AIClient = client
 }
 
 // SetFailureThresholds injects calibrated thresholds (idempotent fallback-safe)
 func (fg *FeedbackGenerator) SetFailureThresholds(thresholds decision.FailureThresholds) {
 	fg.failureThresholds = thresholds
+}
+
+// GenerateFeedbackWithLLM generates feedback evolved by LLM based on trading outcomes
+// Uses AIClient to analyze trading performance and suggest quantified improvements
+// Returns enhanced FeedbackAnalysis with LLM-validated patterns and quantified rules
+func (fg *FeedbackGenerator) GenerateFeedbackWithLLM() (*FeedbackAnalysis, error) {
+	if fg.AIClient == nil {
+		// Fallback to standard generation if no AI client available
+		return fg.GenerateFeedback()
+	}
+
+	// Generate base analysis then replace hardcoded components using LLM
+	analysis, err := fg.GenerateFeedback()
+	if err != nil || analysis == nil {
+		return analysis, err
+	}
+
+	if fg.applyLLMFullAnalysis(analysis, analysis.AllOutcomes, true) {
+		logger.Infof("[FeedbackGenerator] ✅ LLM full analysis applied")
+	} else if fg.applyLLMEnhancements(analysis) {
+		logger.Infof("[FeedbackGenerator] ✅ LLM enhancements applied to patterns/insights")
+	}
+
+	// Keep quantified rules pass if LLM full analysis didn't provide actions
+	if len(analysis.RecommendedActions) == 0 {
+		metaPrompt := fg.buildFeedbackAnalysisPrompt(analysis)
+		lang := "en"
+		if len(analysis.FailurePatterns) > 0 && strings.Contains(analysis.FailurePatterns[0].Description, "日") {
+			lang = "zh"
+		}
+
+		userPrompt := "Please analyze the following trading performance and provide quantified rules for improvement:\n"
+		if lang == "zh" {
+			userPrompt = "请分析以下交易表现，并提供量化的改进规则：\n"
+		}
+
+		evolvedRules, err := fg.AIClient.CallWithMessages(metaPrompt, userPrompt)
+		if err == nil {
+			updatedActions := fg.parseEvolvedRules(evolvedRules, lang)
+			if len(updatedActions) > 0 {
+				analysis.RecommendedActions = updatedActions
+				logger.Infof("[FeedbackGenerator] ✅ LLM-enhanced feedback generated with %d quantified rules", len(updatedActions))
+			}
+		}
+	}
+
+	return analysis, nil
+}
+
+// buildFeedbackAnalysisPrompt creates a meta-prompt for LLM to analyze trading performance
+func (fg *FeedbackGenerator) buildFeedbackAnalysisPrompt(analysis *FeedbackAnalysis) string {
+	var sb strings.Builder
+	if strings.Contains(analysis.AnalysisPeriod, "日") {
+		// Chinese version
+		sb.WriteString("你是交易数据分析专家。你的任务是分析交易表现，并提供量化规则。\n\n")
+		sb.WriteString("# 交易表现分析\n\n")
+		sb.WriteString(fmt.Sprintf("- **总收益:** %.2f%%\n", analysis.TotalReturnPct))
+		sb.WriteString(fmt.Sprintf("- **胜率:** %.1f%%\n", analysis.WinRate))
+		sb.WriteString(fmt.Sprintf("- **利润因子:** %.2f\n", analysis.ProfitFactor))
+		sb.WriteString(fmt.Sprintf("- **每小时交易:** %.2f\n", analysis.TradesPerHour))
+		sb.WriteString(fmt.Sprintf("- **平均持仓时间:** %s\n", analysis.AvgHoldTime))
+		sb.WriteString(fmt.Sprintf("- **最大回撤:** %.1f%%\n", analysis.MaxDrawdown))
+		sb.WriteString("\n# 识别的失败模式\n")
+		for _, pattern := range analysis.FailurePatterns {
+			sb.WriteString(fmt.Sprintf("- %s (出现%d次，平均亏损: %.2f, 概率: %.1f%%)\n",
+				pattern.Description, pattern.Frequency, pattern.AvgPnL, pattern.AvgPnLPct*100))
+		}
+		sb.WriteString("\n# 成功模式\n")
+		for _, pattern := range analysis.SuccessPatterns {
+			sb.WriteString(fmt.Sprintf("- %s (出现%d次，平均收益: %.2f, 概率: %.1f%%)\n",
+				pattern.Description, pattern.Frequency, pattern.AvgPnL, pattern.AvgPnLPct*100))
+		}
+		sb.WriteString("\n# 任务\n")
+		sb.WriteString("基于上述分析，提供5-7个具体的、量化的改进规则。每条规则应该包括：\n")
+		sb.WriteString("1. 问题描述\n")
+		sb.WriteString("2. 量化指标（具体数值）\n")
+		sb.WriteString("3. 执行方法\n")
+		sb.WriteString("4. 预期改进（百分比）\n\n")
+		sb.WriteString("格式: 规则[N]: [描述] | 指标: [具体数值] | 方法: [如何执行] | 预期改进: [百分比]\n")
+	} else {
+		// English version
+		sb.WriteString("You are a trading data analyst expert. Your task is to analyze trading performance and provide quantified rules.\n\n")
+		sb.WriteString("# Trading Performance Analysis\n\n")
+		sb.WriteString(fmt.Sprintf("- **Total Return:** %.2f%%\n", analysis.TotalReturnPct))
+		sb.WriteString(fmt.Sprintf("- **Win Rate:** %.1f%%\n", analysis.WinRate))
+		sb.WriteString(fmt.Sprintf("- **Profit Factor:** %.2f\n", analysis.ProfitFactor))
+		sb.WriteString(fmt.Sprintf("- **Trades Per Hour:** %.2f\n", analysis.TradesPerHour))
+		sb.WriteString(fmt.Sprintf("- **Average Hold Time:** %s\n", analysis.AvgHoldTime))
+		sb.WriteString(fmt.Sprintf("- **Max Drawdown:** %.1f%%\n", analysis.MaxDrawdown))
+		sb.WriteString("\n# Identified Failure Patterns\n")
+		for _, pattern := range analysis.FailurePatterns {
+			sb.WriteString(fmt.Sprintf("- %s (occurred %d times, avg loss: %.2f, avg loss %%: %.1f%%)\n",
+				pattern.Description, pattern.Frequency, pattern.AvgPnL, pattern.AvgPnLPct*100))
+		}
+		sb.WriteString("\n# Success Patterns\n")
+		for _, pattern := range analysis.SuccessPatterns {
+			sb.WriteString(fmt.Sprintf("- %s (occurred %d times, avg gain: %.2f, avg gain %%: %.1f%%)\n",
+				pattern.Description, pattern.Frequency, pattern.AvgPnL, pattern.AvgPnLPct*100))
+		}
+		sb.WriteString("\n# Task\n")
+		sb.WriteString("Based on the analysis above, provide 5-7 specific, quantified improvement rules. Each rule should include:\n")
+		sb.WriteString("1. Problem description\n")
+		sb.WriteString("2. Quantified metric (specific numeric value)\n")
+		sb.WriteString("3. Execution method\n")
+		sb.WriteString("4. Expected improvement (percentage)\n\n")
+		sb.WriteString("Format: Rule [N]: [Description] | Metric: [Specific Value] | Method: [How to Execute] | Expected Improvement: [Percentage]\n")
+	}
+
+	return sb.String()
+}
+
+// parseEvolvedRules extracts quantified rules from LLM output
+func (fg *FeedbackGenerator) parseEvolvedRules(evolvedText string, lang string) []string {
+	var rules []string
+
+	// Parse lines matching the rule format
+	lines := strings.Split(evolvedText, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Look for lines starting with "Rule" or "规则"
+		if strings.HasPrefix(strings.ToLower(line), "rule ") || strings.HasPrefix(line, "规则 ") {
+			// Extract the rule content
+			if parts := strings.Split(line, ":"); len(parts) > 1 {
+				rule := strings.TrimSpace(parts[1])
+				if rule != "" {
+					rules = append(rules, rule)
+				}
+			}
+		} else if strings.HasPrefix(line, "-") || strings.HasPrefix(line, "•") {
+			// Also capture bullet points as rules
+			rule := strings.TrimLeft(line, "- •")
+			rule = strings.TrimSpace(rule)
+			if len(rule) > 20 { // Only significant rules
+				rules = append(rules, rule)
+			}
+		}
+	}
+
+	// If parsing found rules, use them; otherwise return empty
+	if len(rules) == 0 {
+		logger.Infof("[FeedbackGenerator] Failed to parse evolved rules from LLM output, using baseline rules")
+	}
+
+	return rules
+}
+
+type llmFeedbackResponse struct {
+	SuccessPatterns    []TradingPattern `json:"success_patterns"`
+	FailurePatterns    []TradingPattern `json:"failure_patterns"`
+	KeyInsights        []string         `json:"key_insights"`
+	RecommendedActions []string         `json:"recommended_actions"`
+	MarketConditions   string           `json:"market_conditions"`
+}
+
+func (fg *FeedbackGenerator) shouldUseLLMAnalysis(force bool) bool {
+	if fg.AIClient == nil {
+		return false
+	}
+	if force {
+		return true
+	}
+	return fg.config.EnableLLMPatterns || fg.config.EnableLLMInsights
+}
+
+func (fg *FeedbackGenerator) applyLLMFullAnalysis(analysis *FeedbackAnalysis, outcomes []DecisionOutcome, force bool) bool {
+	if !fg.shouldUseLLMAnalysis(force) {
+		return false
+	}
+	prompt := fg.buildLLMFullAnalysisPrompt(analysis, outcomes)
+	systemPrompt := "You are a trading performance analyst. Return ONLY valid JSON without markdown fences."
+	userPrompt := "Analyze historical decisions, outcomes, and microstructure data. Output JSON with success_patterns, failure_patterns, key_insights, recommended_actions, market_conditions."
+
+	respText, err := fg.AIClient.CallWithMessages(systemPrompt, userPrompt+"\n\n"+prompt)
+	if err != nil {
+		logger.Infof("[FeedbackGenerator] LLM full-analysis failed: %v", err)
+		return false
+	}
+
+	parsed, err := fg.parseLLMEnhancementResponse(respText)
+	if err != nil {
+		logger.Infof("[FeedbackGenerator] LLM full-analysis parse failed: %v", err)
+		return false
+	}
+
+	analysis.SuccessPatterns = sanitizeLLMPatterns(parsed.SuccessPatterns, "llm_success")
+	analysis.FailurePatterns = sanitizeLLMPatterns(parsed.FailurePatterns, "llm_failure")
+	analysis.KeyInsights = append([]string(nil), parsed.KeyInsights...)
+	analysis.RecommendedActions = append([]string(nil), parsed.RecommendedActions...)
+	if parsed.MarketConditions != "" {
+		analysis.MarketConditions = parsed.MarketConditions
+	}
+
+	return true
+}
+
+func (fg *FeedbackGenerator) applyLLMEnhancements(analysis *FeedbackAnalysis) bool {
+	if fg.AIClient == nil {
+		return false
+	}
+	if !fg.config.EnableLLMPatterns && !fg.config.EnableLLMInsights {
+		return false
+	}
+
+	prompt := fg.buildLLMEnhancementPrompt(analysis)
+	systemPrompt := "You are a trading performance analyst. Return ONLY valid JSON without markdown fences."
+	userPrompt := "Analyze the data and return JSON with success_patterns, failure_patterns, key_insights, recommended_actions, market_conditions."
+
+	respText, err := fg.AIClient.CallWithMessages(systemPrompt, userPrompt+"\n\n"+prompt)
+	if err != nil {
+		logger.Infof("[FeedbackGenerator] LLM enhancement failed: %v", err)
+		return false
+	}
+
+	parsed, err := fg.parseLLMEnhancementResponse(respText)
+	if err != nil {
+		logger.Infof("[FeedbackGenerator] LLM enhancement parse failed: %v", err)
+		return false
+	}
+
+	if fg.config.EnableLLMPatterns {
+		analysis.SuccessPatterns = append(analysis.SuccessPatterns, sanitizeLLMPatterns(parsed.SuccessPatterns, "llm_success")...)
+		analysis.FailurePatterns = append(analysis.FailurePatterns, sanitizeLLMPatterns(parsed.FailurePatterns, "llm_failure")...)
+	}
+
+	if fg.config.EnableLLMInsights {
+		if len(parsed.KeyInsights) > 0 {
+			analysis.KeyInsights = append(analysis.KeyInsights, parsed.KeyInsights...)
+		}
+		if len(parsed.RecommendedActions) > 0 {
+			analysis.RecommendedActions = append(analysis.RecommendedActions, parsed.RecommendedActions...)
+		}
+		if parsed.MarketConditions != "" {
+			analysis.MarketConditions = parsed.MarketConditions
+		}
+	}
+
+	return true
+}
+
+func sanitizeLLMPatterns(patterns []TradingPattern, fallbackType string) []TradingPattern {
+	result := make([]TradingPattern, 0, len(patterns))
+	for _, p := range patterns {
+		if strings.TrimSpace(p.Description) == "" {
+			continue
+		}
+		if strings.TrimSpace(p.PatternType) == "" {
+			p.PatternType = fallbackType
+		}
+		result = append(result, p)
+	}
+	return result
+}
+
+func (fg *FeedbackGenerator) buildLLMEnhancementPrompt(analysis *FeedbackAnalysis) string {
+	var sb strings.Builder
+	sb.WriteString("# Metrics\n")
+	sb.WriteString(fmt.Sprintf("TotalReturnPct: %.2f\n", analysis.TotalReturnPct))
+	sb.WriteString(fmt.Sprintf("WinRate: %.2f\n", analysis.WinRate))
+	sb.WriteString(fmt.Sprintf("ProfitFactor: %.2f\n", analysis.ProfitFactor))
+	sb.WriteString(fmt.Sprintf("SharpeRatio: %.2f\n", analysis.SharpeRatio))
+	sb.WriteString(fmt.Sprintf("MaxDrawdown: %.2f\n", analysis.MaxDrawdown))
+	sb.WriteString(fmt.Sprintf("TradesPerHour: %.2f\n", analysis.TradesPerHour))
+	sb.WriteString(fmt.Sprintf("AvgHoldTime: %s\n", analysis.AvgHoldTime))
+
+	sb.WriteString("\n# Sample Outcomes\n")
+	maxSamples := 20
+	count := 0
+	for _, o := range analysis.AllOutcomes {
+		if count >= maxSamples {
+			break
+		}
+		if o.RecentOrder == nil {
+			continue
+		}
+		order := o.RecentOrder
+		sb.WriteString(fmt.Sprintf("%s %s pnlPct=%.2f hold=%s spread=%.4f slippage=%.4f budget=%.4f depth=%.0f fillTime=%d chop=%.2f trend=%.2f regime=%s\n",
+			order.Symbol, order.Side, o.RealizedPnLPct, o.HoldDuration, order.EntrySpread, order.EntrySlippage, order.EntrySlippageBudget, order.EntryDepth, order.EntryFillTime, order.ChopScore, order.TrendStrength, order.MarketRegime))
+		appendLLMExtraOrderFields(&sb, order)
+		count++
+	}
+
+	return sb.String()
+}
+
+func (fg *FeedbackGenerator) buildLLMFullAnalysisPrompt(analysis *FeedbackAnalysis, outcomes []DecisionOutcome) string {
+	var sb strings.Builder
+	sb.WriteString("# Metrics\n")
+	sb.WriteString(fmt.Sprintf("TotalReturnPct: %.2f\n", analysis.TotalReturnPct))
+	sb.WriteString(fmt.Sprintf("WinRate: %.2f\n", analysis.WinRate))
+	sb.WriteString(fmt.Sprintf("ProfitFactor: %.2f\n", analysis.ProfitFactor))
+	sb.WriteString(fmt.Sprintf("SharpeRatio: %.2f\n", analysis.SharpeRatio))
+	sb.WriteString(fmt.Sprintf("MaxDrawdown: %.2f\n", analysis.MaxDrawdown))
+	sb.WriteString(fmt.Sprintf("TradesPerHour: %.2f\n", analysis.TradesPerHour))
+	sb.WriteString(fmt.Sprintf("AvgHoldTime: %s\n", analysis.AvgHoldTime))
+
+	sb.WriteString("\n# Decisions & Outcomes (sample)\n")
+	maxSamples := 40
+	count := 0
+	for _, o := range outcomes {
+		if count >= maxSamples {
+			break
+		}
+		order := o.RecentOrder
+		sb.WriteString(fmt.Sprintf("%s %s pnlPct=%.2f hold=%s lev=%d size=%.2f conf=%d reasoning=%q\n",
+			o.Symbol, o.Action, o.RealizedPnLPct, o.HoldDuration, o.Leverage, o.PositionSize, o.Confidence, truncate(o.Reasoning, 120)))
+		if order != nil {
+			sb.WriteString(fmt.Sprintf("  micro: spread=%.4f depth=%.0f slip=%.4f budget=%.4f fill=%dms trend=%.2f chop=%.2f regime=%s vol=%s\n",
+				order.EntrySpread, order.EntryDepth, order.EntrySlippage, order.EntrySlippageBudget, order.EntryFillTime, order.TrendStrength, order.ChopScore, order.MarketRegime, order.VolatilityRegime))
+			appendLLMExtraOrderFields(&sb, order)
+		}
+		count++
+	}
+
+	sb.WriteString("\n# Task\n")
+	sb.WriteString("Derive success and failure patterns from outcomes and microstructure. Provide insights and recommendations for next trades.\n")
+	sb.WriteString("Output JSON only with fields: success_patterns, failure_patterns, key_insights, recommended_actions, market_conditions.\n")
+
+	return sb.String()
+}
+
+func (fg *FeedbackGenerator) parseLLMEnhancementResponse(text string) (*llmFeedbackResponse, error) {
+	clean := stripJSONFences(text)
+	var resp llmFeedbackResponse
+	if err := json.Unmarshal([]byte(clean), &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func stripJSONFences(text string) string {
+	clean := strings.TrimSpace(text)
+	clean = strings.TrimPrefix(clean, "```json")
+	clean = strings.TrimPrefix(clean, "```")
+	clean = strings.TrimSuffix(clean, "```")
+	return strings.TrimSpace(clean)
+}
+
+func appendLLMExtraOrderFields(sb *strings.Builder, order *decision.RecentOrder) {
+	if order == nil || sb == nil {
+		return
+	}
+
+	// Correlation & Risk Book
+	if order.CorrelationToBTC != 0 {
+		sb.WriteString(fmt.Sprintf("    corr_btc=%.2f", order.CorrelationToBTC))
+	}
+	if order.PortfolioCorrelation != 0 {
+		sb.WriteString(fmt.Sprintf(" port_corr=%.2f", order.PortfolioCorrelation))
+	}
+	if order.TimeOfDay >= 0 {
+		sb.WriteString(fmt.Sprintf(" tod=%d", order.TimeOfDay))
+	}
+	if order.EventProximity != "" && order.EventProximity != "none" {
+		sb.WriteString(fmt.Sprintf(" event=%s", order.EventProximity))
+	}
+
+	// Excursion Metrics
+	if order.MaxFavorableExcursion != 0 {
+		sb.WriteString(fmt.Sprintf(" mfe=%.2f", order.MaxFavorableExcursion))
+	}
+	if order.MaxAdverseExcursion != 0 {
+		sb.WriteString(fmt.Sprintf(" mae=%.2f", order.MaxAdverseExcursion))
+	}
+	if order.GiveBackFromPeak != 0 {
+		sb.WriteString(fmt.Sprintf(" giveback=%.2f", order.GiveBackFromPeak))
+	}
+
+	// Carry & Funding
+	if order.FundingAccrued != 0 {
+		sb.WriteString(fmt.Sprintf(" funding=%.4f", order.FundingAccrued))
+	}
+	if order.BorrowCostAccrued != 0 {
+		sb.WriteString(fmt.Sprintf(" borrow=%.4f", order.BorrowCostAccrued))
+	}
+
+	// Execution Quality
+	if order.FillQuality != 0 {
+		sb.WriteString(fmt.Sprintf(" fillq=%.2f", order.FillQuality))
+	}
+	if order.SlippageVsVWAP != 0 {
+		sb.WriteString(fmt.Sprintf(" slip_vwap=%.2f", order.SlippageVsVWAP))
+	}
+	if order.OrderReject {
+		sb.WriteString(" reject=true")
+	}
+	if order.PartialFill {
+		sb.WriteString(" partial=true")
+	}
+
+	sb.WriteString("\n")
+}
+
+func (fg *FeedbackGenerator) detectMicrostructureSuccessPatterns(outcomes []DecisionOutcome) []TradingPattern {
+	patterns := make([]TradingPattern, 0)
+	var spreads []float64
+	var fillTimes []int64
+	for _, o := range outcomes {
+		if o.RecentOrder == nil || o.RecentOrder.EntrySpread <= 0 {
+			continue
+		}
+		spreads = append(spreads, o.RecentOrder.EntrySpread)
+		if o.RecentOrder.EntryFillTime > 0 {
+			fillTimes = append(fillTimes, o.RecentOrder.EntryFillTime)
+		}
+	}
+	medianSpread := medianFloat(spreads)
+	medianFill := medianInt64(fillTimes)
+
+	tightSpreadWins := 0
+	lowSlippageWins := 0
+	fastFillWins := 0
+	evidence := make([]string, 0)
+	for _, o := range outcomes {
+		if !o.Success || o.RecentOrder == nil {
+			continue
+		}
+		order := o.RecentOrder
+		if medianSpread > 0 && order.EntrySpread > 0 && order.EntrySpread <= medianSpread*0.7 {
+			tightSpreadWins++
+			evidence = append(evidence, fmt.Sprintf("%s tight spread %.4f", order.Symbol, order.EntrySpread))
+		}
+		if order.EntrySlippageBudget > 0 && order.EntrySlippage > 0 && order.EntrySlippage <= order.EntrySlippageBudget*0.6 {
+			lowSlippageWins++
+			if len(evidence) < 5 {
+				evidence = append(evidence, fmt.Sprintf("%s low slippage %.4f", order.Symbol, order.EntrySlippage))
+			}
+		}
+		if medianFill > 0 && order.EntryFillTime > 0 && order.EntryFillTime <= int64(float64(medianFill)*0.7) {
+			fastFillWins++
+			if len(evidence) < 5 {
+				evidence = append(evidence, fmt.Sprintf("%s fast fill %dms", order.Symbol, order.EntryFillTime))
+			}
+		}
+	}
+
+	if tightSpreadWins >= fg.config.MinPatternFrequency {
+		patterns = append(patterns, TradingPattern{
+			PatternType:    "micro_tight_spread_wins",
+			Frequency:      tightSpreadWins,
+			AvgPnL:         0,
+			AvgPnLPct:      0,
+			Description:    "Wins cluster around tight entry spreads",
+			Evidence:       evidence,
+			Recommendation: "Prioritize entries with tight spreads and adequate liquidity",
+		})
+	}
+	if lowSlippageWins >= fg.config.MinPatternFrequency {
+		patterns = append(patterns, TradingPattern{
+			PatternType:    "micro_low_slippage_wins",
+			Frequency:      lowSlippageWins,
+			AvgPnL:         0,
+			AvgPnLPct:      0,
+			Description:    "Wins occur when slippage stays well below budget",
+			Evidence:       evidence,
+			Recommendation: "Avoid entries when expected slippage exceeds budget",
+		})
+	}
+	if fastFillWins >= fg.config.MinPatternFrequency {
+		patterns = append(patterns, TradingPattern{
+			PatternType:    "micro_fast_fill_wins",
+			Frequency:      fastFillWins,
+			AvgPnL:         0,
+			AvgPnLPct:      0,
+			Description:    "Faster fills correlate with winning trades",
+			Evidence:       evidence,
+			Recommendation: "Favor venues/conditions with faster fills",
+		})
+	}
+
+	return patterns
+}
+
+func (fg *FeedbackGenerator) detectMicrostructureFailurePatterns(outcomes []DecisionOutcome) []TradingPattern {
+	patterns := make([]TradingPattern, 0)
+	var spreads []float64
+	var fillTimes []int64
+	for _, o := range outcomes {
+		if o.RecentOrder == nil || o.RecentOrder.EntrySpread <= 0 {
+			continue
+		}
+		spreads = append(spreads, o.RecentOrder.EntrySpread)
+		if o.RecentOrder.EntryFillTime > 0 {
+			fillTimes = append(fillTimes, o.RecentOrder.EntryFillTime)
+		}
+	}
+	medianSpread := medianFloat(spreads)
+	medianFill := medianInt64(fillTimes)
+
+	highSlippageLosses := 0
+	wideSpreadLosses := 0
+	thinDepthLosses := 0
+	slowFillLosses := 0
+	trendMismatchLosses := 0
+	evidence := make([]string, 0)
+	for _, o := range outcomes {
+		if o.Success || o.RecentOrder == nil {
+			continue
+		}
+		order := o.RecentOrder
+		if order.EntrySlippageBudget > 0 && order.EntrySlippage > order.EntrySlippageBudget*1.2 {
+			highSlippageLosses++
+			if len(evidence) < 5 {
+				evidence = append(evidence, fmt.Sprintf("%s slippage %.4f", order.Symbol, order.EntrySlippage))
+			}
+		}
+		if medianSpread > 0 && order.EntrySpread > medianSpread*1.5 {
+			wideSpreadLosses++
+			if len(evidence) < 5 {
+				evidence = append(evidence, fmt.Sprintf("%s wide spread %.4f", order.Symbol, order.EntrySpread))
+			}
+		}
+		if order.EntryDepth > 0 && o.PositionSize > 0 && order.EntryDepth < o.PositionSize*3 {
+			thinDepthLosses++
+			if len(evidence) < 5 {
+				evidence = append(evidence, fmt.Sprintf("%s thin depth %.0f", order.Symbol, order.EntryDepth))
+			}
+		}
+		if medianFill > 0 && order.EntryFillTime > int64(float64(medianFill)*1.5) {
+			slowFillLosses++
+			if len(evidence) < 5 {
+				evidence = append(evidence, fmt.Sprintf("%s slow fill %dms", order.Symbol, order.EntryFillTime))
+			}
+		}
+		if order.TrendStrength != 0 {
+			if (order.Side == "long" && order.TrendStrength < -0.2) || (order.Side == "short" && order.TrendStrength > 0.2) {
+				trendMismatchLosses++
+				if len(evidence) < 5 {
+					evidence = append(evidence, fmt.Sprintf("%s trend mismatch %.2f", order.Symbol, order.TrendStrength))
+				}
+			}
+		}
+	}
+
+	if highSlippageLosses >= fg.config.MinPatternFrequency {
+		patterns = append(patterns, TradingPattern{
+			PatternType:    "micro_high_slippage_losses",
+			Frequency:      highSlippageLosses,
+			Description:    "Losses cluster when slippage exceeds budget",
+			Evidence:       evidence,
+			Recommendation: "Avoid entries when expected slippage is above budget",
+		})
+	}
+	if wideSpreadLosses >= fg.config.MinPatternFrequency {
+		patterns = append(patterns, TradingPattern{
+			PatternType:    "micro_wide_spread_losses",
+			Frequency:      wideSpreadLosses,
+			Description:    "Losses occur with wide entry spreads",
+			Evidence:       evidence,
+			Recommendation: "Filter trades with wide spreads or wait for liquidity",
+		})
+	}
+	if thinDepthLosses >= fg.config.MinPatternFrequency {
+		patterns = append(patterns, TradingPattern{
+			PatternType:    "micro_thin_depth_losses",
+			Frequency:      thinDepthLosses,
+			Description:    "Losses when depth is thin relative to position size",
+			Evidence:       evidence,
+			Recommendation: "Reduce size or avoid trades in thin order books",
+		})
+	}
+	if slowFillLosses >= fg.config.MinPatternFrequency {
+		patterns = append(patterns, TradingPattern{
+			PatternType:    "micro_slow_fill_losses",
+			Frequency:      slowFillLosses,
+			Description:    "Losses correlate with slow fills",
+			Evidence:       evidence,
+			Recommendation: "Avoid orders during low liquidity windows",
+		})
+	}
+	if trendMismatchLosses >= fg.config.MinPatternFrequency {
+		patterns = append(patterns, TradingPattern{
+			PatternType:    "micro_trend_mismatch_losses",
+			Frequency:      trendMismatchLosses,
+			Description:    "Losses when trading against trend strength",
+			Evidence:       evidence,
+			Recommendation: "Align trades with dominant trend direction",
+		})
+	}
+
+	return patterns
+}
+
+func medianFloat(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
+	mid := len(sorted) / 2
+	if len(sorted)%2 == 0 {
+		return (sorted[mid-1] + sorted[mid]) / 2
+	}
+	return sorted[mid]
+}
+
+func medianInt64(values []int64) int64 {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := append([]int64(nil), values...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	mid := len(sorted) / 2
+	if len(sorted)%2 == 0 {
+		return (sorted[mid-1] + sorted[mid]) / 2
+	}
+	return sorted[mid]
 }
 
 // GenerateFeedback analyzes recent performance and generates actionable insights
@@ -226,19 +860,35 @@ func (fg *FeedbackGenerator) GenerateFeedback() (*FeedbackAnalysis, error) {
 	}
 
 	// Identify patterns
-	analysis.SuccessPatterns = fg.identifySuccessPatterns(outcomes, metrics)
-	analysis.FailurePatterns = fg.identifyFailurePatterns(outcomes, metrics)
+	llmApplied := fg.applyLLMFullAnalysis(analysis, outcomes, false)
+	if !llmApplied {
+		analysis.SuccessPatterns = fg.identifySuccessPatterns(outcomes, metrics)
+		analysis.FailurePatterns = fg.identifyFailurePatterns(outcomes, metrics)
+	} else {
+		if len(analysis.SuccessPatterns) == 0 {
+			analysis.SuccessPatterns = fg.identifySuccessPatterns(outcomes, metrics)
+		}
+		if len(analysis.FailurePatterns) == 0 {
+			analysis.FailurePatterns = fg.identifyFailurePatterns(outcomes, metrics)
+		}
+	}
 
 	// Extract top trades
 	analysis.TopWinningTrades = fg.getTopTrades(outcomes, true, fg.config.TopTradesCount)
 	analysis.TopLosingTrades = fg.getTopTrades(outcomes, false, fg.config.TopTradesCount)
 
 	// Generate insights
-	analysis.KeyInsights = fg.generateKeyInsights(metrics, outcomes, analysis)
-	analysis.RecommendedActions = fg.generateRecommendedActions(analysis)
+	if !llmApplied || len(analysis.KeyInsights) == 0 {
+		analysis.KeyInsights = fg.generateKeyInsights(metrics, outcomes, analysis)
+	}
+	if !llmApplied || len(analysis.RecommendedActions) == 0 {
+		analysis.RecommendedActions = fg.generateRecommendedActions(analysis)
+	}
 
 	// Market regime analysis
-	analysis.MarketConditions = fg.analyzeMarketConditions(metrics, outcomes)
+	if !llmApplied || analysis.MarketConditions == "" {
+		analysis.MarketConditions = fg.analyzeMarketConditions(metrics, outcomes)
+	}
 
 	return analysis, nil
 }
@@ -324,17 +974,20 @@ func (fg *FeedbackGenerator) extractClosedPositions(events []TradeEvent) []Close
 // This is the bridge between backtest execution and Trade Failure V2 analysis
 func buildRecentOrderFromPosition(pos ClosedPosition) *decision.RecentOrder {
 	holdDuration := pos.ExitTime.Sub(pos.EntryTime)
+	positionValue := pos.EntryPrice * pos.Quantity
 
 	order := &decision.RecentOrder{
-		Symbol:       pos.Symbol,
-		Side:         pos.Side,
-		EntryPrice:   pos.EntryPrice,
-		ExitPrice:    pos.ExitPrice,
-		RealizedPnL:  pos.RealizedPnL,
-		EntryTime:    pos.EntryTime.Format(time.RFC3339),
-		ExitTime:     pos.ExitTime.Format(time.RFC3339),
-		HoldDuration: formatDuration(holdDuration),
-		Leverage:     pos.Leverage,
+		Symbol:         pos.Symbol,
+		Side:           pos.Side,
+		EntryPrice:     pos.EntryPrice,
+		ExitPrice:      pos.ExitPrice,
+		RealizedPnL:    pos.RealizedPnL,
+		EntryTime:      pos.EntryTime.Format(time.RFC3339),
+		ExitTime:       pos.ExitTime.Format(time.RFC3339),
+		HoldDuration:   formatDuration(holdDuration),
+		Leverage:       pos.Leverage,
+		TimeOfDay:      pos.EntryTime.UTC().Hour(),
+		EventProximity: "none",
 	}
 
 	// Calculate PnL percentage
@@ -352,6 +1005,8 @@ func buildRecentOrderFromPosition(pos ClosedPosition) *decision.RecentOrder {
 	if pos.EntryPrice > 0 {
 		order.EntrySlippage = math.Abs(pos.EntryEvent.Slippage / pos.EntryPrice)
 	}
+	order.EntryArrivalPrice = pos.EntryPrice - pos.EntryEvent.Slippage
+	order.EntryFillPrice = pos.EntryPrice
 	order.EntrySlippageBudget = pos.EntryEvent.SlippageBudget
 	order.SignalTime = pos.EntryEvent.SignalTime
 	order.EntryFillTime = pos.EntryEvent.FillTime
@@ -372,6 +1027,8 @@ func buildRecentOrderFromPosition(pos ClosedPosition) *decision.RecentOrder {
 		order.VolatilityRegime = extractVolatilityRegime(pos.EntryMarketData)
 		order.VolumeAtEntry = extractVolumeRatio(pos.EntryMarketData)
 		order.OIDeltaAtEntry = extractOIDelta(pos.EntryMarketData)
+		order.SlippageVsVWAP = computeSlippageVsVWAP(pos.EntryMarketData, order.EntryFillPrice)
+		order.FundingAccrued = estimateFundingAccrued(pos.EntryMarketData.FundingRate, positionValue, holdDuration, pos.Side)
 	}
 
 	// Calculate deltas during trade (entry vs exit market data)
@@ -390,15 +1047,21 @@ func buildRecentOrderFromPosition(pos ClosedPosition) *decision.RecentOrder {
 		order.StopDistanceVsATR = stopDistance / atrPct
 	}
 
-	// Populate excursion metrics from TradeEvent
-	order.MaxFavorableExcursion = pos.EntryEvent.MaxFavorableExcursion
-	order.MaxAdverseExcursion = pos.ExitEvent.MaxAdverseExcursion
+	// Populate excursion metrics from TradeEvent (convert USD to % of position value)
+	if positionValue > 0 {
+		order.MaxFavorableExcursion = (pos.EntryEvent.MaxFavorableExcursion / positionValue) * 100
+		order.MaxAdverseExcursion = (pos.ExitEvent.MaxAdverseExcursion / positionValue) * 100
+	}
 
 	// Calculate giveback: how much profit was left on the table after peak
-	// GiveBack = MaxFavorableExcursion - RealizedPnL
-	if order.MaxFavorableExcursion > 0 && pos.RealizedPnL > 0 {
-		order.GiveBackFromPeak = order.MaxFavorableExcursion - pos.RealizedPnL
+	// GiveBack = MFE% - RealizedPnL%
+	if order.MaxFavorableExcursion > 0 && pos.EntryPrice > 0 {
+		realizedPct := (pos.RealizedPnL / positionValue) * 100
+		order.GiveBackFromPeak = order.MaxFavorableExcursion - realizedPct
 	}
+
+	// Execution quality
+	order.FillQuality = estimateFillQuality(order)
 
 	return order
 }
@@ -500,6 +1163,75 @@ func extractOIDelta(data *market.Data) float64 {
 		return (data.OpenInterest.Latest - data.OpenInterest.Average) / data.OpenInterest.Average
 	}
 	return 0.0
+}
+
+func computeSlippageVsVWAP(data *market.Data, fillPrice float64) float64 {
+	if data == nil || fillPrice <= 0 {
+		return 0
+	}
+	if vwap := estimateEntryVWAP(data); vwap > 0 {
+		return (fillPrice - vwap) / vwap * 100
+	}
+	return 0
+}
+
+func estimateEntryVWAP(data *market.Data) float64 {
+	if data == nil || len(data.TimeframeData) == 0 {
+		return 0
+	}
+	for _, tfData := range data.TimeframeData {
+		if tfData == nil || len(tfData.Klines) == 0 {
+			continue
+		}
+		last := tfData.Klines[len(tfData.Klines)-1]
+		return barVWAPFromKlineBar(last)
+	}
+	return 0
+}
+
+// Add this helper function to handle market.KlineBar input
+func barVWAPFromKlineBar(bar market.KlineBar) float64 {
+	// VWAP = (High + Low + Close) / 3
+	return (bar.High + bar.Low + bar.Close) / 3
+}
+
+func estimateFundingAccrued(fundingRate float64, positionValue float64, holdDuration time.Duration, side string) float64 {
+	if fundingRate == 0 || positionValue <= 0 || holdDuration <= 0 {
+		return 0
+	}
+	// fundingRate is typically per 8h; scale by holding time
+	hours := holdDuration.Hours()
+	accrued := positionValue * fundingRate * (hours / 8.0)
+	if strings.EqualFold(side, "short") {
+		accrued = -accrued
+	}
+	return accrued
+}
+
+func estimateFillQuality(order *decision.RecentOrder) float64 {
+	if order == nil {
+		return 0
+	}
+	quality := 1.0
+	if order.EntrySlippageBudget > 0 && order.EntrySlippage > 0 {
+		ratio := order.EntrySlippage / order.EntrySlippageBudget
+		quality -= math.Min(1, ratio) * 0.6
+	}
+	if order.EntryFillTime > 0 {
+		penalty := math.Min(1, float64(order.EntryFillTime)/1500.0) * 0.2
+		quality -= penalty
+	}
+	if order.EntrySpread > 0 {
+		penalty := math.Min(1, order.EntrySpread/0.003) * 0.2
+		quality -= penalty
+	}
+	if quality < 0 {
+		return 0
+	}
+	if quality > 1 {
+		return 1
+	}
+	return quality
 }
 
 // createDecisionOutcomes converts closed positions into decision outcomes with analysis
@@ -1043,6 +1775,10 @@ func (fg *FeedbackGenerator) identifySuccessPatterns(outcomes []DecisionOutcome,
 		}
 	}
 
+	if fg.config.EnableMicrostructure {
+		patterns = append(patterns, fg.detectMicrostructureSuccessPatterns(outcomes)...)
+	}
+
 	return patterns
 }
 
@@ -1164,18 +1900,6 @@ func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome,
 				longLossesPnL += outcome.RealizedPnLPct
 			}
 		}
-	}
-
-	if longLosses >= fg.config.MinPatternFrequency {
-		patterns = append(patterns, TradingPattern{
-			PatternType:    "holding_losers",
-			Frequency:      longLosses,
-			AvgPnL:         0,
-			AvgPnLPct:      longLossesPnL / float64(longLosses),
-			Description:    "Holding losing positions for too long (>4h)",
-			Evidence:       []string{fmt.Sprintf("%d trades, avg loss %.2f%%", longLosses, longLossesPnL/float64(longLosses))},
-			Recommendation: "⚠️ CRITICAL: Cut losses faster. Set tighter stop-losses and respect them",
-		})
 	}
 
 	if longLosses >= fg.config.MinPatternFrequency {
@@ -1494,6 +2218,10 @@ func (fg *FeedbackGenerator) identifyFailurePatterns(outcomes []DecisionOutcome,
 			},
 			Recommendation: "ENFORCE: Minimum 2:1 R/R. Set stop-loss at 2%, target at 4%+. Use ATR-based stops (1.5x ATR).",
 		})
+	}
+
+	if fg.config.EnableMicrostructure {
+		patterns = append(patterns, fg.detectMicrostructureFailurePatterns(outcomes)...)
 	}
 
 	return patterns
@@ -1844,7 +2572,7 @@ func (fg *FeedbackGenerator) analyzeMarketConditions(metrics *Metrics, outcomes 
 		return "MIXED MARKET: Winning often but profits are small. Need to let winners run longer and reduce stop losses"
 	}
 
-	return "NEUTRAL MARKET: Standard trading conditions with %d trades analyzed. Continue with current approach"
+	return fmt.Sprintf("NEUTRAL MARKET: Standard trading conditions with %d trades analyzed. Continue with current approach", len(outcomes))
 }
 
 // FormatFeedbackForPrompt formats the feedback analysis for inclusion in AI prompts
@@ -1853,7 +2581,7 @@ func (fg *FeedbackGenerator) FormatForPrompt(analysis *FeedbackAnalysis, lang st
 		return ""
 	}
 
-	return fg.FormatForPrompt(analysis, lang, detailed)
+	return fg.FormatFeedbackForPrompt(analysis, lang, detailed)
 }
 
 // FormatForPrompt formats feedback for LLM consumption - CONCISE VERSION

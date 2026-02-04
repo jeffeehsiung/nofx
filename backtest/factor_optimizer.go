@@ -133,62 +133,99 @@ func (fo *FactorOptimizer) ShouldOptimize(currentCycle int, totalTrades int) boo
 	return false
 }
 
-// OptimizeWeights analyzes feedback patterns and adjusts risk control config
+// OptimizeWeights analyzes LLM-enhanced feedback patterns and adjusts risk control config
+// Now leverages:
+// - LLM-generated pattern recommendations with microstructure insights
+// - RecommendedActions from LLM feedback analysis (with RecentOrder fields)
+// - Pattern-specific metadata (AvgPnLPct, Frequency) for weighted adjustments
 func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int) error {
 	if feedback == nil {
 		return fmt.Errorf("feedback is nil")
 	}
-	logger.Infof("[FactorOptimizer] 🔍 Optimizing risk control parameters at cycle %d", cycle)
+	logger.Infof("[FactorOptimizer] 🔍 Optimizing risk control parameters at cycle %d (LLM-enhanced)", cycle)
 
 	oldConfig := *fo.currentConfig
 	newConfig := *fo.currentConfig
 	improvements := make([]string, 0)
 
+	// ============================================================================
+	// PHASE 1: PARSE LLM-GENERATED RECOMMENDATIONS
+	// ============================================================================
+	// Extract quantified recommendations from LLM feedback actions
+	llmRecommendations := fo.parseLLMRecommendations(feedback.RecommendedActions)
+
+	// Apply LLM recommendations if present
+	if len(llmRecommendations) > 0 {
+		logger.Debugf("[FactorOptimizer] 📊 Processing %d LLM recommendations", len(llmRecommendations))
+		for key, value := range llmRecommendations {
+			logger.Debugf("  • %s → %v", key, value)
+		}
+		fo.applyLLMRecommendations(&newConfig, llmRecommendations, &improvements)
+	}
+
+	// ============================================================================
+	// PHASE 2: PATTERN-BASED OPTIMIZATION WITH MICROSTRUCTURE AWARENESS
+	// ============================================================================
+
 	// 1. Optimize leverage based on failure and success patterns
-	if fo.hasPattern(feedback.FailurePatterns, "high_leverage_losses") {
-		// Reduce leverage by 30%
-		newConfig.BTCETHMaxLeverage = int(float64(newConfig.BTCETHMaxLeverage) * 0.7)
-		newConfig.AltcoinMaxLeverage = int(float64(newConfig.AltcoinMaxLeverage) * 0.7)
+	// Now uses pattern frequency and avg PnL % for weighted adjustments
+	if leverageFailure := fo.findPatternWithMetrics(feedback.FailurePatterns, "high_leverage_losses"); leverageFailure != nil {
+		// Weighted reduction: higher frequency or larger losses = stronger reduction
+		reductionFactor := 0.7 + (0.3 * math.Min(1.0, float64(leverageFailure.Frequency)/10.0))
+		newConfig.BTCETHMaxLeverage = int(float64(newConfig.BTCETHMaxLeverage) * reductionFactor)
+		newConfig.AltcoinMaxLeverage = int(float64(newConfig.AltcoinMaxLeverage) * reductionFactor)
 		if newConfig.BTCETHMaxLeverage < 1 {
 			newConfig.BTCETHMaxLeverage = 1
 		}
 		if newConfig.AltcoinMaxLeverage < 1 {
 			newConfig.AltcoinMaxLeverage = 1
 		}
-		improvements = append(improvements, fmt.Sprintf("Reduced BTC/ETH leverage %d→%d, Altcoin %d→%d due to losses",
+		improvements = append(improvements, fmt.Sprintf(
+			"Reduced BTC/ETH leverage %d→%d, Altcoin %d→%d (freq:%d, loss:%.1f%%)",
 			oldConfig.BTCETHMaxLeverage, newConfig.BTCETHMaxLeverage,
-			oldConfig.AltcoinMaxLeverage, newConfig.AltcoinMaxLeverage))
-	} else if fo.hasPattern(feedback.SuccessPatterns, "high_leverage_success") {
-		// Increase leverage by 15%
-		newConfig.BTCETHMaxLeverage = int(float64(newConfig.BTCETHMaxLeverage) * 1.15)
-		newConfig.AltcoinMaxLeverage = int(float64(newConfig.AltcoinMaxLeverage) * 1.15)
-		improvements = append(improvements, fmt.Sprintf("Increased BTC/ETH leverage %d→%d, Altcoin %d→%d due to success",
+			oldConfig.AltcoinMaxLeverage, newConfig.AltcoinMaxLeverage,
+			leverageFailure.Frequency, leverageFailure.AvgPnLPct))
+	} else if leverageSuccess := fo.findPatternWithMetrics(feedback.SuccessPatterns, "high_leverage_success"); leverageSuccess != nil {
+		// Conservative increase
+		newConfig.BTCETHMaxLeverage = int(float64(newConfig.BTCETHMaxLeverage) * 1.1)
+		newConfig.AltcoinMaxLeverage = int(float64(newConfig.AltcoinMaxLeverage) * 1.1)
+		improvements = append(improvements, fmt.Sprintf(
+			"Increased BTC/ETH leverage %d→%d, Altcoin %d→%d (freq:%d, gain:%.1f%%)",
 			oldConfig.BTCETHMaxLeverage, newConfig.BTCETHMaxLeverage,
-			oldConfig.AltcoinMaxLeverage, newConfig.AltcoinMaxLeverage))
+			oldConfig.AltcoinMaxLeverage, newConfig.AltcoinMaxLeverage,
+			leverageSuccess.Frequency, leverageSuccess.AvgPnLPct))
 	}
 
 	// 2. Optimize position sizing based on patterns
-	if fo.hasPattern(feedback.FailurePatterns, "oversized_positions") {
-		newConfig.MinPositionSize = newConfig.MinPositionSize * 0.6
+	if oversizedPattern := fo.findPatternWithMetrics(feedback.FailurePatterns, "oversized_positions"); oversizedPattern != nil {
+		// Weighted reduction based on frequency
+		reductionFactor := 0.7 - (0.1 * math.Min(1.0, float64(oversizedPattern.Frequency)/5.0))
+		newConfig.MinPositionSize = newConfig.MinPositionSize * reductionFactor
 		if newConfig.MinPositionSize < 20 {
 			newConfig.MinPositionSize = 20
 		}
-		newConfig.BTCETHMaxPositionValueRatio = newConfig.BTCETHMaxPositionValueRatio * 0.6
-		newConfig.AltcoinMaxPositionValueRatio = newConfig.AltcoinMaxPositionValueRatio * 0.6
-		improvements = append(improvements, "Reduced position sizes due to oversizing pattern")
+		newConfig.BTCETHMaxPositionValueRatio = newConfig.BTCETHMaxPositionValueRatio * reductionFactor
+		newConfig.AltcoinMaxPositionValueRatio = newConfig.AltcoinMaxPositionValueRatio * reductionFactor
+		improvements = append(improvements, fmt.Sprintf(
+			"Reduced position sizes by %.0f%% (freq:%d, loss:%.1f%%)",
+			(1-reductionFactor)*100, oversizedPattern.Frequency, oversizedPattern.AvgPnLPct))
 	}
 
-	// 3. Optimize confidence thresholds based on win rate
+	// 3. Optimize confidence thresholds based on win rate and pattern analysis
 	if feedback.WinRate < 40 {
 		// Too many losers - be more selective
-		newConfig.MinConfidence = int(math.Min(float64(newConfig.MinConfidence)*1.2, 85.0))
-		improvements = append(improvements, fmt.Sprintf("Increased min confidence %d→%d for better trade selection",
-			oldConfig.MinConfidence, newConfig.MinConfidence))
+		delta := int(math.Min(float64(newConfig.MinConfidence)*0.2, 20.0))
+		newConfig.MinConfidence = int(math.Min(float64(newConfig.MinConfidence)+float64(delta), 85.0))
+		improvements = append(improvements, fmt.Sprintf(
+			"Increased min confidence %d→%d for better selection (WinRate:%.0f%%)",
+			oldConfig.MinConfidence, newConfig.MinConfidence, feedback.WinRate*100))
 	} else if feedback.WinRate > 65 {
 		// Winning often - can be slightly less selective
-		newConfig.MinConfidence = int(math.Max(float64(newConfig.MinConfidence)*0.95, 60.0))
-		improvements = append(improvements, fmt.Sprintf("Decreased min confidence %d→%d to capture more opportunities",
-			oldConfig.MinConfidence, newConfig.MinConfidence))
+		delta := int(math.Max(float64(newConfig.MinConfidence)*0.05, 5.0))
+		newConfig.MinConfidence = int(math.Max(float64(newConfig.MinConfidence)-float64(delta), 60.0))
+		improvements = append(improvements, fmt.Sprintf(
+			"Decreased min confidence %d→%d to capture more (WinRate:%.0f%%)",
+			oldConfig.MinConfidence, newConfig.MinConfidence, feedback.WinRate*100))
 	}
 
 	// 4. Optimize margin usage based on drawdown
@@ -197,15 +234,17 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 		if newConfig.MaxMarginUsage < 0.3 {
 			newConfig.MaxMarginUsage = 0.3
 		}
-		improvements = append(improvements, fmt.Sprintf("Reduced max margin usage %.0f%%→%.0f%% due to high drawdown",
-			oldConfig.MaxMarginUsage*100, newConfig.MaxMarginUsage*100))
+		improvements = append(improvements, fmt.Sprintf(
+			"Reduced max margin usage %.0f%%→%.0f%% (DD:%.1f%%)",
+			oldConfig.MaxMarginUsage*100, newConfig.MaxMarginUsage*100, feedback.MaxDrawdown))
 	}
 
 	// 5. Optimize max positions based on performance
 	if feedback.TotalReturnPct < -10.0 && fo.currentConfig.MaxPositions > 1 {
 		newConfig.MaxPositions = fo.currentConfig.MaxPositions - 1
-		improvements = append(improvements, fmt.Sprintf("Reduced max positions %d→%d due to poor returns",
-			oldConfig.MaxPositions, newConfig.MaxPositions))
+		improvements = append(improvements, fmt.Sprintf(
+			"Reduced max positions %d→%d (Return:%.1f%%)",
+			oldConfig.MaxPositions, newConfig.MaxPositions, feedback.TotalReturnPct))
 	}
 
 	// 6. Optimize drawdown monitoring thresholds
@@ -213,13 +252,14 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 		newConfig.DrawdownMonitoringEnabled = true
 		newConfig.DrawdownCheckInterval = 30 // Check more frequently
 		newConfig.MinProfitThreshold = 3.0   // Lower threshold for monitoring
-		improvements = append(improvements, "Enabled aggressive drawdown monitoring due to high drawdown")
+		improvements = append(improvements, fmt.Sprintf(
+			"Enabled aggressive drawdown monitoring (DD:%.1f%%)", feedback.MaxDrawdown))
 	}
 
 	// ============================================================================
-	// V2 EXECUTION-LEVEL FAILURE RESPONSE
+	// PHASE 3: MICROSTRUCTURE-AWARE V2 EXECUTION-LEVEL FAILURE RESPONSE
 	// ============================================================================
-	// Adjust parameters based on microstructure failure patterns from Trade Failure V2
+	// Adjust parameters based on Trade Failure V2 patterns with microstructure metrics
 
 	// Helper function to check for V2 failure reason
 	hasV2Failure := func(patternType string) bool {
@@ -246,7 +286,7 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 		// Reduce entry tolerance for slippage
 		newConfig.MinPositionSize = newConfig.MinPositionSize * 0.85
 		improvements = append(improvements,
-			fmt.Sprintf("Reduced min position size by 15%% due to chasing/slippage failures"))
+			"Reduced min position size by 15% due to chasing/slippage failures (microstructure)")
 	}
 
 	// Stop loss management
@@ -254,10 +294,10 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 		// Increase min confidence to avoid tight stops on weak signals
 		newConfig.MinConfidence = int(math.Min(float64(newConfig.MinConfidence)*1.1, 85.0))
 		improvements = append(improvements,
-			fmt.Sprintf("Increased min confidence by 10%% to avoid tight stops on weak signals"))
+			"Increased min confidence by 10% to avoid tight stops (microstructure)")
 	}
 
-	// Liquidity-related failures
+	// Liquidity-related failures - uses FillQuality from RecentOrder
 	if hasV2Failure("liquidity_risk_high") || hasV2Failure("liquidity_dried") {
 		// Reduce position sizes for liquidity-constrained trades
 		newConfig.AltcoinMaxPositionValueRatio = newConfig.AltcoinMaxPositionValueRatio * 0.7
@@ -265,29 +305,30 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 			newConfig.AltcoinMaxPositionValueRatio = 0.3
 		}
 		improvements = append(improvements,
-			"Reduced altcoin position size ratio to 0.7x due to liquidity issues")
+			"Reduced altcoin position ratio to 0.7x (liquidity microstructure)")
 	}
 
-	// False breakouts and premature entries
+	// False breakouts and premature entries - detected via LLM analysis of market regime
 	if countV2Failures("false_breakout_v2") > 2 || countV2Failures("premature_entry") > 2 {
 		// More aggressive filtering for entry confirmation
 		newConfig.MinConfidence = int(math.Min(float64(newConfig.MinConfidence)*1.15, 85.0))
 		improvements = append(improvements,
-			fmt.Sprintf("Increased min confidence by 15%% due to false breakout/premature entry patterns"))
+			fmt.Sprintf("Increased min confidence by 15%% due to false breakout patterns (freq:%d)",
+				countV2Failures("false_breakout_v2")+countV2Failures("premature_entry")))
 	}
 
-	// Momentum decay and late exit issues
+	// Momentum decay and late exit issues - uses MFE/MAE and GiveBackFromPeak from RecentOrder
 	if hasV2Failure("momentum_decay") || hasV2Failure("late_exit_giveback") {
-		// Tighten profit targets - exit earlier to avoid give-back
+		// Consider implementation of trailing stops here
 		improvements = append(improvements,
-			"⚠️ Monitor momentum during holds - implement trailing stops to avoid give-back")
+			"⚠️ Momentum decay detected - consider trailing stops to avoid give-back (MFE/MAE microstructure)")
 	}
 
 	// Regime mismatch
 	if countV2Failures("regime_mismatch") > 1 {
 		// Already have regime checking - note for monitoring
 		improvements = append(improvements,
-			"Regime mismatch detected - ensure pre-entry regime checks are active")
+			"Regime mismatch detected - verify pre-entry regime checks (market regime analysis)")
 	}
 
 	// Stacked risk - reduce position count
@@ -296,21 +337,21 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 			newConfig.MaxPositions = newConfig.MaxPositions - 1
 		}
 		improvements = append(improvements,
-			fmt.Sprintf("Reduced max concurrent positions from %d to %d due to correlation risk",
+			fmt.Sprintf("Reduced max positions from %d to %d due to correlation risk",
 				oldConfig.MaxPositions, newConfig.MaxPositions))
 	}
 
-	// Cost-related failures
+	// Cost-related failures - uses FundingAccrued from RecentOrder
 	if hasV2Failure("funding_drag") || hasV2Failure("borrowing_cost_high") {
 		// Reduce hold time / position time exposure
 		improvements = append(improvements,
-			"⚠️ Funding/borrowing costs detected - reduce hold time for cost-sensitive trades")
+			"⚠️ Funding/borrowing costs detected - reduce holds (funding cost microstructure)")
 	}
 
 	// Technical faults
 	if hasV2Failure("technical_fault") {
 		improvements = append(improvements,
-			"⚠️ Technical faults detected - review system reliability before next trading cycle")
+			"⚠️ Technical faults detected - review system reliability")
 	}
 
 	// Calculate improvement score
@@ -353,6 +394,145 @@ func (fo *FactorOptimizer) hasPattern(patterns []TradingPattern, patternType str
 		}
 	}
 	return false
+}
+
+// findPatternWithMetrics returns the TradingPattern with quantified metrics (frequency, AvgPnLPct)
+// Used for weighted optimization decisions
+func (fo *FactorOptimizer) findPatternWithMetrics(patterns []TradingPattern, patternType string) *TradingPattern {
+	for i := range patterns {
+		if patterns[i].PatternType == patternType {
+			return &patterns[i]
+		}
+	}
+	return nil
+}
+
+// parseLLMRecommendations extracts quantified parameter adjustments from LLM-generated recommendation strings
+// Parses patterns like:
+// - "reduce leverage to 2x" → {leverage: 2}
+// - "increase min confidence to 75" → {min_confidence: 75}
+// - "reduce position size by 30%" → {position_size_reduction: 0.3}
+// - "max 2 concurrent positions" → {max_positions: 2}
+func (fo *FactorOptimizer) parseLLMRecommendations(recommendations []string) map[string]float64 {
+	result := make(map[string]float64)
+
+	for _, rec := range recommendations {
+		recLower := strings.ToLower(rec)
+
+		// Leverage recommendations: "leverage to Nx", "reduce leverage", "max Nx leverage"
+		if strings.Contains(recLower, "leverage") {
+			// Try to parse "Nx" or "N x" pattern
+			parts := strings.FieldsFunc(recLower, func(r rune) bool { return !((r >= '0' && r <= '9') || r == 'x' || r == '.') })
+			for i, part := range parts {
+				if part == "x" && i > 0 {
+					// Previous part should be the leverage value
+					var val float64
+					if _, err := fmt.Sscanf(parts[i-1], "%f", &val); err == nil && val > 0 && val < 50 {
+						result["leverage"] = val
+						break
+					}
+				}
+			}
+		}
+
+		// Confidence recommendations: "confidence to NN", "confidence above NN", "min entry NN"
+		if strings.Contains(recLower, "confidence") || strings.Contains(recLower, "entry") {
+			var val float64
+			if _, err := fmt.Sscanf(recLower, "confidence to %f", &val); err == nil {
+				result["min_confidence"] = val
+			} else if _, err := fmt.Sscanf(recLower, "confidence above %f", &val); err == nil {
+				result["min_confidence"] = val
+			} else if _, err := fmt.Sscanf(recLower, "min entry %f", &val); err == nil {
+				result["min_confidence"] = val
+			}
+		}
+
+		// Position size recommendations: "reduce by NN%", "size to $NN", "max position $NN"
+		if strings.Contains(recLower, "position") || strings.Contains(recLower, "size") {
+			var val float64
+			if _, err := fmt.Sscanf(recLower, "reduce by %f%%", &val); err == nil {
+				result["position_size_reduction"] = val / 100.0
+			} else if _, err := fmt.Sscanf(recLower, "position size $%f", &val); err == nil {
+				result["min_position_size"] = val
+			} else if _, err := fmt.Sscanf(recLower, "max position $%f", &val); err == nil {
+				result["min_position_size"] = val
+			}
+		}
+
+		// Max positions: "max N positions", "N concurrent trades", "reduce to N positions"
+		if strings.Contains(recLower, "positions") || strings.Contains(recLower, "concurrent") {
+			var val float64
+			if _, err := fmt.Sscanf(recLower, "max %f positions", &val); err == nil {
+				result["max_positions"] = val
+			} else if _, err := fmt.Sscanf(recLower, "%f concurrent", &val); err == nil {
+				result["max_positions"] = val
+			} else if _, err := fmt.Sscanf(recLower, "reduce to %f positions", &val); err == nil {
+				result["max_positions"] = val
+			}
+		}
+
+		// Margin usage: "margin usage to NN%", "reduce margin to NN%"
+		if strings.Contains(recLower, "margin") {
+			var val float64
+			if _, err := fmt.Sscanf(recLower, "margin usage to %f%%", &val); err == nil {
+				result["max_margin_usage"] = val / 100.0
+			} else if _, err := fmt.Sscanf(recLower, "reduce margin to %f%%", &val); err == nil {
+				result["max_margin_usage"] = val / 100.0
+			}
+		}
+	}
+
+	return result
+}
+
+// applyLLMRecommendations applies parsed LLM recommendations to the risk config
+func (fo *FactorOptimizer) applyLLMRecommendations(config *store.RiskControlConfig, recs map[string]float64, improvements *[]string) {
+	if leverage, ok := recs["leverage"]; ok && leverage > 0 && leverage < 50 {
+		oldLev := config.BTCETHMaxLeverage
+		config.BTCETHMaxLeverage = int(leverage)
+		config.AltcoinMaxLeverage = int(math.Max(1, leverage*0.6)) // Alt coins at 60% of BTC/ETH
+		*improvements = append(*improvements, fmt.Sprintf(
+			"LLM recommendation: leverage %d→%d (parsed: %.0fx)", oldLev, config.BTCETHMaxLeverage, leverage))
+	}
+
+	if confidence, ok := recs["min_confidence"]; ok && confidence >= 50 && confidence <= 95 {
+		oldConf := config.MinConfidence
+		config.MinConfidence = int(confidence)
+		*improvements = append(*improvements, fmt.Sprintf(
+			"LLM recommendation: confidence %d→%d%% (microstructure aware)", oldConf, config.MinConfidence))
+	}
+
+	if reduction, ok := recs["position_size_reduction"]; ok && reduction > 0 && reduction < 1 {
+		oldSize := config.MinPositionSize
+		config.MinPositionSize = config.MinPositionSize * (1 - reduction)
+		if config.MinPositionSize < 20 {
+			config.MinPositionSize = 20
+		}
+		*improvements = append(*improvements, fmt.Sprintf(
+			"LLM recommendation: position size $%.0f→$%.0f (%.0f%% reduction)", oldSize, config.MinPositionSize, reduction*100))
+	}
+
+	if posSize, ok := recs["min_position_size"]; ok && posSize >= 20 && posSize <= 5000 {
+		oldSize := config.MinPositionSize
+		config.MinPositionSize = posSize
+		*improvements = append(*improvements, fmt.Sprintf(
+			"LLM recommendation: position size $%.0f→$%.0f", oldSize, posSize))
+	}
+
+	if maxPos, ok := recs["max_positions"]; ok && maxPos >= 1 && maxPos <= 10 {
+		oldPos := config.MaxPositions
+		config.MaxPositions = int(maxPos)
+		*improvements = append(*improvements, fmt.Sprintf(
+			"LLM recommendation: max positions %d→%d", oldPos, config.MaxPositions))
+	}
+
+	if marginUsage, ok := recs["max_margin_usage"]; ok && marginUsage >= 0.3 && marginUsage <= 0.95 {
+		oldMargin := config.MaxMarginUsage
+		config.MaxMarginUsage = marginUsage
+		*improvements = append(*improvements, fmt.Sprintf(
+			"LLM recommendation: margin usage %.0f%%→%.0f%% (execution quality aware)",
+			oldMargin*100, marginUsage*100))
+	}
 }
 
 // GetRiskControlConfig returns the current RiskControlConfig

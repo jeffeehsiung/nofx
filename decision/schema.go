@@ -257,11 +257,11 @@ var TradingRules = struct {
 }{
 	RiskManagement: map[string]BilingualRuleDef{
 		"MaxMarginUsage": {
-			Value:    0.90,
-			DescZH:   "保证金使用率不得超过90%",
-			DescEN:   "Margin usage must not exceed 90%",
-			ReasonZH: "保留10%的资金应对极端行情和追加保证金",
-			ReasonEN: "Reserve 10% capital for extreme market conditions and margin calls",
+			Value:    0.30,
+			DescZH:   "保证金使用率不得超过30%",
+			DescEN:   "Margin usage must not exceed 30%",
+			ReasonZH: "保留70%的资金应对极端行情和追加保证金",
+			ReasonEN: "Reserve 70% capital for extreme market conditions and margin calls",
 		},
 		"MaxPositionLoss": {
 			Value:    -0.05,

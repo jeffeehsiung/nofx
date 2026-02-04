@@ -151,7 +151,8 @@ func (ct *ComplianceTracker) evaluateRecommendation(rec string, dec *decision.De
 	}
 
 	// 1. Check leverage recommendations
-	if strings.Contains(recLower, "lower leverage") || strings.Contains(recLower, "reduce leverage") {
+	if strings.Contains(recLower, "lower leverage") || strings.Contains(recLower, "reduce leverage") ||
+		(strings.Contains(recLower, "leverage") && (strings.Contains(recLower, "max") || strings.Contains(recLower, "<=") || strings.Contains(recLower, "≤") || strings.Contains(recLower, "2-3x") || strings.Contains(recLower, "3x"))) {
 		if dec.Leverage <= 3 {
 			return true, ct.config.RewardForCompliance * rewardMultiplier
 		}
@@ -159,7 +160,8 @@ func (ct *ComplianceTracker) evaluateRecommendation(rec string, dec *decision.De
 	}
 
 	// 2. Check position size recommendations
-	if strings.Contains(recLower, "reduce position size") || strings.Contains(recLower, "smaller position") {
+	if strings.Contains(recLower, "reduce position size") || strings.Contains(recLower, "smaller position") ||
+		(strings.Contains(recLower, "position size") && (strings.Contains(recLower, "<=") || strings.Contains(recLower, "≤") || strings.Contains(recLower, "max") || strings.Contains(recLower, "$"))) {
 		// Position size is stored as PositionSizeUSD in Decision struct
 		if dec.PositionSizeUSD <= 200 {
 			return true, ct.config.RewardForCompliance * rewardMultiplier
@@ -176,7 +178,10 @@ func (ct *ComplianceTracker) evaluateRecommendation(rec string, dec *decision.De
 	}
 
 	// 4. Check hold action recommendations (from overtrading pattern)
-	if strings.Contains(recLower, "reduce trading frequency") || strings.Contains(recLower, "reduce frequency") {
+	if strings.Contains(recLower, "reduce trading frequency") || strings.Contains(recLower, "reduce frequency") ||
+		strings.Contains(recLower, "cooldown") || strings.Contains(recLower, "cool-down") ||
+		strings.Contains(recLower, "cool down") || strings.Contains(recLower, "wait") ||
+		strings.Contains(recLower, "pause") || strings.Contains(recLower, "break") {
 		if dec.Action == "hold" {
 			return true, ct.config.RewardForCompliance * rewardMultiplier
 		}
@@ -199,7 +204,7 @@ func (ct *ComplianceTracker) evaluateRecommendation(rec string, dec *decision.De
 	}
 
 	// 7. Check time-based recommendations (optimal hours)
-	if strings.Contains(recLower, "focus trading activity") || strings.Contains(recLower, "avoid trading during") {
+	if strings.Contains(recLower, "focus trading activity") || strings.Contains(recLower, "avoid trading during") || strings.Contains(recLower, "time selection") {
 		// Extract hour from recommendation and compare
 		// For now, assume compliant
 		return true, ct.config.RewardForCompliance * 0.5 * rewardMultiplier
@@ -212,27 +217,28 @@ func (ct *ComplianceTracker) evaluateRecommendation(rec string, dec *decision.De
 // decisionMatchesPattern checks if a decision aligns with a trading pattern
 func (ct *ComplianceTracker) decisionMatchesPattern(dec *decision.Decision, pattern TradingPattern) bool {
 	patternLower := strings.ToLower(pattern.PatternType)
+	patternText := strings.ToLower(pattern.PatternType + " " + pattern.Description + " " + pattern.Recommendation)
 
 	// Match high leverage patterns
-	if strings.Contains(patternLower, "high_leverage") || strings.Contains(patternLower, "leverage") {
+	if strings.Contains(patternLower, "high_leverage") || strings.Contains(patternLower, "leverage") || strings.Contains(patternText, "leverage") {
 		return dec.Leverage >= 5
 	}
 
 	// Match position size patterns
-	if strings.Contains(patternLower, "large_position") || strings.Contains(patternLower, "position_size") {
+	if strings.Contains(patternLower, "large_position") || strings.Contains(patternLower, "position_size") || strings.Contains(patternText, "position size") {
 		return dec.PositionSizeUSD >= 300
 	}
 
 	// Match confidence patterns
-	if strings.Contains(patternLower, "low_confidence") {
+	if strings.Contains(patternLower, "low_confidence") || strings.Contains(patternText, "low confidence") {
 		return dec.Confidence < 60
 	}
-	if strings.Contains(patternLower, "high_confidence") {
+	if strings.Contains(patternLower, "high_confidence") || strings.Contains(patternText, "high confidence") {
 		return dec.Confidence >= 70
 	}
 
 	// Match overtrading patterns
-	if strings.Contains(patternLower, "overtrading") || strings.Contains(patternLower, "frequency") {
+	if strings.Contains(patternLower, "overtrading") || strings.Contains(patternLower, "frequency") || strings.Contains(patternText, "frequency") {
 		return dec.Action != "hold" && dec.Action != "wait"
 	}
 

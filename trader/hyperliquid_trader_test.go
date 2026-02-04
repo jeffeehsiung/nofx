@@ -203,18 +203,6 @@ func NewHyperliquidTestSuite(t *testing.T) *HyperliquidTestSuite {
 	walletAddr := "0x9999999999999999999999999999999999999999"
 	ctx := context.Background()
 
-	// Create Exchange client, pointing to mock server
-	exchange := hyperliquid.NewExchange(
-		ctx,
-		privateKey,
-		mockServer.URL,      // Use mock server URL
-		&hyperliquid.Meta{}, // Provide empty Meta
-		"",                  // Some string argument
-		walletAddr,
-		&hyperliquid.SpotMeta{},   // Provide empty SpotMeta
-		&hyperliquid.MixedArray{}, // Provide empty MixedArray
-	)
-
 	// Create meta (simulate successful fetch)
 	meta := &hyperliquid.Meta{
 		Universe: []hyperliquid.AssetInfo{
@@ -222,6 +210,18 @@ func NewHyperliquidTestSuite(t *testing.T) *HyperliquidTestSuite {
 			{Name: "ETH", SzDecimals: 3},
 		},
 	}
+
+	// Create Exchange client, pointing to mock server
+	exchange := hyperliquid.NewExchange(
+		ctx,
+		privateKey,
+		mockServer.URL, // Use mock server URL
+		meta,           // Seed Meta so CoinToAsset works in tests
+		"",             // Some string argument
+		walletAddr,
+		&hyperliquid.SpotMeta{},   // Provide empty SpotMeta
+		&hyperliquid.MixedArray{}, // Provide empty MixedArray
+	)
 
 	trader := &HyperliquidTrader{
 		exchange:      exchange,

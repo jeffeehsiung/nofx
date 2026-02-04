@@ -405,7 +405,18 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	}
 
 	// Initialize analysis systems (feedback, factor, compliance) for live trading
-	at.feedbackGenerator = backtest.NewFeedbackGenerator(at.id, at.initialBalance, backtest.DefaultFeedbackConfig())
+	feedbackConfig := backtest.DefaultFeedbackConfig()
+	feedbackConfig.EnableFeedback = true
+	feedbackConfig.EnableMicrostructure = true
+	if mcpClient != nil {
+		feedbackConfig.EnableLLMPatterns = true
+		feedbackConfig.EnableLLMInsights = true
+	}
+	at.feedbackGenerator = backtest.NewFeedbackGenerator(at.id, at.initialBalance, feedbackConfig)
+	if mcpClient != nil {
+		at.feedbackGenerator.SetAIClient(mcpClient)
+		logger.Infof("✅ [%s] AI client injected into FeedbackGenerator for LLM feedback evolution", config.Name)
+	}
 	at.factorOptimizer = backtest.NewFactorOptimizer(&config.StrategyConfig.RiskControl, backtest.DefaultFactorOptimizerConfig())
 	at.complianceTracker = backtest.NewComplianceTracker(backtest.DefaultComplianceConfig())
 	at.lastFeedback = nil
@@ -1177,7 +1188,13 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 			// Regenerate feedback every FeedbackWindowCycles cycles to avoid constant recalculation
 			if at.feedbackGenerator != nil && stats.TotalTrades >= backtest.DefaultFeedbackConfig().FeedbackWindowCycles {
 				if at.lastFeedback == nil || (stats.TotalTrades-at.feedbackCycle) >= backtest.DefaultFeedbackConfig().FeedbackWindowCycles {
-					feedback, err := at.feedbackGenerator.GenerateFeedback()
+					var feedback *backtest.FeedbackAnalysis
+					var err error
+					if at.mcpClient != nil {
+						feedback, err = at.feedbackGenerator.GenerateFeedbackWithLLM()
+					} else {
+						feedback, err = at.feedbackGenerator.GenerateFeedback()
+					}
 					if err != nil {
 						logger.Warnf("⚠️ [%s] Failed to generate feedback analysis: %v", at.name, err)
 					} else if feedback != nil {
@@ -2053,7 +2070,13 @@ func (at *AutoTrader) GetFeedbackAnalysis() *backtest.FeedbackAnalysis {
 	if at.feedbackGenerator == nil {
 		return nil
 	}
-	analysis, err := at.feedbackGenerator.GenerateFeedback()
+	var analysis *backtest.FeedbackAnalysis
+	var err error
+	if at.mcpClient != nil {
+		analysis, err = at.feedbackGenerator.GenerateFeedbackWithLLM()
+	} else {
+		analysis, err = at.feedbackGenerator.GenerateFeedback()
+	}
 	if err != nil {
 		logger.Warnf("[%s] Error generating feedback analysis: %v", at.config.Name, err)
 		return nil

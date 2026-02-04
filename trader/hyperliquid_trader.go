@@ -653,11 +653,24 @@ func (t *HyperliquidTrader) SetLeverage(symbol string, leverage int) error {
 	// Hyperliquid symbol format (remove USDT suffix)
 	coin := convertSymbolToHyperliquid(symbol)
 
+	// Ensure meta is loaded for this coin before setting leverage
+	if err := t.refreshMetaIfNeeded(coin); err != nil {
+		logger.Warnf("⚠️  Meta refresh failed for %s before setting leverage: %v", coin, err)
+	}
+
 	// Call UpdateLeverage (leverage int, name string, isCross bool)
 	// Third parameter: true=cross margin mode, false=isolated margin mode
 	_, err := t.exchange.UpdateLeverage(t.ctx, leverage, coin, t.isCrossMargin)
 	if err != nil {
-		return fmt.Errorf("failed to set leverage: %w", err)
+		// Retry once if meta might be stale or missing
+		if strings.Contains(strings.ToLower(err.Error()), "coin") && strings.Contains(strings.ToLower(err.Error()), "not found") {
+			if refreshErr := t.refreshMetaIfNeeded(coin); refreshErr == nil {
+				_, err = t.exchange.UpdateLeverage(t.ctx, leverage, coin, t.isCrossMargin)
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("failed to set leverage: %w", err)
+		}
 	}
 
 	logger.Infof("  ✓ %s leverage switched to %dx", symbol, leverage)

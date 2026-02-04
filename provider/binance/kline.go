@@ -263,8 +263,12 @@ func NormalizeSymbol(symbol string) string {
 // MapInterval maps common interval strings to Binance format
 // Binance supports: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
 func MapInterval(interval string) string {
-	// Normalize to lowercase
-	interval = strings.ToLower(strings.TrimSpace(interval))
+	// Normalize input while preserving monthly interval ("1M")
+	interval = strings.TrimSpace(interval)
+	if interval == "1M" || strings.EqualFold(interval, "1mo") {
+		return "1M"
+	}
+	interval = strings.ToLower(interval)
 
 	// Binance uses specific formats
 	validIntervals := map[string]string{
@@ -283,7 +287,6 @@ func MapInterval(interval string) string {
 		"3d":  "3d",
 		"1w":  "1w",
 		"1mo": "1M",
-		"1M":  "1M",
 	}
 
 	if mapped, ok := validIntervals[interval]; ok {

@@ -33,7 +33,7 @@ func TestUpdateTraderRequest_SystemPromptTemplate(t *testing.T) {
 			expectedPromptTemplate: "nof1",
 		},
 		{
-			name: "Should accept system_prompt_template=default during update",
+			name: "Should accept system_prompt_template=gen1 during update",
 			requestJSON: `{
 				"name": "Test Trader",
 				"ai_model_id": "gpt-4",
@@ -48,7 +48,7 @@ func TestUpdateTraderRequest_SystemPromptTemplate(t *testing.T) {
 				"is_cross_margin": true,
 				"system_prompt_template": "gen1"
 			}`,
-			expectedPromptTemplate: "default",
+			expectedPromptTemplate: "gen1",
 		},
 		{
 			name: "Should accept system_prompt_template=custom during update",
@@ -125,7 +125,7 @@ func TestGetTraderConfigResponse_SystemPromptTemplate(t *testing.T) {
 			expectedTemplate: "nof1",
 		},
 		{
-			name: "Get config should return system_prompt_template=default",
+			name: "Get config should return system_prompt_template=gen1",
 			traderConfig: &store.Trader{
 				ID:                   "trader-456",
 				UserID:               "user-1",
@@ -143,7 +143,7 @@ func TestGetTraderConfigResponse_SystemPromptTemplate(t *testing.T) {
 				IsCrossMargin:        false,
 				IsRunning:            false,
 			},
-			expectedTemplate: "default",
+			expectedTemplate: "gen1",
 		},
 	}
 

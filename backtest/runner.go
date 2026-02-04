@@ -155,8 +155,20 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	feedbackConfig := DefaultFeedbackConfig()
 	if cfg.EnableAnalysis {
 		feedbackConfig.EnableFeedback = true
+		feedbackConfig.EnableMicrostructure = true
 	}
 	feedbackGenerator := NewFeedbackGenerator(cfg.RunID, cfg.InitialBalance, feedbackConfig)
+
+	// Inject AI client for LLM-based feedback evolution
+	if client != nil {
+		feedbackGenerator.SetAIClient(client)
+		if cfg.EnableAnalysis {
+			feedbackConfig.EnableLLMPatterns = true
+			feedbackConfig.EnableLLMInsights = true
+		}
+		logger.Infof("✅ AI client injected into FeedbackGenerator for LLM-based feedback evolution")
+	}
+	feedbackGenerator.config = feedbackConfig
 
 	failureThresholds := decision.DefaultFailureThresholds()
 
@@ -930,7 +942,13 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 	if r.feedbackConfig.EnableFeedback && callCount >= r.feedbackConfig.MinDecisionsForFeedback {
 		// Regenerate feedback every FeedbackWindowCycles cycles
 		if r.lastFeedback == nil || (callCount-r.feedbackCycle) >= r.feedbackConfig.FeedbackWindowCycles {
-			feedback, err := r.feedbackGenerator.GenerateFeedback()
+			var feedback *FeedbackAnalysis
+			var err error
+			if r.feedbackGenerator != nil && r.feedbackGenerator.AIClient != nil && (r.feedbackConfig.EnableLLMPatterns || r.feedbackConfig.EnableLLMInsights) {
+				feedback, err = r.feedbackGenerator.GenerateFeedbackWithLLM()
+			} else {
+				feedback, err = r.feedbackGenerator.GenerateFeedback()
+			}
 			if err != nil {
 				logger.Infof("Failed to generate feedback: %v", err)
 			} else if feedback != nil {
