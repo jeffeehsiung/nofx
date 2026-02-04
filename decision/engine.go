@@ -580,7 +580,7 @@ func (e *StrategyEngine) getCoinPoolCoins(limit int) ([]CandidateCoin, error) {
 
 	// Check if Binance fallback is enabled (default: true)
 	useFallback := true
-	if e.config.CoinSource.EnableBinanceFallback == false {
+	if !e.config.CoinSource.EnableBinanceFallback {
 		useFallback = false
 	}
 
@@ -613,7 +613,7 @@ func (e *StrategyEngine) getOITopCoins(limit int) ([]CandidateCoin, error) {
 
 	// Check if Binance fallback is enabled (default: true)
 	useFallback := true
-	if e.config.CoinSource.EnableBinanceFallback == false {
+	if !e.config.CoinSource.EnableBinanceFallback {
 		useFallback = false
 	}
 
@@ -877,15 +877,37 @@ func (e *StrategyEngine) FetchOIRankingData() *provider.OIRankingData {
 	if err != nil {
 		logger.Warnf("⚠️  Failed to fetch OI ranking data: %v", err)
 
-		// Fallback: CoinGlass (requires COINGLASS_API_KEY to be set)
+		// Fallback tier 2: CoinGlass (requires COINGLASS_API_KEY to be set)
 		if e.config.CoinSource.EnableBinanceFallback {
 			fallbackData, fallbackErr := provider.GetOIRankingFromCoinGlass(duration, limit)
-			if fallbackErr != nil {
-				logger.Warnf("⚠️  CoinGlass fallback failed: %v", fallbackErr)
-				return nil
+			if fallbackErr == nil {
+				logger.Infof("✓ Using CoinGlass OI ranking fallback (%d positions)", len(fallbackData.TopPositions))
+				return fallbackData
 			}
-			logger.Infof("✓ Using CoinGlass OI ranking fallback (%d positions)", len(fallbackData.TopPositions))
-			return fallbackData
+			logger.Warnf("⚠️  CoinGlass fallback failed: %v, trying Binance momentum fallback", fallbackErr)
+
+			// Fallback tier 3: Binance momentum-based ranking (always available)
+			symbolsData, _, binanceErr := provider.GetOITopSymbolsWithFallback(limit, false)
+			if binanceErr == nil && len(symbolsData) > 0 {
+				// Convert symbols to OIRankingData format
+				oiPositions := make([]provider.OIPosition, 0, len(symbolsData))
+				for i, symbol := range symbolsData {
+					oiPositions = append(oiPositions, provider.OIPosition{
+						Symbol: symbol,
+						Rank:   i + 1,
+					})
+				}
+				binanceData := &provider.OIRankingData{
+					Duration:     duration,
+					TopPositions: oiPositions,
+					FetchedAt:    time.Now(),
+				}
+				logger.Infof("✓ Using Binance momentum OI ranking fallback (%d positions)", len(binanceData.TopPositions))
+				return binanceData
+			}
+			if binanceErr != nil {
+				logger.Warnf("⚠️  Binance fallback also failed: %v", binanceErr)
+			}
 		}
 
 		return nil
