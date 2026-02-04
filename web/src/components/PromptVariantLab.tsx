@@ -17,36 +17,21 @@ import { api } from '../lib/api'
 import { useLanguage } from '../contexts/LanguageContext'
 
 export interface PromptVariant {
-  id?: string
-  ID?: string
-  promptRoleDefinition?: string
-  PromptRoleDefinition?: string
-  promptTradingFrequency?: string
-  PromptTradingFrequency?: string
-  promptEntryStandards?: string
-  PromptEntryStandards?: string
-  promptDecisionProcess?: string
-  PromptDecisionProcess?: string
-  createdAt?: string
-  CreatedAt?: string
-  totalDecisions?: number
-  TotalDecisions?: number
-  totalReturn?: number
-  TotalReturn?: number
-  winRate?: number
-  WinRate?: number
-  profitFactor?: number
-  ProfitFactor?: number
-  sharpeRatio?: number
-  SharpeRatio?: number
-  maxDrawdown?: number
-  MaxDrawdown?: number
-  fitnessScore?: number
-  FitnessScore?: number
-  generation?: number
-  Generation?: number
-  isActive?: boolean
-  IsActive?: boolean
+  id: string
+  promptRoleDefinition: string
+  promptTradingFrequency: string
+  promptEntryStandards: string
+  promptDecisionProcess: string
+  createdAt: string
+  totalDecisions: number
+  totalReturn: number
+  winRate: number
+  profitFactor: number
+  sharpeRatio: number
+  maxDrawdown: number
+  fitnessScore: number
+  generation: number
+  isActive: boolean
 }
 
 export interface PromptVariantLabResponse {
@@ -156,11 +141,11 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
   }, [data?.variants, resourceId, isBacktest])
 
   const variants = Array.isArray(data?.variants)
-    ? data.variants.filter((v) => v && (typeof v.id === 'string' || typeof v.ID === 'string'))
+    ? data.variants.filter((v) => v && typeof v.id === 'string')
     : []
   const showVariants = isBacktest && variants.length === 0 ? lastNonEmptyVariants : variants
   const everHadVariants = isBacktest ? lastNonEmptyVariants.length > 0 : true
-  const activeVariant = showVariants.length > 0 ? showVariants.find((v) => v.isActive || v.IsActive) : undefined
+  const activeVariant = showVariants.length > 0 ? showVariants.find((v) => v.isActive) : undefined
 
   useEffect(() => {
     if (activeVariant && !selectedVariant) {
@@ -310,15 +295,15 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
             {language === 'zh' ? '活跃变体' : 'Active Variant'}
           </div>
           <div className="text-2xl font-bold text-green-400">
-            {activeVariant ? `Gen ${activeVariant.generation || activeVariant.Generation}` : '-'}
+            {activeVariant ? `Gen ${activeVariant.generation}` : '-'}
           </div>
         </div>
         <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
           <div className="text-slate-400 text-xs mb-1">
             {language === 'zh' ? '活跃适应度' : 'Active Fitness'}
           </div>
-          <div className={`text-2xl font-bold ${getFitnessColor((activeVariant?.fitnessScore ?? activeVariant?.FitnessScore) ?? 0)}`}>
-            {activeVariant ? (((activeVariant.fitnessScore ?? activeVariant.FitnessScore) ?? 0) * 100).toFixed(0) : '-'}%
+          <div className={`text-2xl font-bold ${getFitnessColor(activeVariant?.fitnessScore ?? 0)}`}>
+            {activeVariant ? ((activeVariant.fitnessScore ?? 0) * 100).toFixed(0) : '-'}%
           </div>
         </div>
       </div>
@@ -342,15 +327,15 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {showVariants.map((variant, idx) => (
               <motion.div
-                key={variant.id || variant.ID}
+                key={variant.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.05 }}
                 onClick={() => setSelectedVariant(variant)}
                 className={`cursor-pointer rounded-lg border transition-all ${
-                  (variant.isActive || variant.IsActive)
+                  variant.isActive
                     ? 'border-green-500/50 bg-green-950/20 ring-2 ring-green-500/30'
-                    : (selectedVariant?.id || selectedVariant?.ID) === (variant.id || variant.ID)
+                    : selectedVariant?.id === variant.id
                     ? 'border-blue-500/50 bg-blue-950/20'
                     : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
                 } p-4`}
@@ -358,22 +343,22 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                 {/* Header */}
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    {(variant.isActive || variant.IsActive) ? (
+                    {variant.isActive ? (
                       <CheckCircle2 className="h-5 w-5 text-green-400" />
                     ) : (
                       <Circle className="h-5 w-5 text-slate-500" />
                     )}
                     <div>
-                      <div className={`font-semibold text-sm ${getGenerationColor(variant.generation || variant.Generation || 0)}`}>
-                        Gen {variant.generation || variant.Generation}
+                      <div className={`font-semibold text-sm ${getGenerationColor(variant.generation)}`}>
+                        Gen {variant.generation}
                       </div>
                       <div className="text-xs text-slate-400">
-                        {new Date(variant.createdAt || variant.CreatedAt || '').toLocaleTimeString()}
+                        {new Date(variant.createdAt || '').toLocaleTimeString()}
                       </div>
                     </div>
                   </div>
 
-                  {(variant.isActive || variant.IsActive) && (
+                  {variant.isActive && (
                     <div className="flex items-center gap-1 px-2 py-1 bg-green-500/20 rounded text-xs text-green-400">
                       <Activity className="h-3 w-3" />
                       {language === 'zh' ? '活跃' : 'Active'}
@@ -387,27 +372,27 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                     <span className="text-slate-400">
                       {language === 'zh' ? '总决策' : 'Decisions'}
                     </span>
-                    <span className="text-white font-medium">{variant.totalDecisions || variant.TotalDecisions || 0}</span>
+                    <span className="text-white font-medium">{variant.totalDecisions}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-slate-400">
                       {language === 'zh' ? '总收益率' : 'Return'}
                     </span>
-                    <span className={(variant.totalReturn || variant.TotalReturn || 0) >= 0 ? 'text-green-400' : 'text-red-400'}>
-                      {((variant.totalReturn || variant.TotalReturn || 0) * 100).toFixed(2)}%
+                    <span className={variant.totalReturn >= 0 ? 'text-green-400' : 'text-red-400'}>
+                      {(variant.totalReturn * 100).toFixed(2)}%
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-slate-400">
                       {language === 'zh' ? '胜率' : 'Win Rate'}
                     </span>
-                    <span className="text-white">{((variant.winRate || variant.WinRate || 0) * 100).toFixed(1)}%</span>
+                    <span className="text-white">{(variant.winRate * 100).toFixed(1)}%</span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-slate-400">
                       {language === 'zh' ? '利润因子' : 'Profit Factor'}
                     </span>
-                    <span className="text-white">{(variant.profitFactor || variant.ProfitFactor || 0).toFixed(2)}</span>
+                    <span className="text-white">{variant.profitFactor.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -416,19 +401,19 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                   <span className="text-sm text-slate-400">
                     {language === 'zh' ? '适应度分数' : 'Fitness Score'}
                   </span>
-                  <div className={`text-lg font-bold ${getFitnessColor(variant.fitnessScore || variant.FitnessScore || 0)}`}>
-                    {((variant.fitnessScore || variant.FitnessScore || 0) * 100).toFixed(1)}%
+                  <div className={`text-lg font-bold ${getFitnessColor(variant.fitnessScore)}`}>
+                    {(variant.fitnessScore * 100).toFixed(1)}%
                   </div>
                 </div>
 
                 {/* Activate Button */}
-                {!(variant.isActive || variant.IsActive) && (
+                {!variant.isActive && (
                   <button
-                    onClick={() => handleActivate(variant.id || variant.ID || '')}
+                    onClick={() => handleActivate(variant.id)}
                     disabled={activating !== null}
                     className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 text-white text-sm font-medium rounded transition-colors flex items-center justify-center gap-2"
                   >
-                    {activating === (variant.id || variant.ID) ? (
+                    {activating === variant.id ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
                         {language === 'zh' ? '激活中...' : 'Activating...'}
@@ -455,7 +440,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
             <h3 className="text-lg font-semibold text-white">
               {language === 'zh' ? '选中变体详情' : 'Selected Variant Details'}
             </h3>
-            {(selectedVariant.isActive || selectedVariant.IsActive) && (
+            {selectedVariant.isActive && (
               <span className="ml-auto text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded">
                 {language === 'zh' ? '活跃' : 'Active'}
               </span>
@@ -467,8 +452,8 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
               <div className="text-xs text-slate-400 mb-1">
                 {language === 'zh' ? '代数' : 'Generation'}
               </div>
-              <div className={`text-xl font-bold ${getGenerationColor(selectedVariant.generation || selectedVariant.Generation || 0)}`}>
-                {selectedVariant.generation || selectedVariant.Generation}
+              <div className={`text-xl font-bold ${getGenerationColor(selectedVariant.generation)}`}>
+                {selectedVariant.generation}
               </div>
             </div>
             <div>
@@ -476,15 +461,15 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                 {language === 'zh' ? '创建时间' : 'Created'}
               </div>
               <div className="text-sm text-white">
-                {new Date(selectedVariant.createdAt || selectedVariant.CreatedAt || '').toLocaleString()}
+                {new Date(selectedVariant.createdAt || '').toLocaleString()}
               </div>
             </div>
             <div>
               <div className="text-xs text-slate-400 mb-1">
                 {language === 'zh' ? '适应度分数' : 'Fitness'}
               </div>
-              <div className={`text-xl font-bold ${getFitnessColor(selectedVariant.fitnessScore || selectedVariant.FitnessScore || 0)}`}>
-                {((selectedVariant.fitnessScore || selectedVariant.FitnessScore || 0) * 100).toFixed(1)}%
+              <div className={`text-xl font-bold ${getFitnessColor(selectedVariant.fitnessScore)}`}>
+                {(selectedVariant.fitnessScore * 100).toFixed(1)}%
               </div>
             </div>
           </div>
@@ -500,7 +485,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                   {language === 'zh' ? '角色定义' : 'Role Definition'}
                 </div>
                 <p className="text-sm text-slate-300 whitespace-pre-wrap font-mono">
-                  {(selectedVariant.promptRoleDefinition || selectedVariant.PromptRoleDefinition) || (language === 'zh' ? '无' : 'N/A')}
+                  {selectedVariant.promptRoleDefinition || (language === 'zh' ? '无' : 'N/A')}
                 </p>
               </div>
               <div>
@@ -508,7 +493,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                   {language === 'zh' ? '交易频率' : 'Trading Frequency'}
                 </div>
                 <p className="text-sm text-slate-300 whitespace-pre-wrap font-mono">
-                  {(selectedVariant.promptTradingFrequency || selectedVariant.PromptTradingFrequency) || (language === 'zh' ? '无' : 'N/A')}
+                  {selectedVariant.promptTradingFrequency || (language === 'zh' ? '无' : 'N/A')}
                 </p>
               </div>
               <div>
@@ -516,7 +501,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                   {language === 'zh' ? '入场标准' : 'Entry Standards'}
                 </div>
                 <p className="text-sm text-slate-300 whitespace-pre-wrap font-mono">
-                  {(selectedVariant.promptEntryStandards || selectedVariant.PromptEntryStandards) || (language === 'zh' ? '无' : 'N/A')}
+                  {selectedVariant.promptEntryStandards || (language === 'zh' ? '无' : 'N/A')}
                 </p>
               </div>
               <div>
@@ -524,7 +509,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                   {language === 'zh' ? '决策流程' : 'Decision Process'}
                 </div>
                 <p className="text-sm text-slate-300 whitespace-pre-wrap font-mono">
-                  {(selectedVariant.promptDecisionProcess || selectedVariant.PromptDecisionProcess) || (language === 'zh' ? '无' : 'N/A')}
+                  {selectedVariant.promptDecisionProcess || (language === 'zh' ? '无' : 'N/A')}
                 </p>
               </div>
             </div>
@@ -557,7 +542,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                     {language === 'zh' ? '总收益率' : 'Total Return'}
                   </div>
                   <div className="text-xl font-bold text-green-400">
-                    {(((performanceData.variant?.totalReturn || performanceData.variant?.TotalReturn) ?? 0) * 100).toFixed(2)}%
+                    {((performanceData.variant?.totalReturn ?? 0) * 100).toFixed(2)}%
                   </div>
                 </div>
                 <div>
@@ -565,7 +550,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                     {language === 'zh' ? '胜率' : 'Win Rate'}
                   </div>
                   <div className="text-xl font-bold text-blue-400">
-                    {(((performanceData.variant?.winRate || performanceData.variant?.WinRate) ?? 0) * 100).toFixed(1)}%
+                    {((performanceData.variant?.winRate ?? 0) * 100).toFixed(1)}%
                   </div>
                 </div>
                 <div>
@@ -573,7 +558,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                     {language === 'zh' ? '最大回撤' : 'Max Drawdown'}
                   </div>
                   <div className="text-xl font-bold text-red-400">
-                    {(((performanceData.variant?.maxDrawdown || performanceData.variant?.MaxDrawdown) ?? 0) * 100).toFixed(1)}%
+                    {((performanceData.variant?.maxDrawdown ?? 0) * 100).toFixed(1)}%
                   </div>
                 </div>
                 <div>
@@ -581,7 +566,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                     {language === 'zh' ? '夏普比率' : 'Sharpe Ratio'}
                   </div>
                   <div className="text-xl font-bold text-yellow-400">
-                    {(performanceData.variant?.sharpeRatio || performanceData.variant?.SharpeRatio)?.toFixed(2)}
+                    {(performanceData.variant?.sharpeRatio ?? 0).toFixed(2)}
                   </div>
                 </div>
               </div>
