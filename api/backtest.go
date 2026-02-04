@@ -933,35 +933,7 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 		return
 	}
 
-	// Try to get runner to access prompt optimizer (if backtest is still running)
-	runner, ok := s.backtestManager.GetRunner(runID)
-	if ok && runner.GetPromptOptimizer() != nil {
-		// Backtest is still running, get live variants from memory
-		variants := runner.GetPromptOptimizer().GetAllVariants()
-		c.JSON(http.StatusOK, gin.H{
-			"run_id":     runID,
-			"variants":   variants,
-			"total":      len(variants),
-			"generation": runner.GetPromptOptimizer().GetGeneration(),
-			"active":     runner.GetPromptOptimizer().GetCurrentVariant(),
-			"timestamp":  time.Now().Format("2006-01-02 15:04:05"),
-		})
-		return
-	}
-
-	// Backtest is not running or completed, load variants from database
-	variantsData, err := s.store.Backtest().LoadPromptVariants(runID)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"run_id":   runID,
-			"variants": []interface{}{},
-			"total":    0,
-			"message":  "No prompt optimization data found for this run",
-		})
-		return
-	}
-
-	// Convert database format to API format
+	// Convert prompt variants to API format (camelCase)
 	type APIVariant struct {
 		ID                     string  `json:"id"`
 		PromptRoleDefinition   string  `json:"promptRoleDefinition"`
@@ -978,6 +950,68 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 		FitnessScore           float64 `json:"fitnessScore"`
 		Generation             int     `json:"generation"`
 		IsActive               bool    `json:"isActive"`
+	}
+
+	toAPIVariantFromLive := func(v *backtest.PromptVariant) APIVariant {
+		return APIVariant{
+			ID:                     v.ID,
+			PromptRoleDefinition:   v.PromptRoleDefinition,
+			PromptTradingFrequency: v.PromptTradingFrequency,
+			PromptEntryStandards:   v.PromptEntryStandards,
+			PromptDecisionProcess:  v.PromptDecisionProcess,
+			CreatedAt:              v.CreatedAt.Format(time.RFC3339),
+			TotalDecisions:         v.TotalDecisions,
+			TotalReturn:            v.TotalReturn,
+			WinRate:                v.WinRate,
+			ProfitFactor:           v.ProfitFactor,
+			SharpeRatio:            v.SharpeRatio,
+			MaxDrawdown:            v.MaxDrawdown,
+			FitnessScore:           v.FitnessScore,
+			Generation:             v.Generation,
+			IsActive:               v.IsActive,
+		}
+	}
+
+	// Try to get runner to access prompt optimizer (if backtest is still running)
+	runner, ok := s.backtestManager.GetRunner(runID)
+	if ok && runner.GetPromptOptimizer() != nil {
+		// Backtest is still running, get live variants from memory
+		variantsData := runner.GetPromptOptimizer().GetAllVariants()
+		variants := make([]APIVariant, 0, len(variantsData))
+		var activeVariant *APIVariant
+		for _, v := range variantsData {
+			apiV := toAPIVariantFromLive(v)
+			variants = append(variants, apiV)
+			if v.IsActive {
+				activeVariant = &apiV
+			}
+		}
+		current := runner.GetPromptOptimizer().GetCurrentVariant()
+		if current != nil && activeVariant == nil {
+			apiV := toAPIVariantFromLive(current)
+			activeVariant = &apiV
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"run_id":     runID,
+			"variants":   variants,
+			"total":      len(variants),
+			"generation": runner.GetPromptOptimizer().GetGeneration(),
+			"active":     activeVariant,
+			"timestamp":  time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	// Backtest is not running or completed, load variants from database
+	variantsData, err := s.store.Backtest().LoadPromptVariants(runID)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"run_id":   runID,
+			"variants": []interface{}{},
+			"total":    0,
+			"message":  "No prompt optimization data found for this run",
+		})
+		return
 	}
 
 	variants := make([]APIVariant, 0, len(variantsData))
