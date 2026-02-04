@@ -222,7 +222,7 @@ func (fg *FeedbackGenerator) GenerateFeedbackWithLLM() (*FeedbackAnalysis, error
 
 		evolvedRules, err := fg.AIClient.CallWithMessages(metaPrompt, userPrompt)
 		if err == nil {
-			updatedActions := fg.parseEvolvedRules(evolvedRules, lang)
+			updatedActions := fg.parseEvolvedRules(evolvedRules)
 			if len(updatedActions) > 0 {
 				analysis.RecommendedActions = updatedActions
 				logger.Infof("[FeedbackGenerator] ✅ LLM-enhanced feedback generated with %d quantified rules", len(updatedActions))
@@ -296,7 +296,7 @@ func (fg *FeedbackGenerator) buildFeedbackAnalysisPrompt(analysis *FeedbackAnaly
 }
 
 // parseEvolvedRules extracts quantified rules from LLM output
-func (fg *FeedbackGenerator) parseEvolvedRules(evolvedText string, lang string) []string {
+func (fg *FeedbackGenerator) parseEvolvedRules(evolvedText string) []string {
 	var rules []string
 
 	// Parse lines matching the rule format

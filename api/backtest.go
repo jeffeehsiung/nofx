@@ -963,21 +963,21 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 
 	// Convert database format to API format
 	type APIVariant struct {
-		ID                     string  `json:"ID"`
-		PromptRoleDefinition   string  `json:"PromptRoleDefinition"`
-		PromptTradingFrequency string  `json:"PromptTradingFrequency"`
-		PromptEntryStandards   string  `json:"PromptEntryStandards"`
-		PromptDecisionProcess  string  `json:"PromptDecisionProcess"`
-		CreatedAt              string  `json:"CreatedAt"`
-		TotalDecisions         int     `json:"TotalDecisions"`
-		TotalReturn            float64 `json:"TotalReturn"`
-		WinRate                float64 `json:"WinRate"`
-		ProfitFactor           float64 `json:"ProfitFactor"`
-		SharpeRatio            float64 `json:"SharpeRatio"`
-		MaxDrawdown            float64 `json:"MaxDrawdown"`
-		FitnessScore           float64 `json:"FitnessScore"`
-		Generation             int     `json:"Generation"`
-		IsActive               bool    `json:"IsActive"`
+		ID                     string  `json:"id"`
+		PromptRoleDefinition   string  `json:"promptRoleDefinition"`
+		PromptTradingFrequency string  `json:"promptTradingFrequency"`
+		PromptEntryStandards   string  `json:"promptEntryStandards"`
+		PromptDecisionProcess  string  `json:"promptDecisionProcess"`
+		CreatedAt              string  `json:"createdAt"`
+		TotalDecisions         int     `json:"totalDecisions"`
+		TotalReturn            float64 `json:"totalReturn"`
+		WinRate                float64 `json:"winRate"`
+		ProfitFactor           float64 `json:"profitFactor"`
+		SharpeRatio            float64 `json:"sharpeRatio"`
+		MaxDrawdown            float64 `json:"maxDrawdown"`
+		FitnessScore           float64 `json:"fitnessScore"`
+		Generation             int     `json:"generation"`
+		IsActive               bool    `json:"isActive"`
 	}
 
 	variants := make([]APIVariant, 0, len(variantsData))
@@ -1017,7 +1017,7 @@ func (s *Server) handleGetPromptVariants(c *gin.Context) {
 		"total":      len(variants),
 		"generation": maxGeneration,
 		"active":     activeVariant,
-		"timestamp":  time.Now(),
+		"timestamp":  time.Now().Format(time.RFC3339),
 	})
 }
 

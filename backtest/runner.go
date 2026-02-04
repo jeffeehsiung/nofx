@@ -985,7 +985,7 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 				if r.promptOptimizer.ShouldEvolve(callCount) {
 					// Use the generic EvolvePrompts method for backtest
 					// (Live trading uses meta-prompting via EvolvePromptsWithMetaLearning)
-					if err := r.promptOptimizer.EvolvePrompts(r.cfg.PromptVariant, &strategyConfig.PromptSections); err != nil {
+					if err := r.promptOptimizer.EvolvePrompts(r.cfg.PromptVariant); err != nil {
 						logger.Infof("Failed to evolve prompts: %v", err)
 					} else {
 						// Save optimizer state

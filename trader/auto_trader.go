@@ -1264,7 +1264,7 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 						at.promptOptimizer.RecordDecisionOutcome(at.promptVariantID, metrics)
 						if at.promptOptimizer != nil && at.promptOptimizer.ShouldEvolve(stats.TotalTrades) {
 
-							if err := at.promptOptimizer.EvolvePrompts(at.promptVariantID, &strategyConfig.PromptSections); err != nil {
+							if err := at.promptOptimizer.EvolvePrompts(at.promptVariantID); err != nil {
 								logger.Infof("⚠️ [%s] Failed to evolve prompts: %v", at.name, err)
 							} else {
 								// Save optimizer state

@@ -379,7 +379,7 @@ func (po *PromptOptimizer) ShouldEvolve(currentCycle int) bool {
 
 // EvolvePrompts creates new generation of prompts using LLM-based evolution
 // The LLM analyzes performance and rewrites the system prompt to address weaknesses
-func (po *PromptOptimizer) EvolvePrompts(variantID string, strategy_prompt *store.PromptSectionsConfig) error {
+func (po *PromptOptimizer) EvolvePrompts(variantID string) error {
 	if !po.Config.EnableOptimization {
 		return nil
 	}
@@ -405,7 +405,7 @@ func (po *PromptOptimizer) EvolvePrompts(variantID string, strategy_prompt *stor
 
 	// Use LLM-based evolution if AI client is available
 	if po.AIClient != nil {
-		return po.evolvePromptsWithLLM(variantID, strategy_prompt)
+		return po.evolvePromptsWithLLM(variantID)
 	}
 
 	// Fallback: Keep top performers only (no genetic algorithm)
@@ -428,7 +428,7 @@ func (po *PromptOptimizer) EvolvePrompts(variantID string, strategy_prompt *stor
 
 // evolvePromptsWithLLM uses LLM to evolve system prompts based on performance
 // Optimized to use batch LLM request instead of iterative calls
-func (po *PromptOptimizer) evolvePromptsWithLLM(variantID string, strategy_prompt *store.PromptSectionsConfig) error {
+func (po *PromptOptimizer) evolvePromptsWithLLM(variantID string) error {
 	currentVariant := po.GetVariantByID(variantID)
 	if currentVariant == nil {
 		logger.Fatal("[PromptOptimizer] Variant not found, skipping LLM evolution")
@@ -438,18 +438,16 @@ func (po *PromptOptimizer) evolvePromptsWithLLM(variantID string, strategy_promp
 
 	if currentMetrics == nil {
 		logger.Infof("[PromptOptimizer] No performance data, skipping LLM evolution")
-		po.Generation++
 		return nil
 	}
 
 	// Check if prompt is underperforming before evolution
 	if po.isUnderperforming(currentMetrics) {
 		// Use optimized batch LLM evolution
-		return po.evolvePromptsWithLLMBatch(variantID, strategy_prompt, currentVariant, currentMetrics)
+		return po.evolvePromptsWithLLMBatch(variantID, currentVariant, currentMetrics)
 	}
 
 	logger.Infof("[PromptOptimizer] Prompt variant %s performing adequately (fitness: %.3f), keeping current", variantID, currentVariant.FitnessScore)
-	po.Generation++
 	return nil
 }
 
@@ -464,8 +462,7 @@ func (po *PromptOptimizer) isUnderperforming(metrics *Metrics) bool {
 
 // evolvePromptsWithLLMBatch uses a single batch LLM request to rewrite all prompt sections
 // More efficient than iterative calls, ensures consistency, and parses results back into sections
-func (po *PromptOptimizer) evolvePromptsWithLLMBatch(variantID string, strategy_prompt *store.PromptSectionsConfig,
-	currentVariant *PromptVariant, currentMetrics *Metrics) error {
+func (po *PromptOptimizer) evolvePromptsWithLLMBatch(variantID string, currentVariant *PromptVariant, currentMetrics *Metrics) error {
 
 	// Detect language from current prompt
 	lang := "en"
@@ -480,10 +477,10 @@ func (po *PromptOptimizer) evolvePromptsWithLLMBatch(variantID string, strategy_
 	var userPrompt string
 
 	if lang == "zh" {
-		metaPrompt = po.buildBatchEvolutionPromptZH(strategy_prompt, currentVariant, currentMetrics)
+		metaPrompt = po.buildBatchEvolutionPromptZH(currentVariant, currentMetrics)
 		userPrompt = "请一次性改写以下所有系统提示词部分，并按照指定格式输出。"
 	} else {
-		metaPrompt = po.buildBatchEvolutionPromptEN(strategy_prompt, currentVariant, currentMetrics)
+		metaPrompt = po.buildBatchEvolutionPromptEN(currentVariant, currentMetrics)
 		userPrompt = "Please rewrite all the following system prompt sections at once and output in the specified format."
 	}
 
@@ -496,7 +493,7 @@ func (po *PromptOptimizer) evolvePromptsWithLLMBatch(variantID string, strategy_
 	}
 
 	// Parse evolved sections from batch response
-	sections := po.extractPromptSections(evolvedText, lang)
+	sections := po.extractPromptSections(evolvedText)
 
 	// Create new evolved variant
 	evolvedVariant := &PromptVariant{
@@ -536,8 +533,7 @@ func (po *PromptOptimizer) evolvePromptsWithLLMBatch(variantID string, strategy_
 }
 
 // buildBatchEvolutionPromptEN creates a batch meta-prompt for all sections (English)
-func (po *PromptOptimizer) buildBatchEvolutionPromptEN(prompt *store.PromptSectionsConfig,
-	variant *PromptVariant, metrics *Metrics) string {
+func (po *PromptOptimizer) buildBatchEvolutionPromptEN(variant *PromptVariant, metrics *Metrics) string {
 	var sb strings.Builder
 	sb.WriteString("You are an expert prompt engineer for trading systems. Evolve ALL four sections below simultaneously.\n\n")
 	sb.WriteString("# Performance Issues Identified\n")
@@ -555,13 +551,13 @@ func (po *PromptOptimizer) buildBatchEvolutionPromptEN(prompt *store.PromptSecti
 	}
 	sb.WriteString("\n# Current Sections\n\n")
 	sb.WriteString("## ROLE_DEFINITION\n")
-	sb.WriteString(prompt.RoleDefinition)
+	sb.WriteString(variant.PromptRoleDefinition)
 	sb.WriteString("\n\n## TRADING_FREQUENCY\n")
-	sb.WriteString(prompt.TradingFrequency)
+	sb.WriteString(variant.PromptTradingFrequency)
 	sb.WriteString("\n\n## ENTRY_STANDARDS\n")
-	sb.WriteString(prompt.EntryStandards)
+	sb.WriteString(variant.PromptEntryStandards)
 	sb.WriteString("\n\n## DECISION_PROCESS\n")
-	sb.WriteString(prompt.DecisionProcess)
+	sb.WriteString(variant.PromptDecisionProcess)
 	sb.WriteString("\n\n# Task\n")
 	sb.WriteString("Rewrite ALL four sections to address the identified issues. Output format MUST be:\n\n")
 	sb.WriteString("[ROLE_DEFINITION]\n<rewritten role definition>\n[END_ROLE_DEFINITION]\n\n")
@@ -573,8 +569,7 @@ func (po *PromptOptimizer) buildBatchEvolutionPromptEN(prompt *store.PromptSecti
 }
 
 // buildBatchEvolutionPromptZH creates a batch meta-prompt for all sections (Chinese)
-func (po *PromptOptimizer) buildBatchEvolutionPromptZH(prompt *store.PromptSectionsConfig,
-	variant *PromptVariant, metrics *Metrics) string {
+func (po *PromptOptimizer) buildBatchEvolutionPromptZH(variant *PromptVariant, metrics *Metrics) string {
 	var sb strings.Builder
 	sb.WriteString("你是交易系统提示词工程专家。请同时改写以下四个部分。\n\n")
 	sb.WriteString("# 识别的表现问题\n")
@@ -592,13 +587,13 @@ func (po *PromptOptimizer) buildBatchEvolutionPromptZH(prompt *store.PromptSecti
 	}
 	sb.WriteString("\n# 当前部分\n\n")
 	sb.WriteString("## ROLE_DEFINITION\n")
-	sb.WriteString(prompt.RoleDefinition)
+	sb.WriteString(variant.PromptRoleDefinition)
 	sb.WriteString("\n\n## TRADING_FREQUENCY\n")
-	sb.WriteString(prompt.TradingFrequency)
+	sb.WriteString(variant.PromptTradingFrequency)
 	sb.WriteString("\n\n## ENTRY_STANDARDS\n")
-	sb.WriteString(prompt.EntryStandards)
+	sb.WriteString(variant.PromptEntryStandards)
 	sb.WriteString("\n\n## DECISION_PROCESS\n")
-	sb.WriteString(prompt.DecisionProcess)
+	sb.WriteString(variant.PromptDecisionProcess)
 	sb.WriteString("\n\n# 任务\n")
 	sb.WriteString("改写所有四个部分以解决识别的问题。输出格式必须为：\n\n")
 	sb.WriteString("[ROLE_DEFINITION]\n<改写的角色定义>\n[END_ROLE_DEFINITION]\n\n")
@@ -610,7 +605,7 @@ func (po *PromptOptimizer) buildBatchEvolutionPromptZH(prompt *store.PromptSecti
 }
 
 // extractPromptSections parses batch LLM output into individual prompt sections
-func (po *PromptOptimizer) extractPromptSections(evolvedText string, lang string) map[string]string {
+func (po *PromptOptimizer) extractPromptSections(evolvedText string) map[string]string {
 	sections := map[string]string{
 		"role":      "",
 		"frequency": "",
@@ -665,229 +660,6 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
-}
-
-// DEPRECATED (kept for reference): old iterative prompt evolution
-// buildEvolutionMetaPrompt creates a prompt for the LLM to evolve the system prompt
-func (po *PromptOptimizer) buildEvolutionMetaPromptEN(prompt string, variant *PromptVariant, metrics *Metrics) string {
-	var sb strings.Builder
-	sb.WriteString("You are an expert in prompt engineering for trading systems. Your task is to improve trading prompts based on performance analysis.\n")
-	sb.WriteString("# System Prompt Evolution Task\n\n")
-	sb.WriteString("## Current System Prompt\n```\n")
-	sb.WriteString(prompt)
-	sb.WriteString("\n```\n\n")
-
-	sb.WriteString("## Performance Analysis\n")
-	sb.WriteString(fmt.Sprintf("- **Prompt Evolution History:** %s\n", po.GetEvolutionSummary("en")))
-	sb.WriteString(fmt.Sprintf("- **Total Return:** %.2f%%\n", metrics.TotalReturnPct))
-	sb.WriteString(fmt.Sprintf("- **Win Rate:** %.1f%%\n", metrics.WinRate))
-	sb.WriteString(fmt.Sprintf("- **Profit Factor:** %.2f\n", metrics.ProfitFactor))
-	sb.WriteString(fmt.Sprintf("- **Sharpe Ratio:** %.2f\n", metrics.SharpeRatio))
-	sb.WriteString(fmt.Sprintf("- **Max Drawdown:** %.1f%%\n", metrics.MaxDrawdownPct))
-	sb.WriteString(fmt.Sprintf("- **Fitness Score:** %.3f\n\n", variant.FitnessScore))
-
-	// Identify specific issues
-	sb.WriteString("## Identified Issues\n")
-	if metrics.WinRate < 45 {
-		sb.WriteString("- ⚠️ **Low Win Rate (<45%):** The strategy is too aggressive or lacks proper entry criteria.\n")
-	}
-	if metrics.ProfitFactor < 1.5 {
-		sb.WriteString("- ⚠️ **Low Profit Factor (<1.5):** Losses are too large relative to wins. Needs better risk management.\n")
-	}
-	if metrics.MaxDrawdownPct > 20 {
-		sb.WriteString("- ⚠️ **High Drawdown (>20%):** Position sizing is too aggressive or stop losses are too wide. Please define mathematically clear and quantitative aggressive or stop-loss strategies based on trading history, and calculate precise numeric indicators. Provide formulas if necessary.\n")
-	}
-	if metrics.SharpeRatio < 0.5 {
-		sb.WriteString("- ⚠️ **Low Sharpe Ratio (<0.5):** Returns don't justify the risk. Needs higher quality trades. Please define mathematically clear and quantitative return or risk strategies based on trading history, and calculate precise numeric indicators. Provide formulas if necessary.\n")
-	}
-	if metrics.TotalReturnPct < 0 {
-		sb.WriteString("- ⚠️ **Negative Returns:** The strategy is losing money. Fundamental approach needs revision. Please define mathematically clear and quantitative entry and (especially) exit strategies based on trading history, and calculate precise numeric indicators. Provide formulas if necessary.\n")
-	}
-	sb.WriteString("\n")
-
-	// Learning from market
-	sb.WriteString("## Learning Requirements\n")
-	sb.WriteString("The evolved prompt should:\n")
-	sb.WriteString("1. **Learn from mistakes:** Address the specific issues identified above\n")
-	sb.WriteString("2. **Market adaptation:** Use mathematical modeling to quantitatively consider market sentiment, volatility regimes, and trending vs ranging conditions. Use low-pass filtering to distinguish noise from real trend changes.\n")
-	sb.WriteString("3. **Risk awareness:** Emphasize capital preservation and proper position sizing, with precise numeric indicators and formulas where needed. Strictly enforce these rules.\n")
-	sb.WriteString("4. **Pattern recognition:** Encourage identifying high-probability setups based on market structure, with quantitative indicators and formulas. Strictly judge whether probability conditions are met and calculate confidence values.\n")
-	sb.WriteString("5. **Continuous monitoring**\n\n")
-
-	// Skillset enhancement
-	sb.WriteString("## Skillset Enhancement\n")
-	sb.WriteString("Equip the role with missing or under-developed skills:\n\n")
-
-	sb.WriteString("**Technical Analysis Skills:**\n")
-	sb.WriteString("- Multi-timeframe analysis (1h, 4h, daily) for trend confirmation\n")
-	sb.WriteString("- Support/resistance identification and price action reading\n")
-	sb.WriteString("- Volume analysis for confirming breakouts/breakdowns\n")
-	sb.WriteString("- Market microstructure interpretation (order book, tape reading)\n\n")
-
-	sb.WriteString("**Signal Processing & Quantitative Analysis:**\n")
-	sb.WriteString("- Fourier analysis to decompose price into frequency components (identify dominant cycles)\n")
-	sb.WriteString("- Digital filtering (low-pass to remove noise, high-pass to detect regime changes, band-pass for cycle extraction)\n")
-	sb.WriteString("- Spectral analysis to measure market periodicity and hidden rhythms\n")
-	sb.WriteString("- Wavelet transforms for multi-scale time-frequency analysis\n")
-	sb.WriteString("- Signal-to-noise ratio assessment to distinguish patterns from randomness\n")
-	sb.WriteString("- Autocorrelation and cross-correlation for lead-lag relationships\n")
-	sb.WriteString("- **Extended Kalman Filter (EKF)** with Fourier-based observations:\n")
-	sb.WriteString("  * Use frequency domain features (dominant frequencies, spectral power) as observations\n")
-	sb.WriteString("  * Spectrograms for spatial-temporal evolution tracking\n")
-	sb.WriteString("  * State estimation: predict next market state (trend, volatility, regime) from noisy observations\n")
-	sb.WriteString("  * Non-linear dynamics modeling: EKF handles non-Gaussian, non-linear market behavior\n")
-	sb.WriteString("  * Adaptive filtering: continuously update state estimates as new data arrives\n\n")
-
-	sb.WriteString("**Risk Management Expertise:**\n")
-	sb.WriteString("- Dynamic position sizing based on volatility and account risk\n")
-	sb.WriteString("- Stop-loss placement using ATR, structure, or percentage-based methods\n")
-	sb.WriteString("- Portfolio heat management (total risk across all positions)\n")
-	sb.WriteString("- Correlation awareness to avoid overconcentration\n\n")
-
-	sb.WriteString("**Market Psychology & Sentiment:**\n")
-	sb.WriteString("- Recognizing fear/greed extremes from funding rates, open interest, social sentiment\n")
-	sb.WriteString("- Contrarian thinking when crowd is overly positioned\n")
-	sb.WriteString("- Identifying market regime changes (trending → ranging, risk-on → risk-off)\n")
-	sb.WriteString("- BTC dominance and altcoin rotation cycle awareness\n\n")
-
-	sb.WriteString("**Execution & Trade Management:**\n")
-	sb.WriteString("- Entry timing optimization (avoid FOMO, wait for pullbacks)\n")
-	sb.WriteString("- Scaling in/out strategies for better average prices\n")
-	sb.WriteString("- Trailing stop techniques to capture trends while protecting profits\n")
-	sb.WriteString("- Knowing when NOT to trade (low liquidity, high uncertainty, choppy conditions)\n\n")
-
-	sb.WriteString("**Self-Awareness & Metacognition:**\n")
-	sb.WriteString("- Maintain detailed mathematical models of why trades succeed or fail\n\n")
-
-	sb.WriteString("## Self-Diagnosis: What Skills Are Missing?\n")
-	sb.WriteString("**Critical Task:** Analyze the current prompt and identify what capabilities it lacks.\n\n")
-	sb.WriteString("Ask yourself:\n")
-	sb.WriteString("1. What analytical frameworks or methodologies are absent?\n")
-	sb.WriteString("2. What market dynamics or phenomena does it fail to consider?\n")
-	sb.WriteString("3. What decision-making processes or heuristics could improve outcomes?\n")
-	sb.WriteString("4. What domain knowledge (crypto-specific, macro, derivatives) is missing?\n")
-	sb.WriteString("5. What statistical, mathematical, or computational techniques would be valuable?\n")
-	sb.WriteString("6. What psychological or behavioral finance concepts should be integrated?\n\n")
-	sb.WriteString("**Be comprehensive.** Don't just address the issues above—think about what a world-class trader would know that this prompt doesn't capture.\n\n")
-
-	sb.WriteString("## Your Task\n")
-	sb.WriteString("Rewrite the system prompt to:\n")
-	sb.WriteString("2. Integrate the items listed above\n")
-	sb.WriteString("5. Preserve what's currently working well\n\n")
-	sb.WriteString("Output ONLY the improved system prompt as a mathematical model, with no explanations or commentary.\n")
-
-	return sb.String()
-}
-
-// buildEvolutionMetaPromptZH creates a Chinese prompt for the LLM to evolve the system prompt
-func (po *PromptOptimizer) buildEvolutionMetaPromptZH(prompt string, variant *PromptVariant, metrics *Metrics) string {
-	var sb strings.Builder
-	sb.WriteString("你是交易系统提示词工程专家。你的任务是基于表现分析改进交易提示词。")
-	sb.WriteString("# 系统提示词进化任务\n\n")
-	sb.WriteString("## 当前系统提示词\n```\n")
-	sb.WriteString(prompt)
-	sb.WriteString("\n```\n\n")
-
-	sb.WriteString("## 表现分析\n")
-	sb.WriteString(fmt.Sprintf("- **总的提示词历史记录：** %s\n", po.GetEvolutionSummary("zh")))
-	sb.WriteString(fmt.Sprintf("- **总收益:** %.2f%%\n", metrics.TotalReturnPct))
-	sb.WriteString(fmt.Sprintf("- **胜率:** %.1f%%\n", metrics.WinRate))
-	sb.WriteString(fmt.Sprintf("- **利润因子:** %.2f\n", metrics.ProfitFactor))
-	sb.WriteString(fmt.Sprintf("- **夏普比率:** %.2f\n", metrics.SharpeRatio))
-	sb.WriteString(fmt.Sprintf("- **最大回撤:** %.1f%%\n", metrics.MaxDrawdownPct))
-	sb.WriteString(fmt.Sprintf("- **适应度得分:** %.3f\n\n", variant.FitnessScore))
-
-	// Identify specific issues
-	sb.WriteString("## 识别的问题\n")
-	if metrics.WinRate < 45 {
-		sb.WriteString("- ⚠️ **低胜率 (<45%):** 策略过于激进或缺乏合适的入场标准。\n")
-	}
-	if metrics.ProfitFactor < 1.5 {
-		sb.WriteString("- ⚠️ **低利润因子 (<1.5):** 相对于盈利，亏损过大。需要更好的风险管理。\n")
-	}
-	if metrics.MaxDrawdownPct > 20 {
-		sb.WriteString("- ⚠️ **高回撤 (>20%):** 仓位规模过于激进或止损过宽。请根据交易历史定义数学模型量化且清晰的激进或止损策略，计算好的数字化指标。必要时给出公式。\n")
-	}
-	if metrics.SharpeRatio < 0.5 {
-		sb.WriteString("- ⚠️ **低夏普比率 (<0.5):** 收益无法证明风险。需要更高质量的交易。请根据交易历史定义数学模型量化且清晰的收益或风险策略，计算好的数字化指标。必要时给出公式。\n")
-	}
-	if metrics.TotalReturnPct < 0 {
-		sb.WriteString("- ⚠️ **负收益:** 策略正在亏损。基本方法需要修订。请根据交易历史定义数学模型量化且清晰的入场和（特别是）出场策略，计算好的数字化指标。必要时给出公式。\n")
-	}
-	sb.WriteString("\n")
-
-	// Learning from market
-	sb.WriteString("## 学习要求\n")
-	sb.WriteString("进化后的提示词应该:\n")
-	sb.WriteString("1. **从错误中学习:** 解决上述识别的具体问题\n")
-	sb.WriteString("2. **市场适应:** 数学模型量化的考虑市场情绪、波动率状态、趋势vs震荡条件。以低频滤波来看的话是否只是噪音。还是真的趋势改变了\n")
-	sb.WriteString("3. **风险意识:** 强调资本保护和合理的仓位规模，计算好的数字化指标。必要时给出公式。且根据此严格执行。\n")
-	sb.WriteString("4. **模式识别:** 鼓励基于市场结构识别高概率设置，计算好的数字化指标。必要时给出公式。且根据此严格判断是否满足概率条件，计算信心价值。\n")
-	sb.WriteString("5. **持续监测** \n\n")
-
-	// Skillset enhancement
-	sb.WriteString("## 技能增强\n")
-	sb.WriteString("为角色配备缺失或未充分发展的技能:\n\n")
-
-	sb.WriteString("**技术分析技能:**\n")
-	sb.WriteString("- 多时间框架分析 (1h, 4h, daily) 用于趋势确认\n")
-	sb.WriteString("- 支撑/阻力识别和价格行为解读\n")
-	sb.WriteString("- 成交量分析用于确认突破/击穿\n")
-	sb.WriteString("- 市场微观结构解读 (订单簿、盘口)\n\n")
-
-	sb.WriteString("**信号处理与量化分析:**\n")
-	sb.WriteString("- 傅里叶分析将价格分解为频率成分 (识别主导周期)\n")
-	sb.WriteString("- 数字滤波 (低通去除噪声、高通检测状态变化、带通提取周期)\n")
-	sb.WriteString("- 频谱分析测量市场周期性和隐藏节奏\n")
-	sb.WriteString("- 小波变换用于多尺度时频分析\n")
-	sb.WriteString("- 信噪比评估以区分模式与随机性\n")
-	sb.WriteString("- 自相关和互相关用于领先-滞后关系\n")
-	sb.WriteString("- **扩展卡尔曼滤波器 (EKF)** 与傅里叶观测:\n")
-	sb.WriteString("  * 使用频域特征 (主导频率、谱功率) 作为观测值\n")
-	sb.WriteString("  * 频谱图用于时空演化跟踪\n")
-	sb.WriteString("  * 状态估计: 从噪声观测预测下一个市场状态 (趋势、波动率、状态)\n")
-	sb.WriteString("  * 非线性动力学建模: EKF 处理非高斯、非线性市场行为\n")
-	sb.WriteString("  * 自适应滤波: 随着新数据到达持续更新状态估计\n\n")
-
-	sb.WriteString("**风险管理专业知识:**\n")
-	sb.WriteString("- 基于波动率和账户风险的动态仓位规模\n")
-	sb.WriteString("- 使用 ATR、结构或百分比方法放置止损\n")
-	sb.WriteString("- 投资组合热度管理 (所有仓位的总风险)\n")
-	sb.WriteString("- 相关性意识以避免过度集中\n\n")
-
-	sb.WriteString("**市场心理与情绪:**\n")
-	sb.WriteString("- 从资金费率、持仓量、社交情绪识别恐惧/贪婪极端\n")
-	sb.WriteString("- 当群众过度定位时的逆向思维\n")
-	sb.WriteString("- 识别市场状态变化 (趋势 → 震荡、风险偏好 → 风险规避)\n")
-	sb.WriteString("- BTC 主导地位和山寨币轮动周期意识\n\n")
-
-	sb.WriteString("**执行与交易管理:**\n")
-	sb.WriteString("- 入场时机优化 (避免 FOMO，等待回调)\n")
-	sb.WriteString("- 分批进出策略以获得更好的平均价格\n")
-	sb.WriteString("- 移动止损技术以捕捉趋势同时保护利润\n")
-	sb.WriteString("- 知道何时不交易 (低流动性、高不确定性、震荡条件)\n\n")
-
-	sb.WriteString("**自我意识与元认知:**\n")
-	sb.WriteString("- 保持关于交易成功或失败原因的详细数学模型\n\n")
-
-	sb.WriteString("## 自我诊断: 缺少什么技能?\n")
-	sb.WriteString("**关键任务:** 分析当前提示词并识别它缺乏什么能力。\n\n")
-	sb.WriteString("问自己:\n")
-	sb.WriteString("1. 缺少哪些分析框架或方法论?\n")
-	sb.WriteString("2. 未能考虑哪些市场动态或现象?\n")
-	sb.WriteString("3. 哪些决策过程或启发式方法可以改善结果?\n")
-	sb.WriteString("4. 缺少哪些领域知识 (加密货币特定、宏观、衍生品)?\n")
-	sb.WriteString("5. 哪些统计、数学或计算技术会有价值?\n")
-	sb.WriteString("6. 应该整合哪些心理或行为金融概念?\n\n")
-	sb.WriteString("**要有全面性。** 不要只解决上述问题 - 思考世界级交易员知道而此提示词未捕捉的内容。\n\n")
-
-	sb.WriteString("## 你的任务\n")
-	sb.WriteString("重写系统提示词以:\n")
-	sb.WriteString("2. 整合上述列出项目\n")
-	sb.WriteString("5. 保留当前运作良好的部分\n\n")
-	sb.WriteString("只以数学模型输出改进的系统提示词，不要解释或评论。\n")
-
-	return sb.String()
 }
 
 // calculateFitness computes fitness score for a prompt variant
