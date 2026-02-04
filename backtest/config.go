@@ -241,7 +241,7 @@ func (cfg *BacktestConfig) ToStrategyConfig() *store.StrategyConfig {
 			if lang == "" {
 				lang = "en" // fallback
 			}
-			result.SetConfigPromptSectionsByModeAndLang(cfg.PromptVariant, lang)
+			result.SetConfigPromptSectionsByModeAndLang(cfg.loadedStrategy.TradingMode, lang)
 		}
 
 		return &result
@@ -257,7 +257,8 @@ func (cfg *BacktestConfig) ToStrategyConfig() *store.StrategyConfig {
 		longerTF = cfg.Timeframes[len(cfg.Timeframes)-1]
 	}
 
-	return &store.StrategyConfig{
+	// Build strategy config from backtest config
+	strategyConfig := &store.StrategyConfig{
 		CoinSource: store.CoinSourceConfig{
 			SourceType:    "static",
 			StaticCoins:   cfg.Symbols,
@@ -300,4 +301,13 @@ func (cfg *BacktestConfig) ToStrategyConfig() *store.StrategyConfig {
 			MinConfidence:                75,
 		},
 	}
+
+	// Set prompt sections based on variant and language
+	lang := cfg.Language
+	if lang == "" {
+		lang = "en"
+	}
+	strategyConfig.SetConfigPromptSectionsByModeAndLang("balanced", lang)
+
+	return strategyConfig
 }
