@@ -1624,7 +1624,8 @@ func convertDIYToQuantData(diy *provider.DIYQuantData) *QuantData {
 	// Convert price data
 	if diy.Price != nil {
 		priceChange := make(map[string]float64)
-		priceChange["24h"] = diy.Price.ChangePercent24h
+		// Normalize from percentage (-1.5 for -1.5%) to decimal form (-0.015 for -1.5%) to match external API format
+		priceChange["24h"] = diy.Price.ChangePercent24h / 100.0
 		qd.PriceChange = priceChange
 	}
 
