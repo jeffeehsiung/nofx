@@ -151,21 +151,15 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	// Create strategy engine from backtest config for unified prompt generation
 	strategyConfig := cfg.ToStrategyConfig()
 	strategyEngine := decision.NewStrategyEngine(strategyConfig)
-	// Initialize feedback loop
-	feedbackConfig := DefaultFeedbackConfig()
-	if cfg.EnableAnalysis {
-		feedbackConfig.EnableFeedback = true
-		feedbackConfig.EnableMicrostructure = true
-	}
+	// Initialize feedback loop with smart defaults
+	enableFeedback := cfg.EnableFeedback
+	enableLLM := enableFeedback && client != nil
+	feedbackConfig := SmartFeedbackConfig(cfg.DecisionCadenceNBars, enableFeedback, enableLLM)
 	feedbackGenerator := NewFeedbackGenerator(cfg.RunID, cfg.InitialBalance, feedbackConfig)
 
 	// Inject AI client for LLM-based feedback evolution
-	if client != nil {
+	if client != nil && enableLLM {
 		feedbackGenerator.SetAIClient(client)
-		if cfg.EnableAnalysis {
-			feedbackConfig.EnableLLMPatterns = true
-			feedbackConfig.EnableLLMInsights = true
-		}
 		logger.Infof("✅ AI client injected into FeedbackGenerator for LLM-based feedback evolution")
 	}
 	feedbackGenerator.config = feedbackConfig
@@ -216,7 +210,8 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	defaultPrompt := strategyEngine.GetConfig().PromptSections
 	riskcontrolConfig := strategyEngine.GetConfig().RiskControl
 	promptOptimizationConfig := DefaultPromptOptimizerConfig()
-	if cfg.EnablePromptLab {
+	enablePromptEvolution := cfg.EnablePromptEvolution
+	if enablePromptEvolution {
 		promptOptimizationConfig.EnableOptimization = true
 	}
 	promptOptimizer := NewPromptOptimizerWithAI(&defaultPrompt, promptOptimizationConfig, client, cfg.RunID, cfg.Storage)
@@ -1631,11 +1626,7 @@ func (r *Runner) updateState(ts int64, equity, unrealized, marginUsed float64, p
 
 func (r *Runner) maybeCheckpoint() error {
 	state := r.snapshotState()
-	shouldCheckpoint := false
-
-	if r.cfg.CheckpointIntervalBars > 0 && state.BarIndex > 0 && state.BarIndex%r.cfg.CheckpointIntervalBars == 0 {
-		shouldCheckpoint = true
-	}
+	shouldCheckpoint := r.cfg.CheckpointIntervalBars > 0 && state.BarIndex > 0 && state.BarIndex%r.cfg.CheckpointIntervalBars == 0
 
 	interval := time.Duration(r.cfg.CheckpointIntervalSeconds) * time.Second
 	if interval <= 0 {

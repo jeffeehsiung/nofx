@@ -35,7 +35,7 @@ type PageData[T any] struct {
 	} `json:"pagination"`
 }
 
-var HttpError error = errors.New("http client error")
+var ErrHttp error = errors.New("http client error")
 
 // NewCoinankClient new coinank http client for coinank openapi
 func NewCoinankClient(url, apikey string) *CoinankClient {
@@ -58,7 +58,9 @@ func (c *CoinankClient) Get(ctx context.Context, path string, paramsMap map[stri
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
@@ -83,7 +85,9 @@ func (c *CoinankClient) Post(ctx context.Context, path string, data any) (string
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err

@@ -33,7 +33,7 @@ func (c *CoinankClient) Kline(ctx context.Context, symbol string, exchange coina
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	klines := make([]KlineResult, len(result.Data))
 	for i, k := range result.Data {

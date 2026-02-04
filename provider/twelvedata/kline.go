@@ -122,7 +122,9 @@ func (c *Client) GetTimeSeries(ctx context.Context, symbol string, interval stri
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
@@ -169,7 +171,9 @@ func (c *Client) GetQuote(ctx context.Context, symbol string) (*QuoteResponse, e
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)

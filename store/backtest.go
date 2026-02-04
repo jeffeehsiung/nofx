@@ -236,7 +236,9 @@ func (s *BacktestStore) addColumnIfNotExists(table, column, definition string) {
 	if err != nil {
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	for rows.Next() {
 		var cid int
@@ -362,7 +364,9 @@ func (s *BacktestStore) ListRunIDs() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var ids []string
 	for rows.Next() {
@@ -394,7 +398,9 @@ func (s *BacktestStore) LoadEquityPoints(runID string) ([]EquityPoint, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	points := make([]EquityPoint, 0)
 	for rows.Next() {
@@ -431,7 +437,9 @@ func (s *BacktestStore) LoadTradeEvents(runID string) ([]TradeEvent, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	events := make([]TradeEvent, 0)
 	for rows.Next() {
@@ -484,7 +492,9 @@ func (s *BacktestStore) LoadDecisionRecords(runID string, limit, offset int) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	records := make([]json.RawMessage, 0, limit)
 	for rows.Next() {
@@ -536,7 +546,9 @@ func (s *BacktestStore) ListIndexEntries() ([]RunIndexEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var entries []RunIndexEntry
 	for rows.Next() {
@@ -679,7 +691,9 @@ func (s *BacktestStore) LoadPromptVariants(runID string) ([]*PromptVariantData, 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var variants []*PromptVariantData
 	for rows.Next() {

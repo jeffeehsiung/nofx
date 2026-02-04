@@ -130,7 +130,7 @@ type FeedbackConfig struct {
 	EnableLLMInsights       bool `json:"enable_llm_insights"`        // LLM-assisted insights/recommendations
 }
 
-// DefaultFeedbackConfig returns sensible defaults
+// DefaultFeedbackConfig returns sensible defaults (all disabled)
 func DefaultFeedbackConfig() FeedbackConfig {
 	return FeedbackConfig{
 		EnableFeedback:          false,
@@ -142,6 +142,56 @@ func DefaultFeedbackConfig() FeedbackConfig {
 		EnableLLMPatterns:       false,
 		EnableLLMInsights:       false,
 	}
+}
+
+// SmartFeedbackConfig creates intelligent defaults based on decision cadence and user preferences
+// decisionCadenceNBars: how many bars between each decision (higher = slower decisions)
+// enableFeedback: whether to enable feedback analysis
+// enableLLM: whether to enable LLM-assisted patterns and insights
+func SmartFeedbackConfig(decisionCadenceNBars int, enableFeedback, enableLLM bool) FeedbackConfig {
+	cfg := DefaultFeedbackConfig()
+	cfg.EnableFeedback = enableFeedback
+
+	if !enableFeedback {
+		return cfg // Return defaults if feedback disabled
+	}
+
+	// Always enable microstructure when feedback is enabled
+	cfg.EnableMicrostructure = true
+	cfg.EnableLLMPatterns = enableLLM
+	cfg.EnableLLMInsights = enableLLM
+
+	// Scale feedback thresholds based on decision cadence
+	// Aim for feedback to start after ~150-200 bars of trading
+	if decisionCadenceNBars > 0 {
+		targetBarsBeforeFeedback := 150
+		cfg.MinDecisionsForFeedback = max(3, targetBarsBeforeFeedback/decisionCadenceNBars)
+
+		// Regenerate feedback every ~100-150 bars
+		targetBarsPerFeedback := 100
+		cfg.FeedbackWindowCycles = max(5, targetBarsPerFeedback/decisionCadenceNBars)
+	}
+
+	// Scale top trades count based on expected decision volume
+	// If we make many decisions quickly, show more trades
+	if decisionCadenceNBars < 10 {
+		cfg.TopTradesCount = 5
+	} else if decisionCadenceNBars > 30 {
+		cfg.TopTradesCount = 2
+	} else {
+		cfg.TopTradesCount = 3
+	}
+
+	// Scale pattern frequency based on expected sample size
+	if decisionCadenceNBars < 10 {
+		cfg.MinPatternFrequency = 10
+	} else if decisionCadenceNBars > 30 {
+		cfg.MinPatternFrequency = 5
+	} else {
+		cfg.MinPatternFrequency = 7
+	}
+
+	return cfg
 }
 
 func (fg *FeedbackGenerator) DisableFeedback() {
@@ -532,13 +582,13 @@ func appendLLMExtraOrderFields(sb *strings.Builder, order *decision.RecentOrder)
 
 	// Correlation & Risk Book
 	if order.CorrelationToBTC != 0 {
-		sb.WriteString(fmt.Sprintf("    corr_btc=%.2f", order.CorrelationToBTC))
+		fmt.Fprintf(sb, "    corr_btc=%.2f", order.CorrelationToBTC)
 	}
 	if order.PortfolioCorrelation != 0 {
-		sb.WriteString(fmt.Sprintf(" port_corr=%.2f", order.PortfolioCorrelation))
+		fmt.Fprintf(sb, " port_corr=%.2f", order.PortfolioCorrelation)
 	}
 	if order.TimeOfDay >= 0 {
-		sb.WriteString(fmt.Sprintf(" tod=%d", order.TimeOfDay))
+		fmt.Fprintf(sb, " tod=%d", order.TimeOfDay)
 	}
 	if order.EventProximity != "" && order.EventProximity != "none" {
 		sb.WriteString(fmt.Sprintf(" event=%s", order.EventProximity))

@@ -176,7 +176,9 @@ func (s *DecisionStore) GetLatestRecords(traderID string, n int) ([]*DecisionRec
 	if err != nil {
 		return nil, fmt.Errorf("failed to query decision records: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var records []*DecisionRecord
 	for rows.Next() {
@@ -213,7 +215,9 @@ func (s *DecisionStore) GetAllLatestRecords(n int) ([]*DecisionRecord, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query decision records: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var records []*DecisionRecord
 	for rows.Next() {
@@ -247,8 +251,9 @@ func (s *DecisionStore) GetRecordsByDate(traderID string, date time.Time) ([]*De
 	if err != nil {
 		return nil, fmt.Errorf("failed to query decision records: %w", err)
 	}
-	defer rows.Close()
-
+	defer func() {
+		_ = rows.Close()
+	}()
 	var records []*DecisionRecord
 	for rows.Next() {
 		record, err := s.scanDecisionRecord(rows)
@@ -257,7 +262,6 @@ func (s *DecisionStore) GetRecordsByDate(traderID string, date time.Time) ([]*De
 		}
 		records = append(records, record)
 	}
-
 	return records, nil
 }
 

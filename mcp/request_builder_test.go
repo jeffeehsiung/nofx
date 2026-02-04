@@ -375,7 +375,10 @@ func TestClient_CallWithRequest_MultiRound(t *testing.T) {
 	// Verify request body contains all messages
 	requests := mockHTTP.GetRequests()
 	var body map[string]interface{}
-	json.NewDecoder(requests[0].Body).Decode(&body)
+	err = json.NewDecoder(requests[0].Body).Decode(&body)
+	if err != nil {
+		t.Fatalf("failed to decode request body: %v", err)
+	}
 
 	messages := body["messages"].([]interface{})
 	if len(messages) != 4 {
@@ -414,7 +417,10 @@ func TestClient_CallWithRequest_WithTools(t *testing.T) {
 	// Verify request body contains tools
 	requests := mockHTTP.GetRequests()
 	var body map[string]interface{}
-	json.NewDecoder(requests[0].Body).Decode(&body)
+	err = json.NewDecoder(requests[0].Body).Decode(&body)
+	if err != nil {
+		t.Fatalf("failed to decode request body: %v", err)
+	}
 
 	tools, ok := body["tools"].([]interface{})
 	if !ok || len(tools) == 0 {
@@ -465,12 +471,18 @@ func TestClient_CallWithRequest_UsesClientModel(t *testing.T) {
 		t.Error("request.Model should be empty initially")
 	}
 
-	client.CallWithRequest(request)
+	_, err := client.CallWithRequest(request)
+	if err != nil {
+		t.Fatalf("should not error: %v", err)
+	}
 
 	// Verify DeepSeek's model is used
 	requests := mockHTTP.GetRequests()
 	var body map[string]interface{}
-	json.NewDecoder(requests[0].Body).Decode(&body)
+	err = json.NewDecoder(requests[0].Body).Decode(&body)
+	if err != nil {
+		t.Fatalf("failed to decode request body: %v", err)
+	}
 
 	if body["model"] != DefaultDeepSeekModel {
 		t.Errorf("expected model %s, got %v", DefaultDeepSeekModel, body["model"])

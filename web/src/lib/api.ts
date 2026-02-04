@@ -1,6 +1,7 @@
-import {PromptVariantsResponse} from '../components/PromptLabPage'
-import {TraderPromptVariantResponse} from '../components/LiveTraderPromptLab'
-import {TraderPromptVariantsResponse} from '../components/LiveTraderPromptLab'
+import type {
+  PromptVariantLabResponse,
+  PromptVariantPerformanceResponse,
+} from '../components/PromptVariantLab'
 import type {
   SystemStatus,
   AccountInfo,
@@ -594,7 +595,7 @@ export const api = {
   },
 
   // Prompt Optimization APIs
-  async getPromptVariants(runId: string): Promise<PromptVariantsResponse> {
+  async getPromptVariants(runId: string): Promise<PromptVariantLabResponse> {
     const res = await fetch(`${API_BASE}/backtest/prompt-variants?run_id=${runId}`, {
       headers: getAuthHeaders(),
     })
@@ -818,14 +819,14 @@ export const api = {
   },
 
   // Trader Prompt Optimization APIs
-  async getTraderPromptVariants(traderId: string): Promise<TraderPromptVariantsResponse> {
+  async getTraderPromptVariants(traderId: string): Promise<PromptVariantLabResponse> {
     const res = await fetch(`${API_BASE}/traders/${traderId}/prompt-variants`, {
       headers: getAuthHeaders(),
     })
     return handleJSONResponse<any>(res)
   },
 
-  async getTraderPromptPerformance(traderId: string): Promise<TraderPromptVariantResponse> {
+  async getTraderPromptPerformance(traderId: string): Promise<PromptVariantPerformanceResponse> {
     const res = await fetch(`${API_BASE}/traders/${traderId}/prompt-performance`, {
       headers: getAuthHeaders(),
     })
@@ -842,10 +843,10 @@ export const api = {
   },
 
     // Trader Analysis APIs
-  async getTraderAnalysis(traderId: string): Promise<any> {
+  async getTraderAnalysis(traderId: string): Promise<BacktestAnalysis> {
     const res = await fetch(`${API_BASE}/traders/${traderId}/analysis`, {
       headers: getAuthHeaders(),
     })
-    return handleJSONResponse<any>(res)
+    return handleJSONResponse<BacktestAnalysis>(res)
   },
 }

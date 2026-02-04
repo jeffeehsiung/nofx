@@ -431,7 +431,7 @@ func TestXyzDexOrderFlow(t *testing.T) {
 
 	// Step 2: Find SILVER
 	t.Log("\nStep 2: Looking up xyz:SILVER...")
-	var silverIndex int = -1
+	silverIndex := -1
 	var silverAsset *testXyzDexAsset
 	for i, asset := range meta.Universe {
 		if asset.Name == "xyz:SILVER" {
@@ -453,7 +453,7 @@ func TestXyzDexOrderFlow(t *testing.T) {
 	req2.Header.Set("Content-Type", "application/json")
 	resp2, _ := client.Do(req2)
 	body2, _ := io.ReadAll(resp2.Body)
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 
 	var mids map[string]string
 	if err := json.Unmarshal(body2, &mids); err != nil {

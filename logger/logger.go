@@ -114,7 +114,7 @@ func InitWithSimpleConfig(level string) error {
 // Shutdown gracefully shuts down the logger
 func Shutdown() {
 	if logFile != nil {
-		logFile.Close()
+		_ = logFile.Close()
 		logFile = nil
 	}
 }

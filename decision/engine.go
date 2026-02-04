@@ -707,7 +707,7 @@ func (e *StrategyEngine) fetchSingleExternalSource(source store.ExternalDataSour
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -748,14 +748,16 @@ func (e *StrategyEngine) FetchQuantData(symbol string) (*QuantData, error) {
 	}
 
 	apiURL := e.config.Indicators.QuantDataAPIURL
-	url := strings.Replace(apiURL, "{symbol}", symbol, -1)
+	url := strings.ReplaceAll(apiURL, "{symbol}", symbol)
 
 	// SSRF Protection: Validate URL before making request
 	resp, err := security.SafeGet(url, 10*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP status code: %d", resp.StatusCode)

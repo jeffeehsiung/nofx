@@ -46,6 +46,7 @@ import { confirmToast } from '../lib/notify'
 import { DecisionCard } from './DecisionCard'
 import { MetricTooltip } from './MetricTooltip'
 import { PromptLabPage } from './PromptLabPage'
+import { FeedbackAnalysisDisplay } from './FeedbackAnalysisDisplay'
 import type {
   BacktestStatusPayload,
   BacktestPositionStatus,
@@ -788,8 +789,8 @@ export function BacktestPage() {
     overridePrompt: false,
     cacheAI: true,
     replayOnly: false,
-    enableAnalysis: true,
-    enablePromptLab: true,
+    enableFeedback: true,
+    enablePromptEvolution: true,
     aiModelId: '',
     strategyId: '', // Optional: use saved strategy from Strategy Studio
   })
@@ -963,8 +964,8 @@ export function BacktestPage() {
         override_prompt: formState.overridePrompt,
         cache_ai: formState.cacheAI,
         replay_only: formState.replayOnly,
-        enable_analysis: formState.enableAnalysis,
-        enable_prompt_lab: formState.enablePromptLab,
+        enable_feedback: formState.enableFeedback,
+        enable_prompt_evolution: formState.enablePromptEvolution,
         ai_model_id: formState.aiModelId,
         language: detectedLang,
         leverage: {
@@ -1589,21 +1590,43 @@ export function BacktestPage() {
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={formState.enableAnalysis}
-                          onChange={(e) => handleFormChange('enableAnalysis', e.target.checked)}
+                          checked={formState.enableFeedback}
+                          onChange={(e) => handleFormChange('enableFeedback', e.target.checked)}
                           className="accent-[#F0B90B]"
                         />
                         {language === 'zh' ? '启用失败分析' : 'Enable Analysis'}
                       </label>
+                      {formState.enableFeedback && (
+                        <label className="flex items-center gap-2 cursor-pointer ml-4">
+                          <input
+                            type="checkbox"
+                            checked={formState.enableFeedback}
+                            onChange={(e) => handleFormChange('enableFeedback', e.target.checked)}
+                            className="accent-[#F0B90B]"
+                          />
+                          {language === 'zh' ? '启用反馈分析' : 'Enable Feedback'}
+                        </label>
+                      )}
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={formState.enablePromptLab}
-                          onChange={(e) => handleFormChange('enablePromptLab', e.target.checked)}
+                          checked={formState.enablePromptEvolution}
+                          onChange={(e) => handleFormChange('enablePromptEvolution', e.target.checked)}
                           className="accent-[#F0B90B]"
                         />
                         {language === 'zh' ? '启用提示词实验室' : 'Enable Prompt Lab'}
                       </label>
+                      {formState.enablePromptEvolution && (
+                        <label className="flex items-center gap-2 cursor-pointer ml-4">
+                          <input
+                            type="checkbox"
+                            checked={formState.enablePromptEvolution}
+                            onChange={(e) => handleFormChange('enablePromptEvolution', e.target.checked)}
+                            className="accent-[#F0B90B]"
+                          />
+                          {language === 'zh' ? '启用提示词进化' : 'Enable Prompt Evolution'}
+                        </label>
+                      )}
                     </div>
 
                     <div className="flex gap-2">
@@ -2067,159 +2090,12 @@ export function BacktestPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="space-y-6"
                       >
-                        {analysis ? (
-                          <>
-                            {/* Failure Patterns */}
-                            {analysis.failure_patterns && analysis.failure_patterns.length > 0 && (
-                              <div>
-                                <h3 className="text-lg font-bold mb-3 flex items-center gap-2" style={{ color: '#F6465D' }}>
-                                  <AlertTriangle className="w-5 h-5" />
-                                  {language === 'zh' ? '失败模式分析' : 'Failure Patterns'}
-                                </h3>
-                                <div className="space-y-3">
-                                  {analysis.failure_patterns.map((pattern, idx) => (
-                                    <div key={idx} className="p-4 rounded-lg" style={{ background: 'rgba(246,70,93,0.1)', border: '1px solid rgba(246,70,93,0.3)' }}>
-                                      <div className="flex items-start justify-between mb-2">
-                                        <div className="font-bold" style={{ color: '#F6465D' }}>
-                                          {pattern.pattern_type.replace(/_/g, ' ').toUpperCase()}
-                                        </div>
-                                        <div className="text-xs px-2 py-1 rounded" style={{ background: 'rgba(246,70,93,0.2)', color: '#F6465D' }}>
-                                          {pattern.frequency} {language === 'zh' ? '次' : 'times'}
-                                        </div>
-                                      </div>
-                                      <div className="text-sm mb-2" style={{ color: '#EAECEF' }}>
-                                        {pattern.description}
-                                      </div>
-                                      <div className="grid grid-cols-2 gap-2 mb-2 text-xs">
-                                        <div className="p-2 rounded" style={{ background: 'rgba(246,70,93,0.15)' }}>
-                                          <span style={{ color: '#848E9C' }}>{language === 'zh' ? '平均损失:' : 'Avg Loss:'} </span>
-                                          <span className="font-mono font-bold" style={{ color: '#F6465D' }}>
-                                            ${pattern.avg_pnl.toFixed(2)}
-                                          </span>
-                                        </div>
-                                        <div className="p-2 rounded" style={{ background: 'rgba(246,70,93,0.15)' }}>
-                                          <span style={{ color: '#848E9C' }}>{language === 'zh' ? '损失率:' : 'Loss %:'} </span>
-                                          <span className="font-mono font-bold" style={{ color: '#F6465D' }}>
-                                            {pattern.avg_pnl_pct.toFixed(2)}%
-                                          </span>
-                                        </div>
-                                      </div>
-                                      {pattern.recommendation && (
-                                        <div className="p-2 rounded text-xs" style={{ background: 'rgba(240,185,11,0.1)', border: '1px solid rgba(240,185,11,0.2)', color: '#F0B90B' }}>
-                                          💡 {pattern.recommendation}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Recommended Actions */}
-                            {analysis.recommended_actions && analysis.recommended_actions.length > 0 && (
-                              <div>
-                                <h3 className="text-lg font-bold mb-3 flex items-center gap-2" style={{ color: '#F0B90B' }}>
-                                  <Target className="w-5 h-5" />
-                                  {language === 'zh' ? '建议改进措施' : 'Recommended Actions'}
-                                </h3>
-                                <div className="space-y-2">
-                                  {analysis.recommended_actions.map((action, idx) => (
-                                    <div key={idx} className="p-3 rounded-lg flex items-start gap-3" style={{ background: 'rgba(240,185,11,0.1)', border: '1px solid rgba(240,185,11,0.2)' }}>
-                                      <div className="mt-0.5 font-bold" style={{ color: '#F0B90B' }}>{idx + 1}.</div>
-                                      <div className="flex-1 text-sm" style={{ color: '#EAECEF' }}>{action}</div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Top Losing Trades */}
-                            {analysis.top_losing_trades && analysis.top_losing_trades.length > 0 && (
-                              <div>
-                                <h3 className="text-lg font-bold mb-3 flex items-center gap-2" style={{ color: '#F6465D' }}>
-                                  <TrendingDown className="w-5 h-5" />
-                                  {language === 'zh' ? '最大亏损交易' : 'Top Losing Trades'}
-                                </h3>
-                                <div className="space-y-2">
-                                  {analysis.top_losing_trades.slice(0, 10).map((trade, idx) => (
-                                    <div key={idx} className="p-3 rounded-lg" style={{ background: '#1E2329', border: '1px solid #2B3139' }}>
-                                      <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-xs px-2 py-0.5 rounded font-mono" style={{ background: 'rgba(246,70,93,0.2)', color: '#F6465D' }}>
-                                            #{idx + 1}
-                                          </span>
-                                          <span className="font-bold" style={{ color: '#EAECEF' }}>{trade.symbol}</span>
-                                          <span className="text-xs" style={{ color: '#848E9C' }}>
-                                            {new Date(trade.timestamp).toLocaleString()}
-                                          </span>
-                                        </div>
-                                        <div className="text-right">
-                                          <div className="font-mono font-bold" style={{ color: '#F6465D' }}>
-                                            ${trade.realized_pnl.toFixed(2)}
-                                          </div>
-                                          <div className="text-xs font-mono" style={{ color: '#F6465D' }}>
-                                            ({trade.realized_pnl_pct.toFixed(2)}%)
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <div className="grid grid-cols-3 gap-2 text-xs mb-2">
-                                        <div>
-                                          <span style={{ color: '#848E9C' }}>{language === 'zh' ? '入场:' : 'Entry:'} </span>
-                                          <span className="font-mono" style={{ color: '#EAECEF' }}>${trade.entry_price.toFixed(2)}</span>
-                                        </div>
-                                        <div>
-                                          <span style={{ color: '#848E9C' }}>{language === 'zh' ? '出场:' : 'Exit:'} </span>
-                                          <span className="font-mono" style={{ color: '#EAECEF' }}>${trade.exit_price.toFixed(2)}</span>
-                                        </div>
-                                        <div>
-                                          <span style={{ color: '#848E9C' }}>{language === 'zh' ? '持仓:' : 'Hold:'} </span>
-                                          <span className="font-mono" style={{ color: '#EAECEF' }}>{trade.hold_duration}</span>
-                                        </div>
-                                      </div>
-                                      {trade.analysis && (
-                                        <div className="text-xs p-2 rounded" style={{ background: 'rgba(246,70,93,0.1)', color: '#F6465D' }}>
-                                          {trade.analysis}
-                                        </div>
-                                      )}
-                                      {trade.reasoning && (
-                                        <div className="text-xs mt-2 p-2 rounded" style={{ background: '#0B0E11', color: '#848E9C' }}>
-                                          <div className="font-bold mb-1" style={{ color: '#EAECEF' }}>{language === 'zh' ? '决策原因:' : 'Reasoning:'}</div>
-                                          {trade.reasoning}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Key Insights */}
-                            {analysis.key_insights && analysis.key_insights.length > 0 && (
-                              <div>
-                                <h3 className="text-lg font-bold mb-3 flex items-center gap-2" style={{ color: '#0ECB81' }}>
-                                  <Eye className="w-5 h-5" />
-                                  {language === 'zh' ? '关键洞察' : 'Key Insights'}
-                                </h3>
-                                <div className="space-y-2">
-                                  {analysis.key_insights.map((insight, idx) => (
-                                    <div key={idx} className="p-3 rounded-lg flex items-start gap-3" style={{ background: 'rgba(14,203,129,0.1)', border: '1px solid rgba(14,203,129,0.2)' }}>
-                                      <div className="text-lg">💡</div>
-                                      <div className="flex-1 text-sm" style={{ color: '#EAECEF' }}>{insight}</div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div className="py-12 text-center" style={{ color: '#5E6673' }}>
-                            <AlertTriangle className="w-12 h-12 mx-auto mb-3" style={{ color: '#848E9C' }} />
-                            <div className="text-lg mb-2">{language === 'zh' ? '分析数据尚未生成' : 'Analysis Not Available Yet'}</div>
-                            <div className="text-sm">{language === 'zh' ? '请等待回测运行更多周期后再查看' : 'Wait for backtest to run more cycles'}</div>
-                          </div>
-                        )}
+                        <FeedbackAnalysisDisplay
+                          analysis={analysis || null}
+                          isLoading={false}
+                          error={null}
+                        />
                       </motion.div>
                     )}
 

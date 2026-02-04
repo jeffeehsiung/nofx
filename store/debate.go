@@ -386,7 +386,9 @@ func (s *DebateStore) GetSessionsByUser(userID string) ([]*DebateSession, error)
 	if err != nil {
 		return s.getSessionsByUserBasic(userID)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var sessions []*DebateSession
 	for rows.Next() {
@@ -436,7 +438,9 @@ func (s *DebateStore) ListAllSessions() ([]*DebateSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var sessions []*DebateSession
 	for rows.Next() {
@@ -459,7 +463,9 @@ func (s *DebateStore) getSessionsByUserBasic(userID string) ([]*DebateSession, e
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var sessions []*DebateSession
 	for rows.Next() {
@@ -568,7 +574,9 @@ func (s *DebateStore) GetParticipants(sessionID string) ([]*DebateParticipant, e
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var participants []*DebateParticipant
 	for rows.Next() {
@@ -619,7 +627,9 @@ func (s *DebateStore) GetMessages(sessionID string) ([]*DebateMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var messages []*DebateMessage
 	for rows.Next() {
@@ -655,7 +665,9 @@ func (s *DebateStore) GetMessagesByRound(sessionID string, round int) ([]*Debate
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var messages []*DebateMessage
 	for rows.Next() {
@@ -707,7 +719,9 @@ func (s *DebateStore) GetVotes(sessionID string) ([]*DebateVote, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var votes []*DebateVote
 	for rows.Next() {

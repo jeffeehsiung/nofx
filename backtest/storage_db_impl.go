@@ -170,7 +170,9 @@ func loadRunIDsDB() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	var ids []string
 	for rows.Next() {
 		var runID string
@@ -198,7 +200,9 @@ func loadEquityPointsDB(runID string) ([]EquityPoint, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	points := make([]EquityPoint, 0)
 	for rows.Next() {
 		var point EquityPoint
@@ -346,10 +350,10 @@ func createRunExportDB(runID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	zipWriter := zip.NewWriter(tmpFile)
-	defer zipWriter.Close()
+	defer func() { _ = zipWriter.Close() }()
 
 	if meta, err := loadRunMetadataDB(runID); err == nil {
 		if err := writeJSONToZip(zipWriter, "run.json", meta); err != nil {

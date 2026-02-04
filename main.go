@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"nofx/api"
@@ -27,7 +28,10 @@ func main() {
 	_ = godotenv.Load()
 
 	// Initialize logger
-	logger.Init(nil)
+	if err := logger.Init(nil); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
 
 	logger.Info("╔════════════════════════════════════════════════════════════╗")
 	logger.Info("║           🚀 NOFX - AI-Powered Trading System              ║")
@@ -56,7 +60,11 @@ func main() {
 	if err != nil {
 		logger.Fatalf("❌ Failed to initialize database: %v", err)
 	}
-	defer st.Close()
+	defer func() {
+		if err := st.Close(); err != nil {
+			logger.Errorf("Failed to close database: %v", err)
+		}
+	}()
 	backtest.UseDatabase(st.DB())
 
 	// Initialize installation ID for experience improvement (anonymous statistics)

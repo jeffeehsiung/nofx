@@ -84,7 +84,9 @@ func enforceRetentionDB(maxRuns int) {
 	if err != nil {
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	for rows.Next() {
 		var runID string
 		if err := rows.Scan(&runID); err != nil {

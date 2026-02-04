@@ -99,7 +99,7 @@ func (c *BinanceWebSocketClient) Disconnect() error {
 	}
 
 	if c.conn != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 	}
 
 	if c.heartbeatTicker != nil {

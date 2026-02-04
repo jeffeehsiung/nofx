@@ -16,8 +16,9 @@ import { getModelIcon } from './ModelIcons'
 import { TraderConfigModal } from './TraderConfigModal'
 import { ExchangeConfigModal } from './traders/ExchangeConfigModal'
 import { TraderSettingsModal } from './TraderSettingsModal'
-import { PunkAvatar, getTraderAvatar } from './PunkAvatar'
 import { LiveTraderPromptLab } from './LiveTraderPromptLab'
+import { LiveTraderAnalysis } from './LiveTraderAnalysis'
+import { PunkAvatar, getTraderAvatar } from './PunkAvatar'
 import {
   Bot,
   Brain,
@@ -163,6 +164,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
   const [visibleExchangeAddresses, setVisibleExchangeAddresses] = useState<Set<string>>(new Set())
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [promptLabTraderId, setPromptLabTraderId] = useState<string | null>(null)
+  const [analysisTraderId, setAnalysisTraderId] = useState<string | null>(null)
   // Toggle wallet address visibility for a trader
   const toggleTraderAddressVisibility = (traderId: string) => {
     setVisibleTraderAddresses(prev => {
@@ -1381,6 +1383,17 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
                       {t('promptLab', language) /* or your own label */}
                     </button>
                     <button
+                      onClick={() => setAnalysisTraderId(trader.trader_id)}
+                      className="px-2 md:px-3 py-1.5 md:py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105 flex items-center gap-1 whitespace-nowrap"
+                      style={{
+                        background: 'rgba(99, 102, 241, 0.1)',
+                        color: '#6366F1',
+                      }}
+                    >
+                      <BarChart3 className="w-3 h-3 md:w-4 md:h-4" />
+                      {language === 'zh' ? '分析' : 'Analysis'}
+                    </button>
+                    <button
                       onClick={() => handleToggleCompetition(trader.trader_id, trader.show_in_competition ?? true)}
                       className="px-2 md:px-3 py-1.5 md:py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105 whitespace-nowrap flex items-center gap-1"
                       style={
@@ -1549,6 +1562,27 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
               ×
             </button>
             <LiveTraderPromptLab traderId={promptLabTraderId} />
+          </div>
+        </div>
+      )}
+
+      {/* Analysis Modal */}
+      {analysisTraderId && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center">
+          <div className="bg-slate-900 rounded-lg shadow-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 relative">
+            <button
+              className="absolute top-4 right-4 text-slate-400 hover:text-white text-2xl"
+              onClick={() => setAnalysisTraderId(null)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <div className="mb-4">
+              <h2 className="text-xl font-bold" style={{ color: '#EAECEF' }}>
+                {language === 'zh' ? '交易分析' : 'Trading Analysis'}
+              </h2>
+            </div>
+            <LiveTraderAnalysis traderId={analysisTraderId} />
           </div>
         </div>
       )}

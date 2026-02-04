@@ -23,7 +23,7 @@ func (c *CoinankClient) GetLastPrice(ctx context.Context,
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return &result.Data, nil
 }
@@ -43,7 +43,7 @@ func (c *CoinankClient) GetCoinMarketCap(ctx context.Context,
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return &result.Data, nil
 }

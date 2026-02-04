@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"nofx/logger"
 	"nofx/store"
 )
 
@@ -84,21 +85,21 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	}
 	tmpPath := tmpFile.Name()
 	if _, err := tmpFile.Write(data); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return err
 	}
 	if err := tmpFile.Sync(); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return err
 	}
 	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return err
 	}
 	if err := os.Chmod(tmpPath, perm); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return err
 	}
 	return os.Rename(tmpPath, path)
@@ -117,7 +118,11 @@ func appendJSONLine(path string, payload any) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			logger.Warnf("Failed to close file %s: %v", path, err)
+		}
+	}()
 
 	writer := bufio.NewWriter(f)
 	if _, err := writer.Write(data); err != nil {
@@ -352,7 +357,11 @@ func loadJSONLines[T any](path string) ([]T, error) {
 		}
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			logger.Warnf("Failed to close file: %v", err)
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
@@ -504,7 +513,7 @@ func CreateRunExport(runID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	zipWriter := zip.NewWriter(tmpFile)
 	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -537,17 +546,18 @@ func CreateRunExport(runID string) (string, error) {
 			return err
 		}
 		if _, err := io.Copy(writer, src); err != nil {
-			src.Close()
+			_ = src.Close()
 			return err
 		}
-		src.Close()
+		_ = src.Close()
 		return nil
 	})
 	if err != nil {
-		zipWriter.Close()
+		_ = zipWriter.Close()
 		return "", err
 	}
-	if err := zipWriter.Close(); err != nil {
+	err = zipWriter.Close()
+	if err != nil {
 		return "", err
 	}
 	return tmpFile.Name(), nil

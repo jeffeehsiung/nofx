@@ -37,19 +37,17 @@ func Example_deepseek_backward_compatible() {
 
 func Example_new_client_basic() {
 	// Use default configuration
-	client := mcp.NewClient()
+	_ = mcp.NewClient()
 
 	// Use DeepSeek
-	client = mcp.NewClient(
+	_ = mcp.NewClient(
 		mcp.WithDeepSeekConfig("sk-xxx"),
 	)
 
 	// Use Qwen
-	client = mcp.NewClient(
+	_ = mcp.NewClient(
 		mcp.WithQwenConfig("sk-xxx"),
 	)
-
-	_ = client
 }
 
 func Example_new_client_with_options() {
@@ -141,12 +139,12 @@ func Example_custom_http_client() {
 
 func Example_deepseek_new_api() {
 	// Basic usage
-	client := mcp.NewDeepSeekClientWithOptions(
+	_ = mcp.NewDeepSeekClientWithOptions(
 		mcp.WithAPIKey("sk-xxx"),
 	)
 
 	// Advanced usage
-	client = mcp.NewDeepSeekClientWithOptions(
+	client := mcp.NewDeepSeekClientWithOptions(
 		mcp.WithAPIKey("sk-xxx"),
 		mcp.WithLogger(&CustomLogger{}),
 		mcp.WithTimeout(90*time.Second),
@@ -163,12 +161,12 @@ func Example_deepseek_new_api() {
 
 func Example_qwen_new_api() {
 	// Basic usage
-	client := mcp.NewQwenClientWithOptions(
+	_ = mcp.NewQwenClientWithOptions(
 		mcp.WithAPIKey("sk-xxx"),
 	)
 
 	// Advanced usage
-	client = mcp.NewQwenClientWithOptions(
+	client := mcp.NewQwenClientWithOptions(
 		mcp.WithAPIKey("sk-xxx"),
 		mcp.WithLogger(&CustomLogger{}),
 		mcp.WithTimeout(90*time.Second),

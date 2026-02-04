@@ -98,6 +98,10 @@ type AutoTraderConfig struct {
 
 	// Strategy configuration (use complete strategy config)
 	StrategyConfig *store.StrategyConfig // Strategy configuration (includes coin sources, indicators, risk control, prompts, etc.)
+
+	// Feedback and analysis configuration
+	EnableFeedback        bool // Enable feedback analysis (default: true)
+	EnablePromptEvolution bool // Enable prompt variant evolution (default: true)
 }
 
 // AutoTrader automatic trader
@@ -395,6 +399,10 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	if st != nil {
 		backtestStore = st.Backtest()
 	}
+	// Enable prompt evolution based on config
+	if config.EnablePromptEvolution {
+		optimizerConfig.EnableOptimization = true
+	}
 	at.promptOptimizer = backtest.NewPromptOptimizerWithAI(&basePrompt, optimizerConfig, mcpClient, config.ID, backtestStore)
 	at.promptVariantID = at.promptOptimizer.GetCurrentVariant().ID
 	// Try to load saved optimizer state
@@ -405,15 +413,16 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	}
 
 	// Initialize analysis systems (feedback, factor, compliance) for live trading
-	feedbackConfig := backtest.DefaultFeedbackConfig()
-	feedbackConfig.EnableFeedback = true
-	feedbackConfig.EnableMicrostructure = true
-	if mcpClient != nil {
-		feedbackConfig.EnableLLMPatterns = true
-		feedbackConfig.EnableLLMInsights = true
-	}
+	// Use smart defaults based on trader configuration
+	enableFeedback := config.EnableFeedback
+	enableLLM := enableFeedback && mcpClient != nil
+	feedbackConfig := backtest.SmartFeedbackConfig(
+		20, // Default 20-bar cadence for live trading
+		enableFeedback,
+		enableLLM,
+	)
 	at.feedbackGenerator = backtest.NewFeedbackGenerator(at.id, at.initialBalance, feedbackConfig)
-	if mcpClient != nil {
+	if mcpClient != nil && enableLLM {
 		at.feedbackGenerator.SetAIClient(mcpClient)
 		logger.Infof("✅ [%s] AI client injected into FeedbackGenerator for LLM feedback evolution", config.Name)
 	}
@@ -566,7 +575,7 @@ func (at *AutoTrader) calculateAdaptiveScanInterval() time.Duration {
 	}
 
 	// Calculate recent volatility from position P&L if available
-	var recentVolatility float64 = 0.5 // Default medium volatility
+	recentVolatility := 0.5 // Default medium volatility
 
 	if at.store != nil {
 		// Get recent closed positions to estimate volatility

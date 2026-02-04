@@ -48,26 +48,26 @@ func New(dbPath string) (*Store, error) {
 
 	// Enable foreign key constraints
 	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
 
 	// Use DELETE mode (traditional mode) to ensure Docker bind mount compatibility
 	// Note: WAL mode causes data sync issues on macOS Docker
 	if _, err := db.Exec("PRAGMA journal_mode=DELETE"); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to set journal_mode: %w", err)
 	}
 
 	// Set synchronous=FULL
 	if _, err := db.Exec("PRAGMA synchronous=FULL"); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to set synchronous: %w", err)
 	}
 
 	// Set busy_timeout
 	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to set busy_timeout: %w", err)
 	}
 
@@ -75,13 +75,13 @@ func New(dbPath string) (*Store, error) {
 
 	// Initialize all table structures
 	if err := s.initTables(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to initialize table structure: %w", err)
 	}
 
 	// Initialize default data
 	if err := s.initDefaultData(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to initialize default data: %w", err)
 	}
 

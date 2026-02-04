@@ -79,7 +79,9 @@ func TestHyperliquidPositionBuilding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	// Initialize stores
 	positionStore := store.NewPositionStore(db)
@@ -314,7 +316,9 @@ func TestHyperliquidBugScenario(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	positionStore := store.NewPositionStore(db)
 	if err := positionStore.InitTables(); err != nil {

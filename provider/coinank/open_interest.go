@@ -21,7 +21,7 @@ func (c *CoinankClient) OpenInterestAll(ctx context.Context, baseCoin string) ([
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data, nil
 }
@@ -49,7 +49,7 @@ func (c *CoinankClient) OpenInterestChartV2(ctx context.Context,
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return &result.Data, nil
 }
@@ -76,7 +76,7 @@ func (c *CoinankClient) OpenInterestSymbolChart(ctx context.Context,
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data, nil
 }
@@ -103,7 +103,7 @@ func (c *CoinankClient) OpenInterestKline(ctx context.Context,
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data, nil
 }
@@ -129,7 +129,7 @@ func (c *CoinankClient) OpenInterestAggKline(ctx context.Context,
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data, nil
 }
@@ -148,7 +148,7 @@ func (c *CoinankClient) TickersTopOIByEx(ctx context.Context, baseCoin string) (
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return &result.Data, nil
 }
@@ -173,7 +173,7 @@ func (c *CoinankClient) InstrumentsOiVsMc(ctx context.Context,
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data, nil
 }

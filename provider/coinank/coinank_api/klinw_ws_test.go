@@ -53,7 +53,7 @@ func TestKlineWs(t *testing.T) {
 	}
 	fmt.Println("resub success")
 	time.Sleep(10 * time.Second)
-	ws.Close()
+	_ = ws.Close()
 	fmt.Println("cancel success")
 	time.Sleep(10 * time.Second)
 	fmt.Println("all success")

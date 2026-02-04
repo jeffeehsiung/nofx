@@ -90,12 +90,12 @@ func TestThresholdCalibrator_ApplyToAnalyzer(t *testing.T) {
 
 // generateSyntheticTrades creates realistic synthetic trade data for testing
 func generateSyntheticTrades(count int) []TradeOutcome {
-	rand.Seed(42) // Deterministic for testing
+	rng := rand.New(rand.NewSource(42)) // Deterministic for testing
 
 	trades := make([]TradeOutcome, count)
 
 	for i := 0; i < count; i++ {
-		isProfitable := rand.Float64() > 0.40 // 60% win rate
+		isProfitable := rng.Float64() > 0.40 // 60% win rate
 
 		// Winning trades tend to have better entry conditions
 		volumeBase := 0.95
@@ -106,38 +106,38 @@ func generateSyntheticTrades(count int) []TradeOutcome {
 		}
 
 		// Add noise
-		volume := volumeBase + (rand.Float64()-0.5)*0.2
-		oi := oiBase + (rand.Float64()-0.5)*0.15
+		volume := volumeBase + (rng.Float64()-0.5)*0.2
+		oi := oiBase + (rng.Float64()-0.5)*0.15
 
 		// During-trade metrics
 		volumeDuring := 0.0
 		oiDuring := 0.0
 		if !isProfitable {
-			volumeDuring = -0.35 + (rand.Float64()-0.5)*0.1 // Losers see decay
-			oiDuring = -0.25 + (rand.Float64()-0.5)*0.1
+			volumeDuring = -0.35 + (rng.Float64()-0.5)*0.1 // Losers see decay
+			oiDuring = -0.25 + (rng.Float64()-0.5)*0.1
 		} else {
-			volumeDuring = -0.10 + (rand.Float64()-0.5)*0.1 // Winners more stable
-			oiDuring = -0.05 + (rand.Float64()-0.5)*0.1
+			volumeDuring = -0.10 + (rng.Float64()-0.5)*0.1 // Winners more stable
+			oiDuring = -0.05 + (rng.Float64()-0.5)*0.1
 		}
 
 		// Liquidity metrics
-		entrySpread := 0.001 + rand.Float64()*0.002
-		exitSpread := entrySpread * (1.0 + rand.Float64()*0.5)
+		entrySpread := 0.001 + rng.Float64()*0.002
+		exitSpread := entrySpread * (1.0 + rng.Float64()*0.5)
 		if !isProfitable {
-			exitSpread = entrySpread * (2.0 + rand.Float64()*1.0) // Losers see worse spread
+			exitSpread = entrySpread * (2.0 + rng.Float64()*1.0) // Losers see worse spread
 		}
 
-		entryDepth := 100000 + rand.Float64()*50000
-		exitDepth := entryDepth * (0.8 + rand.Float64()*0.3)
+		entryDepth := 100000 + rng.Float64()*50000
+		exitDepth := entryDepth * (0.8 + rng.Float64()*0.3)
 		if !isProfitable {
-			exitDepth = entryDepth * (0.4 + rand.Float64()*0.2) // Losers see depth shrinkage
+			exitDepth = entryDepth * (0.4 + rng.Float64()*0.2) // Losers see depth shrinkage
 		}
 
 		pnlPct := 0.0
 		if isProfitable {
-			pnlPct = 2.0 + rand.Float64()*8.0 // 2-10% profit
+			pnlPct = 2.0 + rng.Float64()*8.0 // 2-10% profit
 		} else {
-			pnlPct = -(1.0 + rand.Float64()*5.0) // -1 to -6% loss
+			pnlPct = -(1.0 + rng.Float64()*5.0) // -1 to -6% loss
 		}
 
 		trades[i] = TradeOutcome{
@@ -151,7 +151,7 @@ func generateSyntheticTrades(count int) []TradeOutcome {
 			ExitSpread:        exitSpread,
 			EntryDepth:        entryDepth,
 			ExitDepth:         exitDepth,
-			HoldingMinutes:    30 + rand.Intn(120),
+			HoldingMinutes:    30 + rng.Intn(120),
 			PnLPct:            pnlPct,
 		}
 	}

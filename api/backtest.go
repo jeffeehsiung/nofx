@@ -529,7 +529,7 @@ func (s *Server) handleBacktestExport(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 	filename := fmt.Sprintf("%s_export.zip", runID)
 	c.FileAttachment(path, filename)
 }
@@ -850,7 +850,7 @@ func (s *Server) hydrateBacktestAIConfig(cfg *backtest.BacktestConfig) error {
 		return fmt.Errorf("config is nil")
 	}
 	if s.store == nil {
-		return fmt.Errorf("System database not ready, cannot load AI model configuration")
+		return fmt.Errorf("system database not ready, cannot load AI model configuration")
 	}
 
 	cfg.UserID = normalizeUserID(cfg.UserID)
@@ -864,12 +864,12 @@ func (s *Server) hydrateBacktestAIConfig(cfg *backtest.BacktestConfig) error {
 	if modelID != "" {
 		model, err = s.store.AIModel().Get(cfg.UserID, modelID)
 		if err != nil {
-			return fmt.Errorf("Failed to load AI model: %w", err)
+			return fmt.Errorf("failed to load AI model: %w", err)
 		}
 	} else {
 		model, err = s.store.AIModel().GetDefault(cfg.UserID)
 		if err != nil {
-			return fmt.Errorf("No available AI model found: %w", err)
+			return fmt.Errorf("no available AI model found: %w", err)
 		}
 		cfg.AIModelID = model.ID
 	}
@@ -913,10 +913,10 @@ func (s *Server) hydrateBacktestAIConfig(cfg *backtest.BacktestConfig) error {
 
 	if cfg.AICfg.Provider == "custom" {
 		if cfg.AICfg.BaseURL == "" {
-			return fmt.Errorf("Custom AI model requires API URL configuration")
+			return fmt.Errorf("custom AI model requires API URL configuration")
 		}
 		if cfg.AICfg.Model == "" {
-			return fmt.Errorf("Custom AI model requires model name configuration")
+			return fmt.Errorf("custom AI model requires model name configuration")
 		}
 	}
 

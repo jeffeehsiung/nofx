@@ -21,7 +21,7 @@ func (c *CoinankClient) VisualScreener(ctx context.Context, interval coinank_enu
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data, nil
 }
@@ -39,10 +39,10 @@ func (c *CoinankClient) OiRank(ctx context.Context, sortBy coinank_enum.Instrume
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	if !result.Data.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data.Data.List, nil
 }
@@ -60,10 +60,10 @@ func (c *CoinankClient) LongShortRank(ctx context.Context, sortBy coinank_enum.I
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	if !result.Data.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data.Data.List, nil
 }
@@ -81,10 +81,10 @@ func (c *CoinankClient) LiquidationRank(ctx context.Context, sortBy coinank_enum
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	if !result.Data.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data.Data.List, nil
 }
@@ -102,10 +102,10 @@ func (c *CoinankClient) PriceRank(ctx context.Context, sortBy coinank_enum.Instr
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	if !result.Data.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data.Data.List, nil
 }
@@ -123,10 +123,10 @@ func (c *CoinankClient) VolumeRank(ctx context.Context, sortBy coinank_enum.Inst
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	if !result.Data.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data.Data.List, nil
 }

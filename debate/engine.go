@@ -66,7 +66,7 @@ func (e *DebateEngine) cleanupStaleDebates() {
 	for _, session := range sessions {
 		if session.Status == store.DebateStatusRunning || session.Status == store.DebateStatusVoting {
 			logger.Infof("[Debate] Cancelling stale debate: %s (was %s)", session.ID, session.Status)
-			e.debateStore.UpdateSessionStatus(session.ID, store.DebateStatusCancelled)
+			_ = e.debateStore.UpdateSessionStatus(session.ID, store.DebateStatusCancelled)
 		}
 	}
 }
@@ -159,7 +159,7 @@ func (e *DebateEngine) runDebate(session *store.DebateSessionWithDetails, strate
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Errorf("Debate panic recovered: %v", r)
-			e.debateStore.UpdateSessionStatus(session.ID, store.DebateStatusCancelled)
+			_ = e.debateStore.UpdateSessionStatus(session.ID, store.DebateStatusCancelled)
 			if e.OnError != nil {
 				e.OnError(session.ID, fmt.Errorf("debate panic: %v", r))
 			}
@@ -173,7 +173,7 @@ func (e *DebateEngine) runDebate(session *store.DebateSessionWithDetails, strate
 	ctx, err := e.buildMarketContext(session, strategyEngine)
 	if err != nil {
 		logger.Errorf("Failed to build market context: %v", err)
-		e.debateStore.UpdateSessionStatus(session.ID, store.DebateStatusCancelled)
+		_ = e.debateStore.UpdateSessionStatus(session.ID, store.DebateStatusCancelled)
 		if e.OnError != nil {
 			e.OnError(session.ID, err)
 		}
@@ -195,7 +195,7 @@ func (e *DebateEngine) runDebate(session *store.DebateSessionWithDetails, strate
 			e.OnRoundStart(session.ID, round)
 		}
 
-		e.debateStore.UpdateSessionRound(session.ID, round)
+		_ = e.debateStore.UpdateSessionRound(session.ID, round)
 
 		// Get response from each participant
 		for i, participant := range session.Participants {
@@ -241,7 +241,7 @@ func (e *DebateEngine) runDebate(session *store.DebateSessionWithDetails, strate
 
 	// Voting phase
 	logger.Infof("Starting voting phase for session %s", session.ID)
-	e.debateStore.UpdateSessionStatus(session.ID, store.DebateStatusVoting)
+	_ = e.debateStore.UpdateSessionStatus(session.ID, store.DebateStatusVoting)
 
 	votes, err := e.collectVotes(session, strategyEngine, allMessages)
 	if err != nil {
@@ -278,8 +278,8 @@ func (e *DebateEngine) runDebate(session *store.DebateSessionWithDetails, strate
 	session.FinalDecisions = allDecisions
 
 	// Update session with final decisions
-	e.debateStore.UpdateSessionFinalDecisions(session.ID, primaryConsensus, allDecisions)
-	e.debateStore.UpdateSessionStatus(session.ID, store.DebateStatusCompleted)
+	_ = e.debateStore.UpdateSessionFinalDecisions(session.ID, primaryConsensus, allDecisions)
+	_ = e.debateStore.UpdateSessionStatus(session.ID, store.DebateStatusCompleted)
 
 	if e.OnConsensus != nil {
 		e.OnConsensus(session.ID, primaryConsensus)
@@ -1075,7 +1075,7 @@ func (e *DebateEngine) ExecuteConsensus(sessionID string, executor TraderExecuto
 		session.FinalDecision.Error = err.Error()
 	}
 
-	e.debateStore.UpdateSessionFinalDecision(sessionID, session.FinalDecision)
+	_ = e.debateStore.UpdateSessionFinalDecision(sessionID, session.FinalDecision)
 
 	if err != nil {
 		return fmt.Errorf("trade execution failed: %w", err)
@@ -1105,7 +1105,7 @@ func getPersonalityDescription(personality store.DebatePersonality) string {
 
 // parseDecisions extracts multiple decisions from AI response using strict JSON parsing
 func parseDecisions(response string) ([]*store.DebateDecision, int) {
-	avgConfidence := 50
+	var avgConfidence int // Will be set based on parsed decisions
 
 	// Log first 500 chars of response for debugging
 	responsePreview := response

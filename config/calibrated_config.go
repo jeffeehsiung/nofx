@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -60,7 +59,7 @@ func LoadCalibratedThresholdsJSON(configPath string) (FailureThresholdsJSON, boo
 	}
 
 	// Read file
-	data, err := ioutil.ReadFile(configPath)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return defaults, false, fmt.Errorf("failed to read calibrated thresholds: %w", err)
 	}
@@ -169,7 +168,7 @@ func SaveThresholdDriftReport(reportPath string, oldThresholds, newThresholds Fa
 		return fmt.Errorf("failed to create report directory: %w", err)
 	}
 
-	if err := ioutil.WriteFile(reportPath, data, 0644); err != nil {
+	if err := os.WriteFile(reportPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write drift report: %w", err)
 	}
 

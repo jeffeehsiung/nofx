@@ -18,6 +18,6 @@ func (r *SetHttpClientResult) Error() error {
 }
 
 func (r *SetHttpClientResult) GetResult() *http.Client {
-	r.Error()
+	_ = r.Error()
 	return r.Client
 }

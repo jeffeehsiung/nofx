@@ -168,7 +168,7 @@ func (bow *BybitOrderWebSocket) Disconnect() error {
 	close(bow.stopCh)
 
 	if bow.conn != nil {
-		bow.conn.Close()
+		_ = bow.conn.Close()
 	}
 
 	if bow.heartbeatTicker != nil {
@@ -194,7 +194,7 @@ func (bow *BybitOrderWebSocket) GetOrderUpdateChannel() <-chan OrderUpdate {
 
 // Reconnect attempts to reconnect the WebSocket
 func (bow *BybitOrderWebSocket) Reconnect() error {
-	bow.Disconnect()
+	_ = bow.Disconnect()
 	time.Sleep(bow.reconnectDelay)
 	return bow.Connect()
 }

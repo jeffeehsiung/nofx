@@ -24,7 +24,7 @@ func (c *CoinankClient) ListCoin(ctx context.Context, productType coinank_enum.P
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return &result.Data, nil
 }
@@ -48,7 +48,7 @@ func (c *CoinankClient) ListSymbols(ctx context.Context, exchange coinank_enum.E
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return &result.Data, nil
 }

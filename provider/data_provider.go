@@ -3,7 +3,7 @@ package provider
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"nofx/security"
@@ -95,9 +95,11 @@ func fetchAI500() ([]CoinData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to request AI500 API: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
@@ -313,9 +315,11 @@ func fetchOITop() ([]OIPosition, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to request OI Top API: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read OI Top response: %w", err)
 	}
@@ -425,9 +429,11 @@ func fetchOIRanking(url string) ([]OIPosition, string, error) {
 	if err != nil {
 		return nil, "", fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read response: %w", err)
 	}

@@ -312,10 +312,8 @@ func (cs *CryptoService) DecryptPayload(payload *EncryptedPayload) ([]byte, erro
 			return nil, fmt.Errorf("failed to decode AAD: %w", err)
 		}
 
-		var aadData AADData
-		if err := json.Unmarshal(aad, &aadData); err == nil {
-			// Additional validation logic can be added here
-		}
+		// Additional validation logic can be added here if needed
+		_ = json.Unmarshal(aad, &AADData{})
 	}
 
 	// 3. Decrypt AES key using RSA-OAEP

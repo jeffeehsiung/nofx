@@ -167,6 +167,8 @@ export interface CreateTraderRequest {
   trading_mode?: string // 交易模式: "" (默认/balanced), "aggressive", "conservative", 或 prompt variant ID
   is_cross_margin?: boolean
   show_in_competition?: boolean // 是否在竞技场显示
+  enable_feedback?: boolean // Enable feedback analysis (default: true)
+  enable_prompt_evolution?: boolean // Enable prompt variant evolution (default: true)
   // 以下字段为向后兼容保留，新版使用策略配置
   btc_eth_leverage?: number
   altcoin_leverage?: number
@@ -245,6 +247,8 @@ export interface TraderConfigData {
   scan_interval_minutes: number
   initial_balance: number
   is_running: boolean
+  enable_feedback?: boolean  // 启用反馈分析
+  enable_prompt_evolution?: boolean  // 启用提示词进化
   // 以下为旧版字段（向后兼容）
   btc_eth_leverage?: number
   altcoin_leverage?: number
@@ -413,6 +417,51 @@ export interface BacktestAnalysis {
   top_losing_trades: DecisionOutcome[];
   market_conditions: string;
   regime_analysis: Record<string, number>;
+  // Additional metrics for comprehensive display
+  trades_per_hour?: number;
+  avg_hold_time?: string;
+  checklist_compliance?: number;
+  all_outcomes?: DecisionOutcome[];
+}
+
+// Unified type for both backtest and live trader analysis
+export type FeedbackAnalysis = BacktestAnalysis;
+
+// Trader analysis (same structure as backtest analysis)
+export type TraderAnalysis = BacktestAnalysis;
+
+// Prompt Variant Performance Metrics
+export interface PromptVariantPerformance {
+  total_decisions: number;
+  total_return: number;
+  total_return_pct: number;
+  win_rate: number;
+  profit_factor: number;
+  sharpe_ratio: number;
+  max_drawdown: number;
+  fitness_score: number;
+}
+
+// Prompt Variant Definition
+export interface PromptVariant {
+  id: string;
+  prompt_role_definition: string;
+  prompt_trading_frequency: string;
+  prompt_entry_standards: string;
+  prompt_decision_process: string;
+  version: number;
+  created_at: string;
+  updated_at?: string;
+  generation: number;
+  is_active: boolean;
+  // Performance data
+  total_decisions: number;
+  total_return: number;
+  win_rate: number;
+  profit_factor: number;
+  sharpe_ratio: number;
+  max_drawdown: number;
+  fitness_score: number;
 }
 
 export interface BacktestStartConfig {
@@ -435,8 +484,8 @@ export interface BacktestStartConfig {
   override_prompt?: boolean;
   cache_ai?: boolean;
   replay_only?: boolean;
-  enable_analysis?: boolean;
-  enable_prompt_lab?: boolean;
+  enable_feedback?: boolean; // Enable feedback analysis
+  enable_prompt_evolution?: boolean; // Enable prompt variant evolution
   checkpoint_interval_bars?: number;
   checkpoint_interval_seconds?: number;
   replay_decision_dir?: string;

@@ -173,7 +173,7 @@ func (oow *OKXOrderWebSocket) Disconnect() error {
 	close(oow.stopCh)
 
 	if oow.conn != nil {
-		oow.conn.Close()
+		_ = oow.conn.Close()
 	}
 
 	if oow.heartbeatTicker != nil {
@@ -199,7 +199,7 @@ func (oow *OKXOrderWebSocket) GetOrderUpdateChannel() <-chan OrderUpdate {
 
 // Reconnect attempts to reconnect the WebSocket
 func (oow *OKXOrderWebSocket) Reconnect() error {
-	oow.Disconnect()
+	_ = oow.Disconnect()
 	time.Sleep(oow.reconnectDelay)
 	return oow.Connect()
 }

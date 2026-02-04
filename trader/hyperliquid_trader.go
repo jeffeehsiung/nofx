@@ -193,7 +193,7 @@ func (t *HyperliquidTrader) GetBalance() (map[string]interface{}, error) {
 
 	// ✅ Step 1: Query Spot account balance
 	spotState, err := t.exchange.Info().SpotUserState(t.ctx, t.walletAddr)
-	var spotUSDCBalance float64 = 0.0
+	spotUSDCBalance := 0.0
 	if err != nil {
 		logger.Infof("⚠️ Failed to query Spot balance (may have no spot assets): %v", err)
 	} else if spotState != nil && len(spotState.Balances) > 0 {

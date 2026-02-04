@@ -100,7 +100,9 @@ func (t *AsterTrader) getPrecision(symbol string) (SymbolPrecision, error) {
 	if err != nil {
 		return SymbolPrecision{}, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	body, _ := io.ReadAll(resp.Body)
 	var info struct {

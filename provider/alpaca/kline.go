@@ -108,7 +108,9 @@ func (c *Client) GetBars(ctx context.Context, symbol string, timeframe string, l
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)

@@ -24,15 +24,15 @@ func (e *StrategyEngine) buildContinuousLearningFeedback(sb *strings.Builder, ct
 	// === 1. PERFORMANCE SNAPSHOT ===
 	if lang == LangChinese {
 		sb.WriteString("### 📊 当前表现快照\n")
-		sb.WriteString(fmt.Sprintf("- **总交易:** %d笔 | **胜率:** %.1f%% | **利润因子:** %.2f | **夏普比率:** %.2f\n",
+		fmt.Fprintf(sb, "- **总交易:** %d笔 | **胜率:** %.1f%% | **利润因子:** %.2f | **夏普比率:** %.2f\n",
 			ctx.TradingStats.TotalTrades,
 			ctx.TradingStats.WinRate,
 			ctx.TradingStats.ProfitFactor,
-			ctx.TradingStats.SharpeRatio))
-		sb.WriteString(fmt.Sprintf("- **总盈亏:** %+.2f USDT | **最大回撤:** %.1f%% | **盈亏比:** %.2f\n",
+			ctx.TradingStats.SharpeRatio)
+		fmt.Fprintf(sb, "- **总盈亏:** %+.2f USDT | **最大回撤:** %.1f%% | **盈亏比:** %.2f\n",
 			ctx.TradingStats.TotalPnL,
 			ctx.TradingStats.MaxDrawdownPct,
-			e.calculateWinLossRatio(ctx.TradingStats)))
+			e.calculateWinLossRatio(ctx.TradingStats))
 	} else {
 		sb.WriteString("### 📊 Current Performance Snapshot\n")
 		sb.WriteString(fmt.Sprintf("- **Total Trades:** %d | **Win Rate:** %.1f%% | **Profit Factor:** %.2f | **Sharpe:** %.2f\n",

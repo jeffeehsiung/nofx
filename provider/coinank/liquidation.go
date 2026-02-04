@@ -21,7 +21,7 @@ func (c *CoinankClient) LiquidationExchangeStatistics(ctx context.Context, baseC
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return &result.Data, nil
 }
@@ -44,7 +44,7 @@ func (c *CoinankClient) LiquidationCoinAggHistory(ctx context.Context, baseCoin 
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data, nil
 }
@@ -68,7 +68,7 @@ func (c *CoinankClient) LiquidationHistory(ctx context.Context, exchange coinank
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data, nil
 }
@@ -102,7 +102,7 @@ func (c *CoinankClient) LiquidationOrders(ctx context.Context, baseCoin string, 
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data, nil
 }

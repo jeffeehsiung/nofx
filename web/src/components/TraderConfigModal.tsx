@@ -36,6 +36,8 @@ interface FormState {
   show_in_competition: boolean
   scan_interval_minutes: number
   initial_balance?: number
+  enable_feedback: boolean
+  enable_prompt_evolution: boolean
 }
 
 interface TraderConfigModalProps {
@@ -67,6 +69,8 @@ export function TraderConfigModal({
     is_cross_margin: true,
     show_in_competition: true,
     scan_interval_minutes: 3,
+    enable_feedback: true,
+    enable_prompt_evolution: true,
   })
   const [isSaving, setIsSaving] = useState(false)
   const [strategies, setStrategies] = useState<Strategy[]>([])
@@ -106,6 +110,8 @@ export function TraderConfigModal({
         ...traderData,
         strategy_id: traderData.strategy_id || '',
         trading_mode: traderData.trading_mode || '',
+        enable_feedback: traderData.enable_feedback ?? true,
+        enable_prompt_evolution: traderData.enable_prompt_evolution ?? true,
       })
     } else if (!isEditMode) {
       setFormData({
@@ -117,6 +123,8 @@ export function TraderConfigModal({
         is_cross_margin: true,
         show_in_competition: true,
         scan_interval_minutes: 3,
+        enable_feedback: true,
+        enable_prompt_evolution: true,
       })
     }
   }, [traderData, isEditMode, availableModels, availableExchanges])
@@ -172,6 +180,8 @@ export function TraderConfigModal({
         is_cross_margin: formData.is_cross_margin,
         show_in_competition: formData.show_in_competition,
         scan_interval_minutes: formData.scan_interval_minutes,
+        enable_feedback: formData.enable_feedback,
+        enable_prompt_evolution: formData.enable_prompt_evolution,
       }
 
       // 只在编辑模式时包含initial_balance
@@ -507,6 +517,42 @@ export function TraderConfigModal({
                 </div>
                 <p className="text-xs text-[#848E9C] mt-1">
                   隐藏后将不在竞技场页面显示此交易员
+                </p>
+              </div>
+
+              {/* Feedback Analysis */}
+              <div>
+                <label className="text-sm text-[#EAECEF] block mb-2">
+                  {language === 'zh' ? '分析功能' : 'Analysis Features'}
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.enable_feedback}
+                      onChange={(e) => handleInputChange('enable_feedback', e.target.checked)}
+                      className="accent-[#F0B90B]"
+                    />
+                    <span className="text-sm text-[#EAECEF]">
+                      {language === 'zh' ? '启用反馈分析' : 'Enable Feedback Analysis'}
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.enable_prompt_evolution}
+                      onChange={(e) => handleInputChange('enable_prompt_evolution', e.target.checked)}
+                      className="accent-[#F0B90B]"
+                    />
+                    <span className="text-sm text-[#EAECEF]">
+                      {language === 'zh' ? '启用提示词进化' : 'Enable Prompt Evolution'}
+                    </span>
+                  </label>
+                </div>
+                <p className="text-xs text-[#848E9C] mt-1">
+                  {language === 'zh' 
+                    ? '反馈分析: 学习过往交易决策; 提示词进化: 自动优化交易提示词'
+                    : 'Feedback: Learn from past trading decisions; Evolution: Auto-optimize prompts'}
                 </p>
               </div>
 

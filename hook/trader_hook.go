@@ -20,7 +20,7 @@ func (r *NewBinanceTraderResult) Error() error {
 }
 
 func (r *NewBinanceTraderResult) GetResult() *futures.Client {
-	r.Error()
+	_ = r.Error()
 	return r.Client
 }
 
@@ -37,6 +37,6 @@ func (r *NewAsterTraderResult) Error() error {
 }
 
 func (r *NewAsterTraderResult) GetResult() *http.Client {
-	r.Error()
+	_ = r.Error()
 	return r.Client
 }

@@ -99,10 +99,10 @@ func TestSanitizeExchangeConfigForLog(t *testing.T) {
 		AsterPrivateKey       string `json:"aster_private_key"`
 	}{
 		"binance": {
-			Enabled:           true,
-			APIKey:            "binance_api_key_1234567890abcdef",
-			SecretKey:         "binance_secret_key_1234567890abcdef",
-			Testnet:           false,
+			Enabled:   true,
+			APIKey:    "binance_api_key_1234567890abcdef",
+			SecretKey: "binance_secret_key_1234567890abcdef",
+			Testnet:   false,
 		},
 		"hyperliquid": {
 			Enabled:               true,

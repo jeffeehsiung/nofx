@@ -3,8 +3,8 @@ import { useLanguage } from '../contexts/LanguageContext'
 import { X, Settings } from 'lucide-react'
 
 interface TraderSettings {
-  enableAnalysis: boolean
-  enablePromptLab: boolean
+  enableFeedback: boolean
+  enablePromptEvolution: boolean
 }
 
 interface TraderSettingsModalProps {
@@ -23,8 +23,8 @@ export function TraderSettingsModal({
   traderName,
   onSave,
   initialSettings = {
-    enableAnalysis: true,
-    enablePromptLab: true,
+    enableFeedback: true,
+    enablePromptEvolution: true,
   },
 }: TraderSettingsModalProps) {
   const { language } = useLanguage()
@@ -91,8 +91,8 @@ export function TraderSettingsModal({
           <label className="flex items-center gap-3 cursor-pointer p-3 rounded" style={{ background: '#1E2329' }}>
             <input
               type="checkbox"
-              checked={settings.enableAnalysis}
-              onChange={() => handleToggle('enableAnalysis')}
+              checked={settings.enableFeedback}
+              onChange={() => handleToggle('enableFeedback')}
               className="accent-[#F0B90B]"
             />
             <div>
@@ -110,8 +110,8 @@ export function TraderSettingsModal({
           <label className="flex items-center gap-3 cursor-pointer p-3 rounded" style={{ background: '#1E2329' }}>
             <input
               type="checkbox"
-              checked={settings.enablePromptLab}
-              onChange={() => handleToggle('enablePromptLab')}
+              checked={settings.enablePromptEvolution}
+              onChange={() => handleToggle('enablePromptEvolution')}
               className="accent-[#F0B90B]"
             />
             <div>

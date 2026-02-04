@@ -38,9 +38,13 @@ func getCurrentPriceWithFallback(symbol string, klines []Kline) (float64, string
 	priceDeviation := math.Abs(realtimePrice-klinePrice) / klinePrice
 
 	// If the deviation is too large (>2%), the ticker might be stale
+	// But skip warning for test data where K-line price is suspiciously small (e.g., <10 when real price >1000)
 	if priceDeviation > config.MaxPriceDeviationThreshold {
-		logger.Infof("⚠️  %s ticker price deviation %.2f%% from K-line (ticker: %.4f, kline: %.4f), using K-line data",
-			symbol, priceDeviation*100, realtimePrice, klinePrice)
+		// Only warn if both prices seem realistic (avoid test data noise)
+		if klinePrice > 1.0 || realtimePrice < 1000.0 {
+			logger.Infof("⚠️  %s ticker price deviation %.2f%% from K-line (ticker: %.4f, kline: %.4f), using K-line data",
+				symbol, priceDeviation*100, realtimePrice, klinePrice)
+		}
 		return klinePrice, "ticker_stale"
 	}
 
@@ -67,10 +71,10 @@ var (
 // getKlinesFromBinance fetches kline data from Binance and converts to market.Kline format
 func getKlinesFromBinance(symbol, interval string, limit int) ([]Kline, error) {
 	ctx := context.Background()
-	
+
 	binanceKlines, err := binance.GetKlinesFromBinance(ctx, symbol, interval, limit)
 	if err != nil {
-		return nil, fmt.Errorf("Binance API error: %w", err)
+		return nil, fmt.Errorf("binance API error: %w", err)
 	}
 
 	// Convert binance.Kline to market.Kline
@@ -89,6 +93,7 @@ func getKlinesFromBinance(symbol, interval string, limit int) ([]Kline, error) {
 
 	return klines, nil
 }
+
 // getKlinesFromCoinAnk fetches kline data from CoinAnk API (replacement for WSMonitorCli)
 func getKlinesFromCoinAnk(symbol, interval string, limit int) ([]Kline, error) {
 	// Map interval string to coinank enum
@@ -167,7 +172,7 @@ func getKlinesFromHyperliquid(symbol, interval string, limit int) ([]Kline, erro
 	ctx := context.Background()
 	candles, err := client.GetCandles(ctx, baseCoin, hlInterval, limit)
 	if err != nil {
-		return nil, fmt.Errorf("Hyperliquid API error: %w", err)
+		return nil, fmt.Errorf("hyperliquid API error: %w", err)
 	}
 
 	// Convert to market.Kline format
@@ -324,13 +329,13 @@ func Get(symbol string) (*Data, error) {
 		// Use Hyperliquid API for xyz dex assets (use 5m since 3m may not be available)
 		klines3m, err = getKlinesFromHyperliquid(symbol, "5m", 100)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to get 5-minute K-line from Hyperliquid: %v", err)
+			return nil, fmt.Errorf("failed to get 5-minute K-line from Hyperliquid: %v", err)
 		}
 	} else {
 		// Use Binance for regular crypto assets
 		klines3m, err = getKlinesFromBinance(symbol, "3m", 100)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to get 3-minute K-line from Binance: %v", err)
+			return nil, fmt.Errorf("failed to get 3-minute K-line from Binance: %v", err)
 		}
 	}
 
@@ -344,12 +349,12 @@ func Get(symbol string) (*Data, error) {
 	if isXyzAsset {
 		klines4h, err = getKlinesFromHyperliquid(symbol, "4h", 100)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to get 4-hour K-line from Hyperliquid: %v", err)
+			return nil, fmt.Errorf("failed to get 4-hour K-line from Hyperliquid: %v", err)
 		}
 	} else {
 		klines4h, err = getKlinesFromBinance(symbol, "4h", 100)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to get 4-hour K-line from Binance: %v", err)
+			return nil, fmt.Errorf("failed to get 4-hour K-line from Binance: %v", err)
 		}
 	}
 
@@ -502,7 +507,7 @@ func GetWithTimeframes(symbol string, timeframes []string, primaryTimeframe stri
 
 	// If primary timeframe data is empty, return error
 	if len(primaryKlines) == 0 {
-		return nil, fmt.Errorf("Primary timeframe %s K-line data is empty", primaryTimeframe)
+		return nil, fmt.Errorf("primary timeframe %s K-line data is empty", primaryTimeframe)
 	}
 
 	// Data staleness detection
@@ -1308,15 +1313,15 @@ func formatTimeframeData(sb *strings.Builder, data *TimeframeSeriesData) {
 			if i == len(data.Klines)-1 {
 				marker = "  <- current"
 			}
-			sb.WriteString(fmt.Sprintf("%-14s %-9.4f %-9.4f %-9.4f %-9.4f %-12.2f%s\n",
-				timeStr, k.Open, k.High, k.Low, k.Close, k.Volume, marker))
+			fmt.Fprintf(sb, "%-14s %-9.4f %-9.4f %-9.4f %-9.4f %-12.2f%s\n",
+				timeStr, k.Open, k.High, k.Low, k.Close, k.Volume, marker)
 		}
 		sb.WriteString("\n")
 	} else if len(data.MidPrices) > 0 {
 		// Fallback to old format for backward compatibility
-		sb.WriteString(fmt.Sprintf("Mid prices: %s\n\n", formatFloatSlice(data.MidPrices)))
+		fmt.Fprintf(sb, "Mid prices: %s\n\n", formatFloatSlice(data.MidPrices))
 		if len(data.Volume) > 0 {
-			sb.WriteString(fmt.Sprintf("Volume: %s\n\n", formatFloatSlice(data.Volume)))
+			fmt.Fprintf(sb, "Volume: %s\n\n", formatFloatSlice(data.Volume))
 		}
 	}
 

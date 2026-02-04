@@ -58,7 +58,6 @@ type PromptOptimizer struct {
 	CurrentVariant         *PromptVariant
 	Generation             int
 	PopulationSize         int
-	MutationRate           float64
 	FirstShouldEvolveCycle int
 
 	// Configuration
@@ -79,12 +78,11 @@ type PromptOptimizer struct {
 
 // PromptOptimizerConfig controls prompt optimization behavior
 type PromptOptimizerConfig struct {
-	EnableOptimization  bool    `json:"enable_optimization"`
-	PopulationSize      int     `json:"population_size"`        // Number of prompt variants to test
-	MutationRate        float64 `json:"mutation_rate"`          // Probability of mutation (0.0-1.0)
-	EvaluationCycles    int     `json:"evaluation_cycles"`      // Cycles before evaluating variants
-	TopVariantsToKeep   int     `json:"top_variants_to_keep"`   // Best variants to preserve
-	MinDecisionsPerTest int     `json:"min_decisions_per_test"` // Min decisions before evaluation
+	EnableOptimization  bool `json:"enable_optimization"`
+	PopulationSize      int  `json:"population_size"`        // Number of prompt variants to test
+	EvaluationCycles    int  `json:"evaluation_cycles"`      // Cycles before evaluating variants
+	TopVariantsToKeep   int  `json:"top_variants_to_keep"`   // Best variants to preserve
+	MinDecisionsPerTest int  `json:"min_decisions_per_test"` // Min decisions before evaluation
 }
 
 // DefaultPromptOptimizerConfig returns default configuration
@@ -92,7 +90,6 @@ func DefaultPromptOptimizerConfig() *PromptOptimizerConfig {
 	return &PromptOptimizerConfig{
 		EnableOptimization:  false,
 		PopulationSize:      5,
-		MutationRate:        0.3,
 		EvaluationCycles:    30,
 		TopVariantsToKeep:   2,
 		MinDecisionsPerTest: 15,
@@ -118,7 +115,6 @@ func NewPromptOptimizerWithAI(basePrompt *store.PromptSectionsConfig, config *Pr
 		Variants:               make([]*PromptVariant, 0),
 		Generation:             1,
 		PopulationSize:         config.PopulationSize,
-		MutationRate:           config.MutationRate,
 		Config:                 config,
 		DecisionCounts:         make(map[string]int),
 		PerformanceData:        make(map[string]*Metrics),

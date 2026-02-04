@@ -386,16 +386,6 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 	return nil
 }
 
-// hasPattern checks if a pattern type exists in a list of TradingPattern structs
-func (fo *FactorOptimizer) hasPattern(patterns []TradingPattern, patternType string) bool {
-	for _, p := range patterns {
-		if p.PatternType == patternType {
-			return true
-		}
-	}
-	return false
-}
-
 // findPatternWithMetrics returns the TradingPattern with quantified metrics (frequency, AvgPnLPct)
 // Used for weighted optimization decisions
 func (fo *FactorOptimizer) findPatternWithMetrics(patterns []TradingPattern, patternType string) *TradingPattern {
@@ -422,7 +412,7 @@ func (fo *FactorOptimizer) parseLLMRecommendations(recommendations []string) map
 		// Leverage recommendations: "leverage to Nx", "reduce leverage", "max Nx leverage"
 		if strings.Contains(recLower, "leverage") {
 			// Try to parse "Nx" or "N x" pattern
-			parts := strings.FieldsFunc(recLower, func(r rune) bool { return !((r >= '0' && r <= '9') || r == 'x' || r == '.') })
+			parts := strings.FieldsFunc(recLower, func(r rune) bool { return (r < '0' || r > '9') && r != 'x' && r != '.' })
 			for i, part := range parts {
 				if part == "x" && i > 0 {
 					// Previous part should be the leverage value

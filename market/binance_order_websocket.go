@@ -154,7 +154,7 @@ func (bos *BinanceOrderWebSocket) Disconnect() error {
 	close(bos.stopCh)
 
 	if bos.conn != nil {
-		bos.conn.Close()
+		_ = bos.conn.Close()
 	}
 
 	if bos.heartbeatTicker != nil {

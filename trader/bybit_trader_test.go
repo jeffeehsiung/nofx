@@ -31,8 +31,8 @@ func NewBybitTraderTestSuite(t *testing.T) *BybitTraderTestSuite {
 		path := r.URL.Path
 		var respBody interface{}
 
-		switch {
-		case path == "/v5/account/wallet-balance":
+		switch path {
+		case "/v5/account/wallet-balance":
 			respBody = map[string]interface{}{
 				"retCode": 0,
 				"retMsg":  "OK",

@@ -29,7 +29,7 @@ func (c *CoinankClient) NetPositions(ctx context.Context, exchange coinank_enum.
 		return nil, err
 	}
 	if !result.Success {
-		return nil, HttpError
+		return nil, ErrHttp
 	}
 	return result.Data, nil
 }

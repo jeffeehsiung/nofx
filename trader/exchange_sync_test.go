@@ -120,7 +120,9 @@ func runStandardTests(t *testing.T, exchangeName string) {
 			if err != nil {
 				t.Fatalf("Failed to create test database: %v", err)
 			}
-			defer db.Close()
+			defer func() {
+				_ = db.Close()
+			}()
 
 			positionStore := store.NewPositionStore(db)
 			if err := positionStore.InitTables(); err != nil {
@@ -203,7 +205,9 @@ func TestPositionAccumulationBug(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	positionStore := store.NewPositionStore(db)
 	if err := positionStore.InitTables(); err != nil {
@@ -287,7 +291,9 @@ func TestQuantityPrecision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	positionStore := store.NewPositionStore(db)
 	if err := positionStore.InitTables(); err != nil {

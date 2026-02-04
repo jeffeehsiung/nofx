@@ -29,7 +29,7 @@ func BaseCoinSymbols(ctx context.Context, exchangeName coinank_enum.Exchange, sy
 		return nil, err
 	}
 	if !result.Success {
-		return nil, coinank.HttpError
+		return nil, coinank.ErrHttp
 	}
 	return result.Data, nil
 }

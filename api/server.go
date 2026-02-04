@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"nofx/auth"
@@ -327,7 +328,9 @@ func getPublicIPFromAPI() string {
 		if err != nil {
 			continue
 		}
-		defer resp.Body.Close()
+		defer func(body io.ReadCloser) {
+			_ = body.Close()
+		}(resp.Body)
 
 		if resp.StatusCode == http.StatusOK {
 			body := make([]byte, 128)
@@ -429,7 +432,7 @@ func (s *Server) getTraderFromQuery(c *gin.Context) (*manager.TraderManager, str
 		// If no trader_id specified, return first trader for this user
 		ids := s.traderManager.GetTraderIDs()
 		if len(ids) == 0 {
-			return nil, "", fmt.Errorf("No available traders")
+			return nil, "", fmt.Errorf("no available traders")
 		}
 
 		// Get user's trader list, prioritize returning user's own traders
@@ -1092,14 +1095,60 @@ func (s *Server) handleGetTraderPromptVariants(c *gin.Context) {
 		return
 	}
 
-	variants := trader.GetPromptOptimizer().GetAllVariants()
+	// Convert variants to camelCase format (consistent with backtest endpoint)
+	type APIVariant struct {
+		ID                     string  `json:"id"`
+		PromptRoleDefinition   string  `json:"promptRoleDefinition"`
+		PromptTradingFrequency string  `json:"promptTradingFrequency"`
+		PromptEntryStandards   string  `json:"promptEntryStandards"`
+		PromptDecisionProcess  string  `json:"promptDecisionProcess"`
+		CreatedAt              string  `json:"createdAt"`
+		TotalDecisions         int     `json:"totalDecisions"`
+		TotalReturn            float64 `json:"totalReturn"`
+		WinRate                float64 `json:"winRate"`
+		ProfitFactor           float64 `json:"profitFactor"`
+		SharpeRatio            float64 `json:"sharpeRatio"`
+		MaxDrawdown            float64 `json:"maxDrawdown"`
+		FitnessScore           float64 `json:"fitnessScore"`
+		Generation             int     `json:"generation"`
+		IsActive               bool    `json:"isActive"`
+	}
+
+	variantsData := trader.GetPromptOptimizer().GetAllVariants()
+	variants := make([]APIVariant, 0, len(variantsData))
+	var activeVariant *APIVariant
+
+	for _, v := range variantsData {
+		apiV := APIVariant{
+			ID:                     v.ID,
+			PromptRoleDefinition:   v.PromptRoleDefinition,
+			PromptTradingFrequency: v.PromptTradingFrequency,
+			PromptEntryStandards:   v.PromptEntryStandards,
+			PromptDecisionProcess:  v.PromptDecisionProcess,
+			CreatedAt:              v.CreatedAt.Format(time.RFC3339),
+			TotalDecisions:         v.TotalDecisions,
+			TotalReturn:            v.TotalReturn,
+			WinRate:                v.WinRate,
+			ProfitFactor:           v.ProfitFactor,
+			SharpeRatio:            v.SharpeRatio,
+			MaxDrawdown:            v.MaxDrawdown,
+			FitnessScore:           v.FitnessScore,
+			Generation:             v.Generation,
+			IsActive:               v.IsActive,
+		}
+		variants = append(variants, apiV)
+		if v.IsActive {
+			activeVariant = &apiV
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"trader_id":  traderID,
 		"variants":   variants,
 		"total":      len(variants),
 		"generation": trader.GetPromptOptimizer().GetGeneration(),
-		"active":     trader.GetPromptOptimizer().GetCurrentVariant(),
-		"timestamp":  time.Now().Format("2006-01-02 15:04:05"),
+		"active":     activeVariant,
+		"timestamp":  time.Now().Format(time.RFC3339),
 	})
 }
 
@@ -1118,23 +1167,23 @@ func (s *Server) handleGetTraderPromptPerformance(c *gin.Context) {
 
 	variant := trader.GetPromptOptimizer().GetCurrentVariant()
 
-	// Convert variant to API format
+	// Convert variant to API format (camelCase, consistent with backtest endpoint)
 	type APIVariant struct {
-		ID                     string  `json:"ID"`
-		PromptRoleDefinition   string  `json:"PromptRoleDefinition"`
-		PromptTradingFrequency string  `json:"PromptTradingFrequency"`
-		PromptEntryStandards   string  `json:"PromptEntryStandards"`
-		PromptDecisionProcess  string  `json:"PromptDecisionProcess"`
-		CreatedAt              string  `json:"CreatedAt"`
-		TotalDecisions         int     `json:"TotalDecisions"`
-		TotalReturn            float64 `json:"TotalReturn"`
-		WinRate                float64 `json:"WinRate"`
-		ProfitFactor           float64 `json:"ProfitFactor"`
-		SharpeRatio            float64 `json:"SharpeRatio"`
-		MaxDrawdown            float64 `json:"MaxDrawdown"`
-		FitnessScore           float64 `json:"FitnessScore"`
-		Generation             int     `json:"Generation"`
-		IsActive               bool    `json:"IsActive"`
+		ID                     string  `json:"id"`
+		PromptRoleDefinition   string  `json:"promptRoleDefinition"`
+		PromptTradingFrequency string  `json:"promptTradingFrequency"`
+		PromptEntryStandards   string  `json:"promptEntryStandards"`
+		PromptDecisionProcess  string  `json:"promptDecisionProcess"`
+		CreatedAt              string  `json:"createdAt"`
+		TotalDecisions         int     `json:"totalDecisions"`
+		TotalReturn            float64 `json:"totalReturn"`
+		WinRate                float64 `json:"winRate"`
+		ProfitFactor           float64 `json:"profitFactor"`
+		SharpeRatio            float64 `json:"sharpeRatio"`
+		MaxDrawdown            float64 `json:"maxDrawdown"`
+		FitnessScore           float64 `json:"fitnessScore"`
+		Generation             int     `json:"generation"`
+		IsActive               bool    `json:"isActive"`
 	}
 	apiVariant := APIVariant{
 		ID:                     variant.ID,
@@ -1142,7 +1191,7 @@ func (s *Server) handleGetTraderPromptPerformance(c *gin.Context) {
 		PromptTradingFrequency: variant.PromptTradingFrequency,
 		PromptEntryStandards:   variant.PromptEntryStandards,
 		PromptDecisionProcess:  variant.PromptDecisionProcess,
-		CreatedAt:              variant.CreatedAt.Format("2006-01-02 15:04:05"),
+		CreatedAt:              variant.CreatedAt.Format(time.RFC3339),
 		TotalDecisions:         variant.TotalDecisions,
 		TotalReturn:            variant.TotalReturn,
 		WinRate:                variant.WinRate,
@@ -1156,7 +1205,7 @@ func (s *Server) handleGetTraderPromptPerformance(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"trader_id": traderID,
 		"variant":   apiVariant,
-		"timestamp": time.Now().Format("2006-01-02 15:04:05"),
+		"timestamp": time.Now().Format(time.RFC3339),
 		"message":   "Prompt variant performance retrieved successfully",
 	})
 }

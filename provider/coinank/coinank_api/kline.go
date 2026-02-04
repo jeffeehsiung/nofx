@@ -35,7 +35,7 @@ func Kline(ctx context.Context, symbol string, exchange coinank_enum.Exchange, t
 		return nil, err
 	}
 	if !result.Success {
-		return nil, coinank.HttpError
+		return nil, coinank.ErrHttp
 	}
 	klines := make([]coinank.KlineResult, len(result.Data))
 	for i, k := range result.Data {

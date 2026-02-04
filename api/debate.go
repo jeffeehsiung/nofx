@@ -436,7 +436,9 @@ func (h *DebateHandler) HandleDebateStream(c *gin.Context) {
 		"event": "initial",
 		"data":  initialState,
 	})
-	fmt.Fprintf(c.Writer, "event: initial\ndata: %s\n\n", initialData)
+	if _, err := fmt.Fprintf(c.Writer, "event: initial\ndata: %s\n\n", initialData); err != nil {
+		logger.Warnf("Failed to write SSE event: %v", err)
+	}
 	c.Writer.Flush()
 
 	// Stream updates

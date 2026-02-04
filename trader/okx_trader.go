@@ -753,7 +753,7 @@ func (t *OKXTrader) CloseLong(symbol string, quantity float64) (map[string]inter
 	// Find actual position from exchange
 	var actualQty float64
 	var posFound bool
-	var posMgnMode string = "cross" // Default to cross margin
+	posMgnMode := "cross" // Default to cross margin
 	logger.Infof("🔍 OKX CloseLong: searching for symbol=%s in %d positions", symbol, len(positions))
 	for _, pos := range positions {
 		logger.Infof("🔍 OKX position: symbol=%v, side=%v, positionAmt=%v, mgnMode=%v", pos["symbol"], pos["side"], pos["positionAmt"], pos["mgnMode"])
@@ -866,7 +866,7 @@ func (t *OKXTrader) CloseShort(symbol string, quantity float64) (map[string]inte
 	// Find actual position from exchange
 	var actualQty float64
 	var posFound bool
-	var posMgnMode string = "cross" // Default to cross margin
+	posMgnMode := "cross" // Default to cross margin
 	logger.Infof("🔍 OKX CloseShort searching positions: symbol=%s, current position count=%d", symbol, len(positions))
 	for _, pos := range positions {
 		logger.Infof("🔍 OKX position: symbol=%v, side=%v, positionAmt=%v, mgnMode=%v",

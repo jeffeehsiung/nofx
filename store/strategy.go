@@ -41,6 +41,7 @@ type StrategyConfig struct {
 	// editable sections of System Prompt
 	PromptSections PromptSectionsConfig `json:"prompt_sections,omitempty"`
 }
+
 // PromptTemplates holds prompt sections for each trading mode
 var PromptTemplates = map[string]map[string]PromptSectionsConfig{
 	"balanced": {
@@ -1058,16 +1059,16 @@ func (c *StrategyConfig) AvailableIndicatorsString(sb *strings.Builder, lang str
 	kline := indicators.Klines
 	if lang == "zh" {
 		sb.WriteString("你会有以下数据可用：\n")
-		sb.WriteString(fmt.Sprintf("- %s K线序列", kline.PrimaryTimeframe))
+		fmt.Fprintf(sb, "- %s K线序列", kline.PrimaryTimeframe)
 		if kline.EnableMultiTimeframe {
-			sb.WriteString(fmt.Sprintf(" + %s K线序列\n", kline.LongerTimeframe))
+			fmt.Fprintf(sb, " + %s K线序列\n", kline.LongerTimeframe)
 		} else {
 			sb.WriteString("\n")
 		}
 		if indicators.EnableEMA {
 			sb.WriteString("- EMA指标")
 			if len(indicators.EMAPeriods) > 0 {
-				sb.WriteString(fmt.Sprintf("（周期：%v）", indicators.EMAPeriods))
+				fmt.Fprintf(sb, "（周期：%v）", indicators.EMAPeriods)
 			}
 			sb.WriteString("\n")
 		}

@@ -107,13 +107,13 @@ func (t *BybitTrader) GetBalance() (map[string]interface{}, error) {
 	}
 
 	if result.RetCode != 0 {
-		return nil, fmt.Errorf("Bybit API error: %s", result.RetMsg)
+		return nil, fmt.Errorf("bybit API error: %s", result.RetMsg)
 	}
 
 	// Extract balance information
 	resultData, ok := result.Result.(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("Bybit balance return format error")
+		return nil, fmt.Errorf("bybit balance return format error")
 	}
 
 	list, _ := resultData["list"].([]interface{})
@@ -183,12 +183,12 @@ func (t *BybitTrader) GetPositions() ([]map[string]interface{}, error) {
 	}
 
 	if result.RetCode != 0 {
-		return nil, fmt.Errorf("Bybit API error: %s", result.RetMsg)
+		return nil, fmt.Errorf("bybit API error: %s", result.RetMsg)
 	}
 
 	resultData, ok := result.Result.(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("Bybit positions return format error")
+		return nil, fmt.Errorf("bybit positions return format error")
 	}
 
 	list, _ := resultData["list"].([]interface{})
@@ -309,7 +309,7 @@ func (t *BybitTrader) OpenLong(symbol string, quantity float64, leverage int) (m
 
 	result, err := t.client.NewUtaBybitServiceWithParams(params).PlaceOrder(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("Bybit open long failed: %w", err)
+		return nil, fmt.Errorf("bybit open long failed: %w", err)
 	}
 
 	// Clear cache
@@ -352,7 +352,7 @@ func (t *BybitTrader) OpenShort(symbol string, quantity float64, leverage int) (
 
 	result, err := t.client.NewUtaBybitServiceWithParams(params).PlaceOrder(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("Bybit open short failed: %w", err)
+		return nil, fmt.Errorf("bybit open short failed: %w", err)
 	}
 
 	// Clear cache
@@ -397,7 +397,7 @@ func (t *BybitTrader) CloseLong(symbol string, quantity float64) (map[string]int
 
 	result, err := t.client.NewUtaBybitServiceWithParams(params).PlaceOrder(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("Bybit close long failed: %w", err)
+		return nil, fmt.Errorf("bybit close long failed: %w", err)
 	}
 
 	// Clear cache
@@ -442,7 +442,7 @@ func (t *BybitTrader) CloseShort(symbol string, quantity float64) (map[string]in
 
 	result, err := t.client.NewUtaBybitServiceWithParams(params).PlaceOrder(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("Bybit close short failed: %w", err)
+		return nil, fmt.Errorf("bybit close short failed: %w", err)
 	}
 
 	// Clear cache

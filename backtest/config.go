@@ -26,28 +26,28 @@ type LeverageConfig struct {
 
 // BacktestConfig describes the input configuration for a backtest run.
 type BacktestConfig struct {
-	RunID                string   `json:"run_id"`
-	UserID               string   `json:"user_id,omitempty"`
-	AIModelID            string   `json:"ai_model_id,omitempty"`
-	StrategyID           string   `json:"strategy_id,omitempty"` // Optional: use saved strategy from Strategy Studio
-	Symbols              []string `json:"symbols"`
-	Timeframes           []string `json:"timeframes"`
-	DecisionTimeframe    string   `json:"decision_timeframe"`
-	DecisionCadenceNBars int      `json:"decision_cadence_nbars"`
-	StartTS              int64    `json:"start_ts"`
-	EndTS                int64    `json:"end_ts"`
-	InitialBalance       float64  `json:"initial_balance"`
-	FeeBps               float64  `json:"fee_bps"`
-	SlippageBps          float64  `json:"slippage_bps"`
-	FillPolicy           string   `json:"fill_policy"`
-	PromptVariant        string   `json:"prompt_variant"`
-	PromptTemplate       string   `json:"prompt_template"`
-	CustomPrompt         string   `json:"custom_prompt"`
-	OverrideBasePrompt   bool     `json:"override_prompt"`
-	CacheAI              bool     `json:"cache_ai"`
-	ReplayOnly           bool     `json:"replay_only"`
-	EnableAnalysis       bool     `json:"enable_analysis"`
-	EnablePromptLab      bool     `json:"enable_prompt_lab"`
+	RunID                 string   `json:"run_id"`
+	UserID                string   `json:"user_id,omitempty"`
+	AIModelID             string   `json:"ai_model_id,omitempty"`
+	StrategyID            string   `json:"strategy_id,omitempty"` // Optional: use saved strategy from Strategy Studio
+	Symbols               []string `json:"symbols"`
+	Timeframes            []string `json:"timeframes"`
+	DecisionTimeframe     string   `json:"decision_timeframe"`
+	DecisionCadenceNBars  int      `json:"decision_cadence_nbars"`
+	StartTS               int64    `json:"start_ts"`
+	EndTS                 int64    `json:"end_ts"`
+	InitialBalance        float64  `json:"initial_balance"`
+	FeeBps                float64  `json:"fee_bps"`
+	SlippageBps           float64  `json:"slippage_bps"`
+	FillPolicy            string   `json:"fill_policy"`
+	PromptVariant         string   `json:"prompt_variant"`
+	PromptTemplate        string   `json:"prompt_template"`
+	CustomPrompt          string   `json:"custom_prompt"`
+	OverrideBasePrompt    bool     `json:"override_prompt"`
+	CacheAI               bool     `json:"cache_ai"`
+	ReplayOnly            bool     `json:"replay_only"`
+	EnableFeedback        bool     `json:"enable_feedback"`         // Enable feedback analysis
+	EnablePromptEvolution bool     `json:"enable_prompt_evolution"` // Enable prompt variant evolution
 
 	AICfg    AIConfig       `json:"ai"`
 	Leverage LeverageConfig `json:"leverage"`

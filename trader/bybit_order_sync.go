@@ -96,7 +96,7 @@ func (t *BybitTrader) getTradesViaHTTP(startTime time.Time, limit int) ([]BybitT
 	}
 
 	if result.RetCode != 0 {
-		return nil, fmt.Errorf("Bybit API error: %s", result.RetMsg)
+		return nil, fmt.Errorf("bybit API error: %s", result.RetMsg)
 	}
 
 	return t.parseTradesResult(result.Result.List)

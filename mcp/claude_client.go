@@ -114,11 +114,11 @@ func (c *ClaudeClient) parseMCPResponse(body []byte) (string, error) {
 	}
 
 	if response.Error != nil {
-		return "", fmt.Errorf("Claude API error: %s - %s", response.Error.Type, response.Error.Message)
+		return "", fmt.Errorf("claude API error: %s - %s", response.Error.Type, response.Error.Message)
 	}
 
 	if len(response.Content) == 0 {
-		return "", fmt.Errorf("Claude returned empty content, body: %s", string(body))
+		return "", fmt.Errorf("claude returned empty content, body: %s", string(body))
 	}
 
 	// Report token usage if callback is set

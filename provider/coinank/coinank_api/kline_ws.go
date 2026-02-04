@@ -90,7 +90,9 @@ func ws(ctx context.Context) (*websocket.Conn, <-chan string, error) {
 }
 
 func read(conn *websocket.Conn, ch chan string) {
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	defer close(ch)
 	for {
 		var msg string
