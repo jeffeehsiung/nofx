@@ -599,7 +599,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/backtest/prompt-variants?run_id=${runId}`, {
       headers: getAuthHeaders(),
     })
-    return handleJSONResponse<any>(res)
+    return handleJSONResponse<PromptVariantLabResponse>(res)
   },
 
   async activatePromptVariant(runId: string, variantId: string): Promise<any> {
@@ -823,14 +823,14 @@ export const api = {
     const res = await fetch(`${API_BASE}/traders/${traderId}/prompt-variants`, {
       headers: getAuthHeaders(),
     })
-    return handleJSONResponse<any>(res)
+    return handleJSONResponse<PromptVariantLabResponse>(res)
   },
 
   async getTraderPromptPerformance(traderId: string): Promise<PromptVariantPerformanceResponse> {
     const res = await fetch(`${API_BASE}/traders/${traderId}/prompt-performance`, {
       headers: getAuthHeaders(),
     })
-    return handleJSONResponse<any>(res)
+    return handleJSONResponse<PromptVariantPerformanceResponse>(res)
   },
 
   async activateTraderPromptVariant(traderId: string, variantId: string): Promise<any> {

@@ -432,36 +432,36 @@ export type TraderAnalysis = BacktestAnalysis;
 
 // Prompt Variant Performance Metrics
 export interface PromptVariantPerformance {
-  total_decisions: number;
-  total_return: number;
-  total_return_pct: number;
-  win_rate: number;
-  profit_factor: number;
-  sharpe_ratio: number;
-  max_drawdown: number;
-  fitness_score: number;
+  totalDecisions: number;
+  totalReturn: number;
+  totalReturnPct: number;
+  winRate: number;
+  profitFactor: number;
+  sharpeRatio: number;
+  maxDrawdown: number;
+  fitnessScore: number;
 }
 
 // Prompt Variant Definition
 export interface PromptVariant {
   id: string;
-  prompt_role_definition: string;
-  prompt_trading_frequency: string;
-  prompt_entry_standards: string;
-  prompt_decision_process: string;
-  version: number;
-  created_at: string;
-  updated_at?: string;
+  promptRoleDefinition: string;
+  promptTradingFrequency: string;
+  promptEntryStandards: string;
+  promptDecisionProcess: string;
+  version?: number;
+  createdAt: string;
+  updatedAt?: string;
   generation: number;
-  is_active: boolean;
+  isActive: boolean;
   // Performance data
-  total_decisions: number;
-  total_return: number;
-  win_rate: number;
-  profit_factor: number;
-  sharpe_ratio: number;
-  max_drawdown: number;
-  fitness_score: number;
+  totalDecisions: number;
+  totalReturn: number;
+  winRate: number;
+  profitFactor: number;
+  sharpeRatio: number;
+  maxDrawdown: number;
+  fitnessScore: number;
 }
 
 export interface BacktestStartConfig {

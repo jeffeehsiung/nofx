@@ -1077,21 +1077,21 @@ func (s *Server) handleGetPromptPerformance(c *gin.Context) {
 	variants := runner.GetPromptOptimizer().GetAllVariants()
 
 	type VariantPerformance struct {
-		ID                     string  `json:"ID"`
-		PromptRoleDefinition   string  `json:"PromptRoleDefinition"`
-		PromptTradingFrequency string  `json:"PromptTradingFrequency"`
-		PromptEntryStandards   string  `json:"PromptEntryStandards"`
-		PromptDecisionProcess  string  `json:"PromptDecisionProcess"`
-		CreatedAt              string  `json:"CreatedAt"`
-		TotalDecisions         int     `json:"TotalDecisions"`
-		TotalReturn            float64 `json:"TotalReturn"`
-		WinRate                float64 `json:"WinRate"`
-		ProfitFactor           float64 `json:"ProfitFactor"`
-		SharpeRatio            float64 `json:"SharpeRatio"`
-		MaxDrawdown            float64 `json:"MaxDrawdown"`
-		FitnessScore           float64 `json:"FitnessScore"`
-		Generation             int     `json:"Generation"`
-		IsActive               bool    `json:"IsActive"`
+		ID                     string  `json:"id"`
+		PromptRoleDefinition   string  `json:"promptRoleDefinition"`
+		PromptTradingFrequency string  `json:"promptTradingFrequency"`
+		PromptEntryStandards   string  `json:"promptEntryStandards"`
+		PromptDecisionProcess  string  `json:"promptDecisionProcess"`
+		CreatedAt              string  `json:"createdAt"`
+		TotalDecisions         int     `json:"totalDecisions"`
+		TotalReturn            float64 `json:"totalReturn"`
+		WinRate                float64 `json:"winRate"`
+		ProfitFactor           float64 `json:"profitFactor"`
+		SharpeRatio            float64 `json:"sharpeRatio"`
+		MaxDrawdown            float64 `json:"maxDrawdown"`
+		FitnessScore           float64 `json:"fitnessScore"`
+		Generation             int     `json:"generation"`
+		IsActive               bool    `json:"isActive"`
 	}
 
 	var performances []VariantPerformance
@@ -1102,7 +1102,7 @@ func (s *Server) handleGetPromptPerformance(c *gin.Context) {
 			PromptTradingFrequency: v.PromptTradingFrequency,
 			PromptEntryStandards:   v.PromptEntryStandards,
 			PromptDecisionProcess:  v.PromptDecisionProcess,
-			CreatedAt:              v.CreatedAt.Format("2006-01-02 15:04:05"),
+			CreatedAt:              v.CreatedAt.Format(time.RFC3339),
 			TotalDecisions:         v.TotalDecisions,
 			TotalReturn:            v.TotalReturn,
 			WinRate:                v.WinRate,
@@ -1119,7 +1119,7 @@ func (s *Server) handleGetPromptPerformance(c *gin.Context) {
 		"run_id":    runID,
 		"variants":  performances,
 		"total":     len(performances),
-		"timestamp": time.Now(),
+		"timestamp": time.Now().Format(time.RFC3339),
 	})
 }
 

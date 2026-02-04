@@ -50,6 +50,36 @@ export interface PromptVariantPerformanceResponse {
   message?: string
 }
 
+const toNumber = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+const normalizeVariant = (variant: Partial<PromptVariant> | null | undefined): PromptVariant => {
+  const v = variant ?? {}
+  return {
+    id: typeof v.id === 'string' ? v.id : '',
+    promptRoleDefinition: typeof v.promptRoleDefinition === 'string' ? v.promptRoleDefinition : '',
+    promptTradingFrequency: typeof v.promptTradingFrequency === 'string' ? v.promptTradingFrequency : '',
+    promptEntryStandards: typeof v.promptEntryStandards === 'string' ? v.promptEntryStandards : '',
+    promptDecisionProcess: typeof v.promptDecisionProcess === 'string' ? v.promptDecisionProcess : '',
+    createdAt: typeof v.createdAt === 'string' ? v.createdAt : '',
+    totalDecisions: toNumber(v.totalDecisions),
+    totalReturn: toNumber(v.totalReturn),
+    winRate: toNumber(v.winRate),
+    profitFactor: toNumber(v.profitFactor),
+    sharpeRatio: toNumber(v.sharpeRatio),
+    maxDrawdown: toNumber(v.maxDrawdown),
+    fitnessScore: toNumber(v.fitnessScore),
+    generation: Math.trunc(toNumber(v.generation)),
+    isActive: Boolean(v.isActive),
+  }
+}
+
 interface PromptVariantLabProps {
   type: 'backtest' | 'trader'
   resourceId?: string
@@ -73,7 +103,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
         try {
           const parsed = JSON.parse(cached)
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setLastNonEmptyVariants(parsed)
+            setLastNonEmptyVariants(parsed.map((variant) => normalizeVariant(variant)))
           }
         } catch {}
       }
@@ -132,20 +162,25 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
     { refreshInterval: 10000 }
   )
 
+
   // Save variants to sessionStorage when fetched (backtest only)
   useEffect(() => {
     if (isBacktest && data?.variants && data.variants.length > 0 && resourceId) {
-      setLastNonEmptyVariants(data.variants)
-      sessionStorage.setItem(`promptlab-variants-${resourceId}`, JSON.stringify(data.variants))
+      const normalized = data.variants.map((variant) => normalizeVariant(variant))
+      setLastNonEmptyVariants(normalized)
+      sessionStorage.setItem(`promptlab-variants-${resourceId}`, JSON.stringify(normalized))
     }
   }, [data?.variants, resourceId, isBacktest])
 
   const variants = Array.isArray(data?.variants)
-    ? data.variants.filter((v) => v && typeof v.id === 'string')
+    ? data.variants.map((variant) => normalizeVariant(variant)).filter((v) => v.id)
     : []
   const showVariants = isBacktest && variants.length === 0 ? lastNonEmptyVariants : variants
   const everHadVariants = isBacktest ? lastNonEmptyVariants.length > 0 : true
   const activeVariant = showVariants.length > 0 ? showVariants.find((v) => v.isActive) : undefined
+  const performanceVariant = performanceData?.variant
+    ? normalizeVariant(performanceData.variant)
+    : undefined
 
   useEffect(() => {
     if (activeVariant && !selectedVariant) {
@@ -353,7 +388,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                         Gen {variant.generation}
                       </div>
                       <div className="text-xs text-slate-400">
-                        {new Date(variant.createdAt || '').toLocaleTimeString()}
+                        {variant.createdAt ? new Date(variant.createdAt).toLocaleTimeString() : '-'}
                       </div>
                     </div>
                   </div>
@@ -461,7 +496,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                 {language === 'zh' ? '创建时间' : 'Created'}
               </div>
               <div className="text-sm text-white">
-                {new Date(selectedVariant.createdAt || '').toLocaleString()}
+                {selectedVariant.createdAt ? new Date(selectedVariant.createdAt).toLocaleString() : '-'}
               </div>
             </div>
             <div>
@@ -542,7 +577,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                     {language === 'zh' ? '总收益率' : 'Total Return'}
                   </div>
                   <div className="text-xl font-bold text-green-400">
-                    {((performanceData.variant?.totalReturn ?? 0) * 100).toFixed(2)}%
+                    {((performanceVariant?.totalReturn ?? 0) * 100).toFixed(2)}%
                   </div>
                 </div>
                 <div>
@@ -550,7 +585,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                     {language === 'zh' ? '胜率' : 'Win Rate'}
                   </div>
                   <div className="text-xl font-bold text-blue-400">
-                    {((performanceData.variant?.winRate ?? 0) * 100).toFixed(1)}%
+                    {((performanceVariant?.winRate ?? 0) * 100).toFixed(1)}%
                   </div>
                 </div>
                 <div>
@@ -558,7 +593,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                     {language === 'zh' ? '最大回撤' : 'Max Drawdown'}
                   </div>
                   <div className="text-xl font-bold text-red-400">
-                    {((performanceData.variant?.maxDrawdown ?? 0) * 100).toFixed(1)}%
+                    {((performanceVariant?.maxDrawdown ?? 0) * 100).toFixed(1)}%
                   </div>
                 </div>
                 <div>
@@ -566,7 +601,7 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                     {language === 'zh' ? '夏普比率' : 'Sharpe Ratio'}
                   </div>
                   <div className="text-xl font-bold text-yellow-400">
-                    {(performanceData.variant?.sharpeRatio ?? 0).toFixed(2)}
+                    {(performanceVariant?.sharpeRatio ?? 0).toFixed(2)}
                   </div>
                 </div>
               </div>
