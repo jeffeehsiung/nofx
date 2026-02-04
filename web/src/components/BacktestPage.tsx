@@ -1587,46 +1587,24 @@ export function BacktestPage() {
                         />
                         {tr('form.replayOnlyLabel')}
                       </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
+                      <label className="flex items-center gap-2 cursor-pointer ml-4">
                         <input
                           type="checkbox"
                           checked={formState.enableFeedback}
                           onChange={(e) => handleFormChange('enableFeedback', e.target.checked)}
                           className="accent-[#F0B90B]"
                         />
-                        {language === 'zh' ? '启用失败分析' : 'Enable Analysis'}
+                        {language === 'zh' ? '启用反馈分析' : 'Enable Feedback'}
                       </label>
-                      {formState.enableFeedback && (
-                        <label className="flex items-center gap-2 cursor-pointer ml-4">
-                          <input
-                            type="checkbox"
-                            checked={formState.enableFeedback}
-                            onChange={(e) => handleFormChange('enableFeedback', e.target.checked)}
-                            className="accent-[#F0B90B]"
-                          />
-                          {language === 'zh' ? '启用反馈分析' : 'Enable Feedback'}
-                        </label>
-                      )}
-                      <label className="flex items-center gap-2 cursor-pointer">
+                      <label className="flex items-center gap-2 cursor-pointer ml-4">
                         <input
                           type="checkbox"
                           checked={formState.enablePromptEvolution}
                           onChange={(e) => handleFormChange('enablePromptEvolution', e.target.checked)}
                           className="accent-[#F0B90B]"
                         />
-                        {language === 'zh' ? '启用提示词实验室' : 'Enable Prompt Lab'}
+                        {language === 'zh' ? '启用提示词进化' : 'Enable Prompt Evolution'}
                       </label>
-                      {formState.enablePromptEvolution && (
-                        <label className="flex items-center gap-2 cursor-pointer ml-4">
-                          <input
-                            type="checkbox"
-                            checked={formState.enablePromptEvolution}
-                            onChange={(e) => handleFormChange('enablePromptEvolution', e.target.checked)}
-                            className="accent-[#F0B90B]"
-                          />
-                          {language === 'zh' ? '启用提示词进化' : 'Enable Prompt Evolution'}
-                        </label>
-                      )}
                     </div>
 
                     <div className="flex gap-2">
