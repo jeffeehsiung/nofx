@@ -60,7 +60,9 @@ type DebateSession struct {
 	MaxRounds       int               `json:"max_rounds"`
 	CurrentRound    int               `json:"current_round"`
 	IntervalMinutes int               `json:"interval_minutes"`          // Debate interval (5, 15, 30, 60 minutes)
-	PromptVariant   string            `json:"prompt_variant"`            // prompt template (balanced/aggressive/conservative/scalping)
+	PromptVariant   string            `json:"prompt_variant"`            // Prompt variant (gen1/gen2)
+	PromptTemplate  string            `json:"prompt_template"`           // Prompt template (balanced/aggressive/conservative/scalping)
+	TradingMode     string            `json:"trading_mode"`              // Trading mode (balanced/aggressive/conservative/scalping)
 	FinalDecision   *DebateDecision   `json:"final_decision,omitempty"`  // Single decision (backward compat)
 	FinalDecisions  []*DebateDecision `json:"final_decisions,omitempty"` // Multi-coin decisions
 	AutoExecute     bool              `json:"auto_execute"`
@@ -271,7 +273,13 @@ func (s *DebateStore) CreateSession(session *DebateSession) error {
 		session.IntervalMinutes = 5
 	}
 	if session.PromptVariant == "" {
-		session.PromptVariant = "balanced"
+		session.PromptVariant = "gen1"
+	}
+	if session.PromptTemplate == "" {
+		session.PromptTemplate = "balanced"
+	}
+	if session.TradingMode == "" {
+		session.TradingMode = "balanced"
 	}
 	if session.OIRankingLimit == 0 {
 		session.OIRankingLimit = 10
@@ -283,10 +291,10 @@ func (s *DebateStore) CreateSession(session *DebateSession) error {
 	session.UpdatedAt = time.Now()
 
 	_, err := s.db.Exec(`
-		INSERT INTO debate_sessions (id, user_id, name, strategy_id, status, symbol, max_rounds, current_round, interval_minutes, prompt_variant, auto_execute, trader_id, enable_oi_ranking, oi_ranking_limit, oi_duration, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO debate_sessions (id, user_id, name, strategy_id, status, symbol, max_rounds, current_round, interval_minutes, prompt_variant, prompt_template, trading_mode, auto_execute, trader_id, enable_oi_ranking, oi_ranking_limit, oi_duration, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		session.ID, session.UserID, session.Name, session.StrategyID, session.Status,
-		session.Symbol, session.MaxRounds, session.CurrentRound, session.IntervalMinutes, session.PromptVariant,
+		session.Symbol, session.MaxRounds, session.CurrentRound, session.IntervalMinutes, session.PromptVariant, session.PromptTemplate, session.TradingMode,
 		session.AutoExecute, session.TraderID, session.EnableOIRanking, session.OIRankingLimit, session.OIDuration,
 		session.CreatedAt, session.UpdatedAt,
 	)
@@ -300,6 +308,8 @@ func (s *DebateStore) GetSession(id string) (*DebateSession, error) {
 	var traderID sql.NullString
 	var intervalMinutes sql.NullInt64
 	var promptVariant sql.NullString
+	var promptTemplate sql.NullString
+	var tradingMode sql.NullString
 	var enableOIRanking sql.NullBool
 	var oiRankingLimit sql.NullInt64
 	var oiDuration sql.NullString
@@ -307,13 +317,13 @@ func (s *DebateStore) GetSession(id string) (*DebateSession, error) {
 	// Try new schema first
 	err := s.db.QueryRow(`
 		SELECT id, user_id, name, strategy_id, status, symbol, max_rounds, current_round,
-		       interval_minutes, prompt_variant, final_decision, auto_execute, trader_id,
+		       interval_minutes, prompt_variant, prompt_template, trading_mode, final_decision, auto_execute, trader_id,
 		       enable_oi_ranking, oi_ranking_limit, oi_duration, created_at, updated_at
 		FROM debate_sessions WHERE id = ?`, id,
 	).Scan(
 		&session.ID, &session.UserID, &session.Name, &session.StrategyID,
 		&session.Status, &session.Symbol, &session.MaxRounds, &session.CurrentRound,
-		&intervalMinutes, &promptVariant,
+		&intervalMinutes, &promptVariant, &promptTemplate, &tradingMode,
 		&finalDecisionJSON, &session.AutoExecute, &traderID,
 		&enableOIRanking, &oiRankingLimit, &oiDuration, &session.CreatedAt, &session.UpdatedAt,
 	)
@@ -334,7 +344,9 @@ func (s *DebateStore) GetSession(id string) (*DebateSession, error) {
 		}
 		// Set defaults for new fields
 		session.IntervalMinutes = 5
-		session.PromptVariant = "balanced"
+		session.PromptVariant = "gen1"
+		session.PromptTemplate = "balanced"
+		session.TradingMode = "balanced"
 		session.OIRankingLimit = 10
 		session.OIDuration = "1h"
 	} else {
@@ -343,9 +355,17 @@ func (s *DebateStore) GetSession(id string) (*DebateSession, error) {
 		if intervalMinutes.Valid {
 			session.IntervalMinutes = int(intervalMinutes.Int64)
 		}
-		session.PromptVariant = "balanced"
+		session.PromptVariant = "gen1"
 		if promptVariant.Valid {
 			session.PromptVariant = promptVariant.String
+		}
+		session.PromptTemplate = "balanced"
+		if promptTemplate.Valid {
+			session.PromptTemplate = promptTemplate.String
+		}
+		session.TradingMode = "balanced"
+		if tradingMode.Valid {
+			session.TradingMode = tradingMode.String
 		}
 		if traderID.Valid {
 			session.TraderID = traderID.String
@@ -378,7 +398,7 @@ func (s *DebateStore) GetSessionsByUser(userID string) ([]*DebateSession, error)
 	// First try the new schema with all columns
 	rows, err := s.db.Query(`
 		SELECT id, user_id, name, strategy_id, status, symbol, max_rounds, current_round,
-		       interval_minutes, prompt_variant, final_decision, auto_execute, trader_id, created_at, updated_at
+		       interval_minutes, prompt_variant, prompt_template, trading_mode, final_decision, auto_execute, trader_id, created_at, updated_at
 		FROM debate_sessions WHERE user_id = ? ORDER BY created_at DESC`, userID,
 	)
 
@@ -397,11 +417,13 @@ func (s *DebateStore) GetSessionsByUser(userID string) ([]*DebateSession, error)
 		var traderID sql.NullString
 		var intervalMinutes sql.NullInt64
 		var promptVariant sql.NullString
+		var promptTemplate sql.NullString
+		var tradingMode sql.NullString
 
 		if err := rows.Scan(
 			&session.ID, &session.UserID, &session.Name, &session.StrategyID,
 			&session.Status, &session.Symbol, &session.MaxRounds, &session.CurrentRound,
-			&intervalMinutes, &promptVariant,
+			&intervalMinutes, &promptVariant, &promptTemplate, &tradingMode,
 			&finalDecisionJSON, &session.AutoExecute, &traderID, &session.CreatedAt, &session.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -412,9 +434,17 @@ func (s *DebateStore) GetSessionsByUser(userID string) ([]*DebateSession, error)
 		if intervalMinutes.Valid {
 			session.IntervalMinutes = int(intervalMinutes.Int64)
 		}
-		session.PromptVariant = "balanced"
+		session.PromptVariant = "gen1"
 		if promptVariant.Valid {
 			session.PromptVariant = promptVariant.String
+		}
+		session.PromptTemplate = "balanced"
+		if promptTemplate.Valid {
+			session.PromptTemplate = promptTemplate.String
+		}
+		session.TradingMode = "balanced"
+		if tradingMode.Valid {
+			session.TradingMode = tradingMode.String
 		}
 
 		if finalDecisionJSON.Valid && finalDecisionJSON.String != "" {
@@ -482,7 +512,9 @@ func (s *DebateStore) getSessionsByUserBasic(userID string) ([]*DebateSession, e
 
 		// Set defaults for new fields
 		session.IntervalMinutes = 5
-		session.PromptVariant = "balanced"
+		session.PromptVariant = "gen1"
+		session.PromptTemplate = "balanced"
+		session.TradingMode = "balanced"
 
 		if finalDecisionJSON.Valid && finalDecisionJSON.String != "" {
 			var decision DebateDecision

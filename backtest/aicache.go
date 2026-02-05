@@ -15,7 +15,7 @@ import (
 
 type cachedDecision struct {
 	Key           string                 `json:"key"`
-	PromptVariant string                 `json:"prompt_variant"`
+	PromptVariant string                 `json:"prompt_variant"` // Prompt variant ID used
 	Timestamp     int64                  `json:"ts"`
 	Decision      *decision.FullDecision `json:"decision"`
 }

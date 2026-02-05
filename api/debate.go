@@ -62,7 +62,9 @@ type CreateDebateRequest struct {
 	Symbol          string              `json:"symbol"` // Optional: auto-selected based on strategy if empty
 	MaxRounds       int                 `json:"max_rounds"`
 	IntervalMinutes int                 `json:"interval_minutes"`
-	PromptVariant   string              `json:"prompt_variant"`
+	PromptVariant   string              `json:"prompt_variant"`  // Prompt variant (gen1/gen2)
+	PromptTemplate  string              `json:"prompt_template"` // Prompt template (balanced/aggressive/conservative/scalping)
+	TradingMode     string              `json:"trading_mode"`    // Trading mode (balanced/aggressive/conservative/scalping)
 	AutoExecute     bool                `json:"auto_execute"`
 	TraderID        string              `json:"trader_id"`
 	Participants    []ParticipantConfig `json:"participants" binding:"required,min=2"`
@@ -205,7 +207,13 @@ func (h *DebateHandler) HandleCreateDebate(c *gin.Context) {
 		req.IntervalMinutes = 5
 	}
 	if req.PromptVariant == "" {
-		req.PromptVariant = "balanced"
+		req.PromptVariant = "gen1"
+	}
+	if req.PromptTemplate == "" {
+		req.PromptTemplate = "balanced"
+	}
+	if req.TradingMode == "" {
+		req.TradingMode = "balanced"
 	}
 
 	// Create session
@@ -217,6 +225,8 @@ func (h *DebateHandler) HandleCreateDebate(c *gin.Context) {
 		MaxRounds:       req.MaxRounds,
 		IntervalMinutes: req.IntervalMinutes,
 		PromptVariant:   req.PromptVariant,
+		PromptTemplate:  req.PromptTemplate,
+		TradingMode:     req.TradingMode,
 		AutoExecute:     req.AutoExecute,
 		TraderID:        req.TraderID,
 		EnableOIRanking: req.EnableOIRanking,

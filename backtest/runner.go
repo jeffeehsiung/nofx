@@ -1056,7 +1056,6 @@ func (r *Runner) invokeAIWithRetry(ctx *decision.Context) (*decision.FullDecisio
 			ctx,
 			r.mcpClient,
 			r.strategyEngine,
-			r.cfg.PromptVariant,
 		)
 		if err == nil {
 			return fd, nil

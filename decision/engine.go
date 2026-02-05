@@ -171,7 +171,7 @@ type Context struct {
 	Account                AccountInfo                             `json:"account"`
 	Positions              []PositionInfo                          `json:"positions"`
 	CandidateCoins         []CandidateCoin                         `json:"candidate_coins"`
-	PromptVariant          string                                  `json:"prompt_variant,omitempty"`
+	PromptVariant          string                                  `json:"prompt_variant,omitempty"` // Evolved prompt variant ID
 	TradingStats           *TradingStats                           `json:"trading_stats,omitempty"`
 	RecentOrders           []RecentOrder                           `json:"recent_orders,omitempty"`
 	PerformanceFeedback    string                                  `json:"-"` // *backtest.FeedbackAnalysis - avoiding circular dependency
@@ -297,11 +297,11 @@ func (e *StrategyEngine) SetCustomPrompt(customPrompt string) {
 func GetFullDecision(ctx *Context, mcpClient mcp.AIClient) (*FullDecision, error) {
 	defaultConfig := store.GetDefaultStrategyConfig("en")
 	engine := NewStrategyEngine(&defaultConfig)
-	return GetFullDecisionWithStrategy(ctx, mcpClient, engine, "")
+	return GetFullDecisionWithStrategy(ctx, mcpClient, engine)
 }
 
 // GetFullDecisionWithStrategy uses StrategyEngine to get AI decision (unified prompt generation)
-func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *StrategyEngine, variant string) (*FullDecision, error) {
+func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *StrategyEngine) (*FullDecision, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("context is nil")
 	}
@@ -335,7 +335,7 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 
 	// 2. Build System Prompt using strategy engine
 	riskConfig := engine.GetRiskControlConfig()
-	systemPrompt := engine.BuildSystemPromptWithContext(ctx.Account.TotalEquity, variant, ctx)
+	systemPrompt := engine.BuildSystemPromptWithContext(ctx.Account.TotalEquity, ctx)
 
 	// 3. Build User Prompt using strategy engine
 	userPrompt := engine.BuildUserPrompt(ctx)
@@ -934,7 +934,7 @@ func (e *StrategyEngine) FetchOIRankingData() *provider.OIRankingData {
 // ============================================================================
 
 // BuildSystemPromptWithContext builds System Prompt with optional context for evolved role
-func (e *StrategyEngine) BuildSystemPromptWithContext(accountEquity float64, variant string, ctx *Context) string {
+func (e *StrategyEngine) BuildSystemPromptWithContext(accountEquity float64, ctx *Context) string {
 	var sb strings.Builder
 	riskControl := e.config.RiskControl
 	promptSections := e.config.PromptSections

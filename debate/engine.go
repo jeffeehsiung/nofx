@@ -181,7 +181,7 @@ func (e *DebateEngine) runDebate(session *store.DebateSessionWithDetails, strate
 	}
 
 	// Build system prompt based on strategy (same as AI Test)
-	baseSystemPrompt := strategyEngine.BuildSystemPromptWithContext(1000.0, session.PromptVariant, ctx)
+	baseSystemPrompt := strategyEngine.BuildSystemPromptWithContext(1000.0, ctx)
 
 	// Build user prompt with market data (OI ranking data is included via ctx.OIRankingData)
 	userPrompt := strategyEngine.BuildUserPrompt(ctx)
@@ -353,7 +353,7 @@ func (e *DebateEngine) buildMarketContext(session *store.DebateSessionWithDetail
 		},
 		Positions:      []decision.PositionInfo{},
 		CandidateCoins: candidates,
-		PromptVariant:  session.PromptVariant,
+		PromptVariant:  session.PromptTemplate, // Use template as variant ID for debate
 		MarketDataMap:  marketDataMap,
 		QuantDataMap:   quantDataMap,
 		OIRankingData:  oiRankingData,
@@ -548,7 +548,7 @@ func (e *DebateEngine) collectVotes(session *store.DebateSessionWithDetails, str
 	var votes []*store.DebateVote
 
 	// Build voting context
-	baseSystemPrompt := strategyEngine.BuildSystemPromptWithContext(1000.0, session.PromptVariant, &decision.Context{})
+	baseSystemPrompt := strategyEngine.BuildSystemPromptWithContext(1000.0, &decision.Context{})
 
 	for _, participant := range session.Participants {
 		vote, err := e.getParticipantVote(session, participant, baseSystemPrompt, allMessages)
