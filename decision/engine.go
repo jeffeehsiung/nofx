@@ -1117,19 +1117,7 @@ func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 			sb.WriteString(formatRecentTradesEN(ctx.RecentOrders))
 		}
 	}
-	// 8. 历史交易统计
-	if ctx.TradingStats != nil && ctx.TradingStats.TotalTrades > 0 {
-		if lang == LangChinese {
-			sb.WriteString(formatTradingStatsZH(ctx.TradingStats))
-		} else {
-			sb.WriteString(formatTradingStatsEN(ctx.TradingStats))
-		}
-	}
-	// 9. 连续学习反馈（强化学习：基于历史交易表现的改进建议）(暂时禁用）)
-	// if ctx.TradingStats != nil && ctx.TradingStats.TotalTrades >= 3 {
-	// 	e.buildContinuousLearningFeedback(&sb, ctx, lang)
-	// }
-	// 10. 元提示（强化学习：基于最近交易表现的总结）
+	// 8. 历史交易统计（强化学习：基于最近交易表现的总结）
 	if ctx.TradingStats != nil && len(ctx.RecentOrders) > 0 {
 		var wins, losses []interface{}
 		for _, order := range ctx.RecentOrders {
@@ -1148,7 +1136,7 @@ func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 		sb.WriteString(metaPrompt)
 		sb.WriteString("\n")
 	}
-	// 11. 候选币种（带市场数据）
+	// 9. 候选币种（带市场数据）
 	if len(ctx.CandidateCoins) > 0 {
 		if lang == LangChinese {
 			sb.WriteString(formatCandidateCoinsZH(ctx))
@@ -1156,7 +1144,7 @@ func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 			sb.WriteString(formatCandidateCoinsEN(ctx))
 		}
 	}
-	// 12. OI排名数据（如果有）
+	// 10. OI排名数据（如果有）
 	if ctx.OIRankingData != nil {
 		if lang == LangChinese {
 			sb.WriteString(formatOIRankingZH(ctx.OIRankingData))
@@ -1538,24 +1526,14 @@ func detectLanguage(text string) Language {
 }
 
 // buildMetaPromptEN builds a meta-prompt for LLM self-improvement in English
-func buildMetaPromptEN(stats interface{}, wins, losses []interface{}) string {
-	type StatsLike struct {
-		WinRate        float64
-		ProfitFactor   float64
-		SharpeRatio    float64
-		AvgWin         float64
-		AvgLoss        float64
-		MaxDrawdownPct float64
-	}
-	stat := stats.(StatsLike)
-
+func buildMetaPromptEN(stats TradingStats, wins, losses []interface{}) string {
 	var sb strings.Builder
 	sb.WriteString("## 📊 Strategy Self-Improvement Opportunity\n\n")
 	sb.WriteString("Based on recent performance, consider these improvements to your strategy:\n\n")
 
 	sb.WriteString("**Current Performance:**\n")
-	sb.WriteString(fmt.Sprintf("- Win Rate: %.1f%% | Profit Factor: %.2f | Sharpe: %.2f\n", stat.WinRate, stat.ProfitFactor, stat.SharpeRatio))
-	sb.WriteString(fmt.Sprintf("- Avg Win: $%.2f | Avg Loss: $%.2f | Max Drawdown: %.1f%%\n\n", stat.AvgWin, stat.AvgLoss, stat.MaxDrawdownPct))
+	sb.WriteString(fmt.Sprintf("- Win Rate: %.1f%% | Profit Factor: %.2f | Sharpe: %.2f\n", stats.WinRate, stats.ProfitFactor, stats.SharpeRatio))
+	sb.WriteString(fmt.Sprintf("- Avg Win: $%.2f | Avg Loss: $%.2f | Max Drawdown: %.1f%%\n\n", stats.AvgWin, stats.AvgLoss, stats.MaxDrawdownPct))
 
 	sb.WriteString(fmt.Sprintf("**Recent Winning Trades (%d):**\n", len(wins)))
 	for i, trade := range wins {
@@ -1592,25 +1570,14 @@ func buildMetaPromptEN(stats interface{}, wins, losses []interface{}) string {
 }
 
 // buildMetaPromptZH builds a meta-prompt for LLM self-improvement in Chinese
-func buildMetaPromptZH(stats interface{}, wins, losses []interface{}) string {
-	type StatsLike struct {
-		WinRate        float64
-		ProfitFactor   float64
-		SharpeRatio    float64
-		AvgWin         float64
-		AvgLoss        float64
-		MaxDrawdownPct float64
-	}
-
-	stat := stats.(StatsLike)
-
+func buildMetaPromptZH(stats TradingStats, wins, losses []interface{}) string {
 	var sb strings.Builder
 	sb.WriteString("## 📊 策略自我改进机会\n\n")
 	sb.WriteString("基于最近的表现，考虑对你的策略进行以下改进：\n\n")
 
 	sb.WriteString("**当前表现：**\n")
-	sb.WriteString(fmt.Sprintf("- 胜率: %.1f%% | 利润因子: %.2f | 夏普比: %.2f\n", stat.WinRate, stat.ProfitFactor, stat.SharpeRatio))
-	sb.WriteString(fmt.Sprintf("- 平均赢: $%.2f | 平均亏: $%.2f | 最大回撤: %.1f%%\n\n", stat.AvgWin, stat.AvgLoss, stat.MaxDrawdownPct))
+	sb.WriteString(fmt.Sprintf("- 胜率: %.1f%% | 利润因子: %.2f | 夏普比: %.2f\n", stats.WinRate, stats.ProfitFactor, stats.SharpeRatio))
+	sb.WriteString(fmt.Sprintf("- 平均赢: $%.2f | 平均亏: $%.2f | 最大回撤: %.1f%%\n\n", stats.AvgWin, stats.AvgLoss, stats.MaxDrawdownPct))
 
 	sb.WriteString(fmt.Sprintf("**最近的盈利交易 (%d)：**\n", len(wins)))
 	for i, trade := range wins {
