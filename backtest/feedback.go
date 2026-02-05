@@ -2641,11 +2641,11 @@ func (fg *FeedbackGenerator) generateRecommendedActions(analysis *FeedbackAnalys
 
 	// 2. Checklist enforcement
 	actions = append(actions, "✅ **MANDATORY PRE-TRADE CHECKLIST**:")
-	actions = append(actions, "   • [ ] Confidence ≥ 80% (not 70%)")
-	actions = append(actions, "   • [ ] Position size ≤ 40% of usual (not 50%)")
-	actions = append(actions, "   • [ ] Clear 2:1 R/R BEFORE entry")
-	actions = append(actions, "   • [ ] Market in trending regime (ChopScore < 40)")
-	actions = append(actions, "   • [ ] Multi-timeframe alignment (5m, 15m, 1H)")
+	actions = append(actions, "   • Confidence ≥ 80% (not 70%)")
+	actions = append(actions, "   • Position size ≤ 40% of usual (not 50%)")
+	actions = append(actions, "   • Clear 2:1 R/R BEFORE entry")
+	actions = append(actions, "   • Market in trending regime (ChopScore < 40)")
+	actions = append(actions, "   • Multi-timeframe alignment (5m, 15m, 1H)")
 
 	// 3. Psychological safeguards
 	actions = append(actions, "🧘 **PSYCHOLOGICAL SAFEGUARDS**:")
@@ -3923,11 +3923,11 @@ func (fg *FeedbackGenerator) summarizeMetrics(analysis *FeedbackAnalysis) Metric
 	}
 
 	// Drawdown status
-	if analysis.MaxDrawdown > 30 {
+	if analysis.MaxDrawdown > CriticalDrawdownThreshold {
 		ms.DrawdownStatus = "CRITICAL"
-	} else if analysis.MaxDrawdown > 20 {
+	} else if analysis.MaxDrawdown > DefaultMaxDrawdownPct {
 		ms.DrawdownStatus = "HIGH"
-	} else if analysis.MaxDrawdown > 10 {
+	} else if analysis.MaxDrawdown > DefaultDrawdownWarningLevel {
 		ms.DrawdownStatus = "MODERATE"
 	} else {
 		ms.DrawdownStatus = "LOW"

@@ -22,7 +22,7 @@ const (
 	DefaultDrawdownWarningLevel = 15.0 // Start warning at this drawdown
 	DefaultStopLossPct          = 3.0  // Default stop-loss percentage
 	DefaultTakeProfitPct        = 6.0  // Default take-profit percentage
-	MaxDrawdownLimit            = 50.0 // Hard limit for drawdown
+	MaxDrawdownLimit            = 40.0 // Hard limit for drawdown
 	CriticalDrawdownThreshold   = 30.0 // Critical drawdown level
 )
 
@@ -129,7 +129,7 @@ const (
 // Drawer and Profit Thresholds
 const (
 	MinProfitThresholdForMonitoring = 5.0  // Start monitoring drawdown after N% profit
-	DrawdownCloseThreshold          = 40.0 // Close position if drawdown exceeds N%
+	DrawdownCloseThreshold          = 30.0 // Close position if drawdown exceeds N%
 	QuickProfitTarget               = 3.0  // Quick profit target percentage
 	SwingTradeTarget                = 10.0 // Swing trade target percentage
 )

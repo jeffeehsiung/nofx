@@ -56,9 +56,9 @@ type OptimizationRecord struct {
 func DefaultFactorOptimizerConfig() *FactorOptimizerConfig {
 	return &FactorOptimizerConfig{
 		EnableOptimization:   true,
-		OptimizationCycles:   10,
+		OptimizationCycles:   MinTradesForFeedback,
 		ParameterSearchWidth: 0.2,
-		MinTradesForUpdate:   10,
+		MinTradesForUpdate:   MinTradesForFeedback,
 		AdaptationRate:       0.15,
 	}
 }
@@ -73,19 +73,19 @@ func NewFactorOptimizer(riskcontrolConfig *store.RiskControlConfig, config *Fact
 	var defaultConfig *store.RiskControlConfig
 	if riskcontrolConfig == nil {
 		defaultConfig = &store.RiskControlConfig{
-			MaxPositions:                 5,
-			BTCETHMaxLeverage:            5,
-			AltcoinMaxLeverage:           3,
-			BTCETHMaxPositionValueRatio:  5.0,
-			AltcoinMaxPositionValueRatio: 1.0,
-			MaxMarginUsage:               0.9,
-			MinPositionSize:              50.0,
-			MinRiskRewardRatio:           1.5,
-			MinConfidence:                65,
+			MaxPositions:                 MaxPositionsPerAccount,
+			BTCETHMaxLeverage:            DefaultMaxLeverage,
+			AltcoinMaxLeverage:           DefaultOptimalLeverage,
+			BTCETHMaxPositionValueRatio:  MaxPositionsPerAccount,
+			AltcoinMaxPositionValueRatio: DefaultPositionSizeScale,
+			MaxMarginUsage:               DefaultMaxMarginUsage,
+			MinPositionSize:              DefaultMinPositionSize,
+			MinRiskRewardRatio:           DefaultMinRiskRewardRatio,
+			MinConfidence:                MinConfidenceForEntry,
 			DrawdownMonitoringEnabled:    true,
-			DrawdownCheckInterval:        60,
-			MinProfitThreshold:           5.0,
-			DrawdownCloseThreshold:       40.0,
+			DrawdownCheckInterval:        PerformanceCheckInterval,
+			MinProfitThreshold:           MinProfitThresholdForMonitoring,
+			DrawdownCloseThreshold:       CriticalDrawdownThreshold,
 		}
 	} else {
 		defaultConfig = riskcontrolConfig
@@ -171,7 +171,7 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 	// Now uses pattern frequency and avg PnL % for weighted adjustments
 	if leverageFailure := fo.findPatternWithMetrics(feedback.FailurePatterns, "high_leverage_losses"); leverageFailure != nil {
 		// Weighted reduction: higher frequency or larger losses = stronger reduction
-		reductionFactor := 0.7 + (0.3 * math.Min(1.0, float64(leverageFailure.Frequency)/10.0))
+		reductionFactor := SafeMarginLevel + (PatternConfidenceWeight * math.Min(1.0, float64(leverageFailure.Frequency)/10.0))
 		newConfig.BTCETHMaxLeverage = int(float64(newConfig.BTCETHMaxLeverage) * reductionFactor)
 		newConfig.AltcoinMaxLeverage = int(float64(newConfig.AltcoinMaxLeverage) * reductionFactor)
 		if newConfig.BTCETHMaxLeverage < 1 {
@@ -199,7 +199,7 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 	// 2. Optimize position sizing based on patterns
 	if oversizedPattern := fo.findPatternWithMetrics(feedback.FailurePatterns, "oversized_positions"); oversizedPattern != nil {
 		// Weighted reduction based on frequency
-		reductionFactor := 0.7 - (0.1 * math.Min(1.0, float64(oversizedPattern.Frequency)/5.0))
+		reductionFactor := SafeMarginLevel - (0.1 * math.Min(1.0, float64(oversizedPattern.Frequency)/5.0))
 		newConfig.MinPositionSize = newConfig.MinPositionSize * reductionFactor
 		if newConfig.MinPositionSize < 20 {
 			newConfig.MinPositionSize = 20
@@ -212,14 +212,14 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 	}
 
 	// 3. Optimize confidence thresholds based on win rate and pattern analysis
-	if feedback.WinRate < 40 {
+	if feedback.WinRate < MinWinRateForSuccess {
 		// Too many losers - be more selective
 		delta := int(math.Min(float64(newConfig.MinConfidence)*0.2, 20.0))
 		newConfig.MinConfidence = int(math.Min(float64(newConfig.MinConfidence)+float64(delta), 85.0))
 		improvements = append(improvements, fmt.Sprintf(
 			"Increased min confidence %d→%d for better selection (WinRate:%.0f%%)",
 			oldConfig.MinConfidence, newConfig.MinConfidence, feedback.WinRate*100))
-	} else if feedback.WinRate > 65 {
+	} else if feedback.WinRate > GoodWinRate {
 		// Winning often - can be slightly less selective
 		delta := int(math.Max(float64(newConfig.MinConfidence)*0.05, 5.0))
 		newConfig.MinConfidence = int(math.Max(float64(newConfig.MinConfidence)-float64(delta), 60.0))
@@ -229,10 +229,10 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 	}
 
 	// 4. Optimize margin usage based on drawdown
-	if feedback.MaxDrawdown > 20.0 { // Exceeded typical 20% drawdown limit
-		newConfig.MaxMarginUsage = newConfig.MaxMarginUsage * 0.7
-		if newConfig.MaxMarginUsage < 0.3 {
-			newConfig.MaxMarginUsage = 0.3
+	if feedback.MaxDrawdown > DefaultMaxDrawdownPct { // Exceeded typical 20% drawdown limit
+		newConfig.MaxMarginUsage = newConfig.MaxMarginUsage * SafeMarginLevel
+		if newConfig.MaxMarginUsage < SentimentConfidenceWeight {
+			newConfig.MaxMarginUsage = SentimentConfidenceWeight
 		}
 		improvements = append(improvements, fmt.Sprintf(
 			"Reduced max margin usage %.0f%%→%.0f%% (DD:%.1f%%)",
@@ -248,10 +248,10 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 	}
 
 	// 6. Optimize drawdown monitoring thresholds
-	if feedback.MaxDrawdown > 15.0 {
+	if feedback.MaxDrawdown > DefaultDrawdownWarningLevel {
 		newConfig.DrawdownMonitoringEnabled = true
-		newConfig.DrawdownCheckInterval = 30 // Check more frequently
-		newConfig.MinProfitThreshold = 3.0   // Lower threshold for monitoring
+		newConfig.DrawdownCheckInterval = WebsocketHeartbeatInterval   // Check more frequently
+		newConfig.MinProfitThreshold = MinProfitThresholdForMonitoring // Lower threshold for monitoring
 		improvements = append(improvements, fmt.Sprintf(
 			"Enabled aggressive drawdown monitoring (DD:%.1f%%)", feedback.MaxDrawdown))
 	}
@@ -284,7 +284,7 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 	// Execution failures - reduce slippage budget and position size
 	if hasV2Failure("chasing_entry") || hasV2Failure("slippage_exceeded") {
 		// Reduce entry tolerance for slippage
-		newConfig.MinPositionSize = newConfig.MinPositionSize * 0.85
+		newConfig.MinPositionSize = newConfig.MinPositionSize * ComplianceRateExcellent
 		improvements = append(improvements,
 			"Reduced min position size by 15% due to chasing/slippage failures (microstructure)")
 	}
@@ -300,9 +300,9 @@ func (fo *FactorOptimizer) OptimizeWeights(feedback *FeedbackAnalysis, cycle int
 	// Liquidity-related failures - uses FillQuality from RecentOrder
 	if hasV2Failure("liquidity_risk_high") || hasV2Failure("liquidity_dried") {
 		// Reduce position sizes for liquidity-constrained trades
-		newConfig.AltcoinMaxPositionValueRatio = newConfig.AltcoinMaxPositionValueRatio * 0.7
-		if newConfig.AltcoinMaxPositionValueRatio < 0.3 {
-			newConfig.AltcoinMaxPositionValueRatio = 0.3
+		newConfig.AltcoinMaxPositionValueRatio = newConfig.AltcoinMaxPositionValueRatio * SafeMarginLevel
+		if newConfig.AltcoinMaxPositionValueRatio < SentimentConfidenceWeight {
+			newConfig.AltcoinMaxPositionValueRatio = SentimentConfidenceWeight
 		}
 		improvements = append(improvements,
 			"Reduced altcoin position ratio to 0.7x (liquidity microstructure)")
@@ -480,7 +480,7 @@ func (fo *FactorOptimizer) applyLLMRecommendations(config *store.RiskControlConf
 	if leverage, ok := recs["leverage"]; ok && leverage > 0 && leverage < 50 {
 		oldLev := config.BTCETHMaxLeverage
 		config.BTCETHMaxLeverage = int(leverage)
-		config.AltcoinMaxLeverage = int(math.Max(1, leverage*0.6)) // Alt coins at 60% of BTC/ETH
+		config.AltcoinMaxLeverage = int(math.Max(1, leverage*PositiveSentimentThreshold)) // Alt coins at 60% of BTC/ETH
 		*improvements = append(*improvements, fmt.Sprintf(
 			"LLM recommendation: leverage %d→%d (parsed: %.0fx)", oldLev, config.BTCETHMaxLeverage, leverage))
 	}
@@ -516,7 +516,7 @@ func (fo *FactorOptimizer) applyLLMRecommendations(config *store.RiskControlConf
 			"LLM recommendation: max positions %d→%d", oldPos, config.MaxPositions))
 	}
 
-	if marginUsage, ok := recs["max_margin_usage"]; ok && marginUsage >= 0.3 && marginUsage <= 0.95 {
+	if marginUsage, ok := recs["max_margin_usage"]; ok && marginUsage >= SentimentConfidenceWeight && marginUsage <= CriticalMarginLevel {
 		oldMargin := config.MaxMarginUsage
 		config.MaxMarginUsage = marginUsage
 		*improvements = append(*improvements, fmt.Sprintf(
