@@ -20,6 +20,9 @@ type Config struct {
 	RegistrationEnabled bool
 	MaxUsers            int // Maximum number of users allowed (0 = unlimited, default = 10)
 
+	// Exchange fee configuration
+	BinanceTakerFeeRate float64
+
 	// Security configuration
 	// TransportEncryption enables browser-side encryption for API keys
 	// Requires HTTPS or localhost. Set to false for HTTP access via IP.
@@ -43,6 +46,7 @@ func Init() {
 		RegistrationEnabled:   true,
 		MaxUsers:              10,   // Default: 10 users allowed
 		ExperienceImprovement: true, // Default: enabled to help improve the product
+		BinanceTakerFeeRate:   DefaultBinanceTakerFeeRate,
 	}
 
 	// Load from environment variables
@@ -85,6 +89,12 @@ func Init() {
 	cfg.AlpacaAPIKey = os.Getenv("ALPACA_API_KEY")
 	cfg.AlpacaSecretKey = os.Getenv("ALPACA_SECRET_KEY")
 	cfg.TwelveDataKey = os.Getenv("TWELVEDATA_API_KEY")
+
+	if v := os.Getenv("BINANCE_TAKER_FEE_RATE"); v != "" {
+		if fee, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil && fee > 0 {
+			cfg.BinanceTakerFeeRate = fee
+		}
+	}
 
 	global = cfg
 

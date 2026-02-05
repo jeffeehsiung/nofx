@@ -135,6 +135,11 @@ const (
 	WebsocketReadTimeout   = 60   // Seconds
 )
 
+// Exchange Fee Defaults
+const (
+	DefaultBinanceTakerFeeRate = 0.0004 // 0.04% taker fee
+)
+
 // Validation Constants
 const (
 	MinOrderQuantity      = 0.001   // Minimum order quantity

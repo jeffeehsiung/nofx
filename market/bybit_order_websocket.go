@@ -25,7 +25,6 @@ type BybitOrderWebSocket struct {
 	testnet            bool
 	apiKey             string
 	apiSecret          string
-	authenticated      bool
 }
 
 // BybitOrderUpdate represents order updates from Bybit

@@ -23,6 +23,7 @@ type ClosedPnLRecord struct {
 // Used for reconstructing position history with unified algorithm
 type TradeRecord struct {
 	TradeID      string    // Unique trade ID from exchange
+	OrderID      string    // Order ID from exchange (used for dedupe)
 	Symbol       string    // Trading pair (e.g., "BTCUSDT")
 	Side         string    // "BUY" or "SELL"
 	PositionSide string    // "LONG", "SHORT", or "BOTH" (for one-way mode)

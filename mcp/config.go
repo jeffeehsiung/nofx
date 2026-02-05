@@ -61,11 +61,3 @@ func getEnvInt(key string, defaultValue int) int {
 	}
 	return defaultValue
 }
-
-// getEnvString reads string from environment variable, returns default value if empty
-func getEnvString(key string, defaultValue string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	return defaultValue
-}

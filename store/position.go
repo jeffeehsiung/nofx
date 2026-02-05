@@ -361,6 +361,24 @@ func (s *PositionStore) ClosePositionFully(
 	return nil
 }
 
+// HasOrderID checks if a position already references the given order ID
+// Used to dedupe sync processing when orders were recorded immediately
+func (s *PositionStore) HasOrderID(traderID string, orderID string) (bool, error) {
+	if orderID == "" {
+		return false, nil
+	}
+	row := s.db.QueryRow(`
+		SELECT COUNT(1)
+		FROM trader_positions
+		WHERE trader_id = ? AND (entry_order_id = ? OR exit_order_id = ?)
+	`, traderID, orderID, orderID)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return false, fmt.Errorf("failed to check position by order id: %w", err)
+	}
+	return count > 0, nil
+}
+
 // DeleteAllOpenPositions deletes all OPEN positions for a trader (used for snapshot reset)
 func (s *PositionStore) DeleteAllOpenPositions(traderID string) error {
 	_, err := s.db.Exec(`

@@ -94,69 +94,6 @@ func getKlinesFromBinance(symbol, interval string, limit int) ([]Kline, error) {
 	return klines, nil
 }
 
-// getKlinesFromCoinAnk fetches kline data from CoinAnk API (replacement for WSMonitorCli)
-func getKlinesFromCoinAnk(symbol, interval string, limit int) ([]Kline, error) {
-	// Map interval string to coinank enum
-	var coinankInterval coinank_enum.Interval
-	switch interval {
-	case "1m":
-		coinankInterval = coinank_enum.Minute1
-	case "3m":
-		coinankInterval = coinank_enum.Minute3
-	case "5m":
-		coinankInterval = coinank_enum.Minute5
-	case "15m":
-		coinankInterval = coinank_enum.Minute15
-	case "30m":
-		coinankInterval = coinank_enum.Minute30
-	case "1h":
-		coinankInterval = coinank_enum.Hour1
-	case "2h":
-		coinankInterval = coinank_enum.Hour2
-	case "4h":
-		coinankInterval = coinank_enum.Hour4
-	case "6h":
-		coinankInterval = coinank_enum.Hour6
-	case "8h":
-		coinankInterval = coinank_enum.Hour8
-	case "12h":
-		coinankInterval = coinank_enum.Hour12
-	case "1d":
-		coinankInterval = coinank_enum.Day1
-	case "3d":
-		coinankInterval = coinank_enum.Day3
-	case "1w":
-		coinankInterval = coinank_enum.Week1
-	default:
-		return nil, fmt.Errorf("unsupported interval: %s", interval)
-	}
-
-	// Call CoinAnk free/open API (no authentication required)
-	ctx := context.Background()
-	ts := time.Now().UnixMilli()
-	// Use "To" side to search backward from current time (get historical klines)
-	coinankKlines, err := coinank_api.Kline(ctx, symbol, coinank_enum.Binance, ts, coinank_enum.To, limit, coinankInterval)
-	if err != nil {
-		return nil, fmt.Errorf("CoinAnk API error: %w", err)
-	}
-
-	// Convert coinank kline format to market.Kline format
-	klines := make([]Kline, len(coinankKlines))
-	for i, ck := range coinankKlines {
-		klines[i] = Kline{
-			OpenTime:  ck.StartTime,
-			Open:      ck.Open,
-			High:      ck.High,
-			Low:       ck.Low,
-			Close:     ck.Close,
-			Volume:    ck.Volume,
-			CloseTime: ck.EndTime,
-		}
-	}
-
-	return klines, nil
-}
-
 // getKlinesFromHyperliquid fetches kline data from Hyperliquid API for xyz dex assets
 func getKlinesFromHyperliquid(symbol, interval string, limit int) ([]Kline, error) {
 	// Remove xyz: prefix if present for the API call

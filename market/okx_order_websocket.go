@@ -6,10 +6,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/websocket"
 	"nofx/logger"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // OKXOrderWebSocket implements order update streaming for OKX
@@ -28,7 +29,6 @@ type OKXOrderWebSocket struct {
 	apiKey             string
 	apiSecret          string
 	passphrase         string
-	authenticated      bool
 }
 
 // OKXOrderUpdate represents order updates from OKX

@@ -134,6 +134,7 @@ type AutoTrader struct {
 	peakPnLCache            map[string]float64 // Peak profit cache (symbol -> peak P&L percentage)
 	peakPnLCacheMutex       sync.RWMutex       // Cache read-write lock
 	lastBalanceSyncTime     time.Time          // Last balance sync time
+	lastOrderSyncWarnTime   time.Time          // Last time OrderSync disabled warning was logged
 	userID                  string             // User ID
 	successfulClosesInCycle int                // Track successful close positions in current cycle (for expected net position calculation)
 
@@ -370,6 +371,7 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		peakPnLCache:           make(map[string]float64),
 		peakPnLCacheMutex:      sync.RWMutex{},
 		lastBalanceSyncTime:    time.Now(),
+		lastOrderSyncWarnTime:  time.Time{},
 		userID:                 userID,
 		lastPrices:             make(map[string]float64),
 		lastPricesMutex:        sync.RWMutex{},
@@ -781,6 +783,15 @@ func (at *AutoTrader) runCycle() error {
 		at.dailyPnL = 0
 		at.lastResetTime = time.Now()
 		logger.Info("📅 Daily P&L reset")
+	}
+
+	// 2.5. OrderSync health warning (Binance only)
+	if at.exchange == "binance" && isBinanceSyncDisabled(at.exchangeID) {
+		if at.lastOrderSyncWarnTime.IsZero() || time.Since(at.lastOrderSyncWarnTime) > 5*time.Minute {
+			failures := getBinanceSyncFailureCount(at.exchangeID)
+			logger.Warnf("⚠️ [%s] Binance OrderSync disabled after %d failures; fills will not sync until recovery", at.name, failures)
+			at.lastOrderSyncWarnTime = time.Now()
+		}
 	}
 
 	// 3. Check for order book triggers (Phase 1.3 - event-driven triggers)
@@ -2107,6 +2118,13 @@ func (at *AutoTrader) GetStatus() map[string]interface{} {
 	isRunning := at.isRunning
 	at.isRunningMutex.RUnlock()
 
+	orderSyncDisabled := false
+	orderSyncFailures := 0
+	if at.exchange == "binance" {
+		orderSyncDisabled = isBinanceSyncDisabled(at.exchangeID)
+		orderSyncFailures = getBinanceSyncFailureCount(at.exchangeID)
+	}
+
 	return map[string]interface{}{
 		"trader_id":                     at.id,
 		"trader_name":                   at.name,
@@ -2121,6 +2139,8 @@ func (at *AutoTrader) GetStatus() map[string]interface{} {
 		"stop_until":                    at.stopUntil.Format(time.RFC3339),
 		"last_reset_time":               at.lastResetTime.Format(time.RFC3339),
 		"ai_provider":                   aiProvider,
+		"order_sync_disabled":           orderSyncDisabled,
+		"order_sync_failures":           orderSyncFailures,
 		"prompt_optimization_active":    at.promptOptimizer != nil,
 		"feedback_analysis_active":      at.feedbackGenerator != nil,
 		"trade_failure_analysis_active": at.factorOptimizer != nil,
@@ -2625,7 +2645,7 @@ func (at *AutoTrader) recordAndConfirmOrder(orderResult map[string]interface{}, 
 	// Exchanges with OrderSync: Skip immediate order recording, let OrderSync handle it
 	// This ensures accurate data from GetTrades API and avoids duplicate records
 	switch at.exchange {
-	case "binance", "hyperliquid", "bybit", "okx", "bitget", "aster":
+	case "hyperliquid", "bybit", "okx", "bitget", "aster":
 		logger.Infof("  📝 Order submitted (id: %s), will be synced by OrderSync", orderID)
 		return
 	}
@@ -2687,6 +2707,8 @@ func (at *AutoTrader) recordAndConfirmOrder(orderResult map[string]interface{}, 
 		orderID, action, actualPrice, actualQty, fee)
 
 	// Record position change with actual fill data (use normalized symbol)
+	// Note: Do NOT create fill records here for Binance—let OrderSync handle fills to avoid duplicate TradeIDs.
+	// Immediate recording creates positions only; fills come from sync with official exchange TradeIDs.
 	at.recordPositionChange(orderID, normalizedSymbolForPosition, positionSide, action, actualQty, actualPrice, leverage, fee)
 
 	// Send anonymous trade statistics for experience improvement (async, non-blocking)
@@ -3007,11 +3029,21 @@ func (at *AutoTrader) createOrderRecord(orderID, symbol, action, positionSide st
 }
 
 // recordOrderFill records order fill/trade details
+// NOTE: For Binance, fills are NOT created here. They are synced from Binance API via OrderSync
+// This prevents duplicate fills with conflicting TradeIDs and ensures official exchange data is used.
+// For other exchanges, fills may be created here immediately.
 func (at *AutoTrader) recordOrderFill(orderRecordID int64, exchangeOrderID, symbol, action string, price, quantity, fee float64) {
 	if at.store == nil {
 		return
 	}
 
+	// Skip fill recording for Binance—OrderSync will handle it with official TradeIDs
+	if at.exchange == "binance" {
+		logger.Infof("  📝 Fill for %s will be recorded by OrderSync (official data)", exchangeOrderID)
+		return
+	}
+
+	// For other exchanges: record fill immediately
 	// Determine side (BUY/SELL)
 	var side string
 	switch action {
@@ -3281,6 +3313,7 @@ func (at *AutoTrader) handleOrderUpdate(order market.OrderUpdate) {
 	// Persist order status to database so UI/analytics stay in sync
 	if at.store != nil {
 		orderStore := at.store.Order()
+		var createdOrder *store.TraderOrder
 
 		// Find existing order by exchange order ID
 		existing, _ := orderStore.GetOrderByExchangeID(at.exchangeID, order.OrderID)
@@ -3306,11 +3339,83 @@ func (at *AutoTrader) handleOrderUpdate(order market.OrderUpdate) {
 			}
 			if err := orderStore.CreateOrder(newOrder); err != nil {
 				logger.Infof("[%s] ⚠️ Failed to create order record for %s: %v", at.name, order.OrderID, err)
+			} else {
+				createdOrder = newOrder
 			}
 		} else {
 			// Update status/fills on existing order
 			if err := orderStore.UpdateOrderStatus(existing.ID, strings.ToUpper(order.Status), order.ExecutedQuantity, order.AveragePrice, existing.Commission); err != nil {
 				logger.Infof("[%s] ⚠️ Failed to update order status for %s: %v", at.name, order.OrderID, err)
+			}
+		}
+
+		// WebSocket fallback: create a synthetic fill if OrderSync is disabled (Binance only)
+		if at.exchange == "binance" && isBinanceSyncDisabled(at.exchangeID) {
+			status := strings.ToUpper(order.Status)
+			if status == "FILLED" && order.ExecutedQuantity > 0 {
+				orderRecord := existing
+				if orderRecord == nil {
+					orderRecord = createdOrder
+				}
+				if orderRecord != nil {
+					fills, err := orderStore.GetOrderFills(orderRecord.ID)
+					if err == nil && len(fills) == 0 {
+						price := order.AveragePrice
+						if price <= 0 {
+							price = order.OrderPrice
+						}
+						quoteQty := order.CumulativeQuoteQty
+						if quoteQty <= 0 {
+							quoteQty = price * order.ExecutedQuantity
+						}
+
+						feeRate := config.Get().BinanceTakerFeeRate
+						if feeRate <= 0 {
+							feeRate = config.DefaultBinanceTakerFeeRate
+						}
+						estimatedCommission := quoteQty * feeRate
+						realizedPnL := 0.0
+						positionSide := strings.ToUpper(order.PositionSide)
+						side := strings.ToUpper(order.Side)
+						normalizedSymbol := market.Normalize(order.Symbol)
+						if positionSide == "LONG" && side == "SELL" {
+							if openPos, err := at.store.Position().GetOpenPositionBySymbol(at.id, normalizedSymbol, "LONG"); err == nil && openPos != nil && openPos.EntryPrice > 0 {
+								realizedPnL = (price - openPos.EntryPrice) * order.ExecutedQuantity
+							}
+						} else if positionSide == "SHORT" && side == "BUY" {
+							if openPos, err := at.store.Position().GetOpenPositionBySymbol(at.id, normalizedSymbol, "SHORT"); err == nil && openPos != nil && openPos.EntryPrice > 0 {
+								realizedPnL = (openPos.EntryPrice - price) * order.ExecutedQuantity
+							}
+						}
+
+						syntheticTradeID := fmt.Sprintf("ws-%s-%d", order.OrderID, order.Timestamp.UnixMilli())
+
+						fill := &store.TraderFill{
+							TraderID:        at.id,
+							ExchangeID:      at.exchangeID,
+							ExchangeType:    at.exchange,
+							OrderID:         orderRecord.ID,
+							ExchangeOrderID: order.OrderID,
+							ExchangeTradeID: syntheticTradeID,
+							Symbol:          normalizedSymbol,
+							Side:            side,
+							Price:           price,
+							Quantity:        order.ExecutedQuantity,
+							QuoteQuantity:   quoteQty,
+							Commission:      estimatedCommission,
+							CommissionAsset: "USDT",
+							RealizedPnL:     realizedPnL,
+							IsMaker:         false,
+							CreatedAt:       order.Timestamp,
+						}
+
+						if err := orderStore.CreateFill(fill); err != nil {
+							logger.Infof("[%s] ⚠️ Failed to create synthetic fill for %s: %v", at.name, order.OrderID, err)
+						} else {
+							logger.Infof("[%s] 🧩 Synthetic fill recorded (OrderSync disabled): %s", at.name, syntheticTradeID)
+						}
+					}
+				}
 			}
 		}
 	}

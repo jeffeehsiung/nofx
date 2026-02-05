@@ -470,6 +470,30 @@ func (s *OrderStore) GetOrderFills(orderID int64) ([]*TraderFill, error) {
 	return fills, nil
 }
 
+// UpdateSyntheticFillForOrder replaces a synthetic WebSocket fill with official trade data.
+// Returns true if any synthetic fills were updated.
+func (s *OrderStore) UpdateSyntheticFillForOrder(exchangeID, exchangeOrderID, exchangeTradeID string, price, quantity, quoteQuantity, commission, realizedPnL float64, createdAt time.Time) (bool, error) {
+	result, err := s.db.Exec(`
+		UPDATE trader_fills
+		SET exchange_trade_id = ?, price = ?, quantity = ?, quote_quantity = ?,
+			commission = ?, realized_pnl = ?, created_at = ?
+		WHERE exchange_id = ? AND exchange_order_id = ? AND exchange_trade_id LIKE 'ws-%'
+	`,
+		exchangeTradeID, price, quantity, quoteQuantity,
+		commission, realizedPnL, createdAt.Format(time.RFC3339),
+		exchangeID, exchangeOrderID,
+	)
+	if err != nil {
+		return false, fmt.Errorf("failed to update synthetic fill: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("failed to read affected rows: %w", err)
+	}
+	return rows > 0, nil
+}
+
 // GetTraderOrderStats 获取trader的订单统计
 func (s *OrderStore) GetTraderOrderStats(traderID string) (map[string]interface{}, error) {
 	var totalOrders, filledOrders, canceledOrders int

@@ -171,20 +171,3 @@ type CleanupConfig struct {
 	NoAlertTimeout    time.Duration `json:"no_alert_timeout"`    // No alert timeout duration
 	CheckInterval     time.Duration `json:"check_interval"`      // Check interval
 }
-
-var defaultMarketConfig = Config{
-	AlertThresholds: AlertThresholds{
-		VolumeSpike:      3.0,
-		PriceChange15Min: 0.05,
-		VolumeTrend:      2.0,
-		RSIOverbought:    70,
-		RSIOversold:      30,
-	},
-	CleanupConfig: CleanupConfig{
-		InactiveTimeout:   30 * time.Minute,
-		MinScoreThreshold: 15.0,
-		NoAlertTimeout:    20 * time.Minute,
-		CheckInterval:     5 * time.Minute,
-	},
-	UpdateInterval: 60, // 1 minute
-}

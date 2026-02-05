@@ -392,6 +392,89 @@ type llmFeedbackResponse struct {
 	MarketConditions   string           `json:"market_conditions"`
 }
 
+// UnmarshalJSON handles flexible JSON unmarshaling for LLM responses that may serialize patterns as strings
+func (lr *llmFeedbackResponse) UnmarshalJSON(data []byte) error {
+	aux := &struct {
+		SuccessPatterns    interface{} `json:"success_patterns"`
+		FailurePatterns    interface{} `json:"failure_patterns"`
+		KeyInsights        []string    `json:"key_insights"`
+		RecommendedActions []string    `json:"recommended_actions"`
+		MarketConditions   string      `json:"market_conditions"`
+	}{
+		KeyInsights:        []string{},
+		RecommendedActions: []string{},
+	}
+
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	// Handle success_patterns - could be array of objects or string
+	if aux.SuccessPatterns != nil {
+		switch v := aux.SuccessPatterns.(type) {
+		case []interface{}:
+			// Already array - try to unmarshal
+			if patBytes, err := json.Marshal(v); err == nil {
+				_ = json.Unmarshal(patBytes, &lr.SuccessPatterns)
+			}
+		case string:
+			// String case - try to parse as JSON array
+			if v != "" && (v[0] == '[' || v[0] == '{') {
+				_ = json.Unmarshal([]byte(v), &lr.SuccessPatterns)
+			}
+			// If it's plain text, create a pattern from it
+			if len(lr.SuccessPatterns) == 0 && v != "" {
+				lr.SuccessPatterns = []TradingPattern{{
+					PatternType:    "llm_success",
+					Description:    v,
+					Recommendation: "Review this identified pattern",
+					Evidence:       []string{},
+				}}
+			}
+		}
+	}
+
+	// Handle failure_patterns - could be array of objects or string
+	if aux.FailurePatterns != nil {
+		switch v := aux.FailurePatterns.(type) {
+		case []interface{}:
+			// Already array - try to unmarshal
+			if patBytes, err := json.Marshal(v); err == nil {
+				_ = json.Unmarshal(patBytes, &lr.FailurePatterns)
+			}
+		case string:
+			// String case - try to parse as JSON array
+			if v != "" && (v[0] == '[' || v[0] == '{') {
+				_ = json.Unmarshal([]byte(v), &lr.FailurePatterns)
+			}
+			// If it's plain text, create a pattern from it
+			if len(lr.FailurePatterns) == 0 && v != "" {
+				lr.FailurePatterns = []TradingPattern{{
+					PatternType:    "llm_failure",
+					Description:    v,
+					Recommendation: "Address this failure pattern",
+					Evidence:       []string{},
+				}}
+			}
+		}
+	}
+
+	// Handle key_insights
+	if len(aux.KeyInsights) > 0 {
+		lr.KeyInsights = aux.KeyInsights
+	}
+
+	// Handle recommended_actions
+	if len(aux.RecommendedActions) > 0 {
+		lr.RecommendedActions = aux.RecommendedActions
+	}
+
+	// Handle market_conditions
+	lr.MarketConditions = aux.MarketConditions
+
+	return nil
+}
+
 func (fg *FeedbackGenerator) shouldUseLLMAnalysis(force bool) bool {
 	if fg.AIClient == nil {
 		return false

@@ -15,13 +15,46 @@ import (
 var (
 	binanceSyncState      = make(map[string]time.Time) // exchangeID -> lastSyncTime
 	binanceSyncStateMutex sync.RWMutex
+	binanceSyncFailures   = make(map[string]int)  // exchangeID -> consecutive failure count
+	binanceSyncDisabled   = make(map[string]bool) // exchangeID -> fallback enabled (sync disabled)
 )
+
+const binanceSyncFailureThreshold = 3
+
+func markBinanceSyncSuccess(exchangeID string) {
+	binanceSyncStateMutex.Lock()
+	binanceSyncFailures[exchangeID] = 0
+	binanceSyncDisabled[exchangeID] = false
+	binanceSyncStateMutex.Unlock()
+}
+
+func markBinanceSyncFailure(exchangeID string) {
+	binanceSyncStateMutex.Lock()
+	binanceSyncFailures[exchangeID]++
+	if binanceSyncFailures[exchangeID] >= binanceSyncFailureThreshold {
+		binanceSyncDisabled[exchangeID] = true
+	}
+	binanceSyncStateMutex.Unlock()
+}
+
+func isBinanceSyncDisabled(exchangeID string) bool {
+	binanceSyncStateMutex.RLock()
+	defer binanceSyncStateMutex.RUnlock()
+	return binanceSyncDisabled[exchangeID]
+}
+
+func getBinanceSyncFailureCount(exchangeID string) int {
+	binanceSyncStateMutex.RLock()
+	defer binanceSyncStateMutex.RUnlock()
+	return binanceSyncFailures[exchangeID]
+}
 
 // SyncOrdersFromBinance syncs Binance Futures trade history to local database
 // Uses COMMISSION detection + fromId for efficient incremental sync
 // Also creates/updates position records to ensure orders/fills/positions data consistency
 func (t *FuturesTrader) SyncOrdersFromBinance(traderID string, exchangeID string, exchangeType string, st *store.Store) error {
 	if st == nil {
+		markBinanceSyncFailure(exchangeID)
 		return fmt.Errorf("store is nil")
 	}
 
@@ -62,6 +95,7 @@ func (t *FuturesTrader) SyncOrdersFromBinance(traderID string, exchangeID string
 		binanceSyncStateMutex.Lock()
 		binanceSyncState[exchangeID] = syncStartTime
 		binanceSyncStateMutex.Unlock()
+		markBinanceSyncSuccess(exchangeID)
 		return nil
 	}
 
@@ -94,6 +128,15 @@ func (t *FuturesTrader) SyncOrdersFromBinance(traderID string, exchangeID string
 
 	logger.Infof("📥 Received %d trades from Binance (%d API calls)", len(allTrades), apiCalls)
 
+	// If ALL symbols failed, mark sync failure for fallback
+	if len(failedSymbols) == len(changedSymbols) {
+		markBinanceSyncFailure(exchangeID)
+		return fmt.Errorf("binance order sync failed for all symbols")
+	}
+
+	// Otherwise, reset failure count (partial success counts as healthy)
+	markBinanceSyncSuccess(exchangeID)
+
 	// Only update last sync time if ALL symbols were successfully queried
 	// This prevents data loss when some symbols fail due to rate limit or network issues
 	if len(failedSymbols) == 0 {
@@ -120,9 +163,58 @@ func (t *FuturesTrader) SyncOrdersFromBinance(traderID string, exchangeID string
 
 	for _, trade := range allTrades {
 		// Check if trade already exists
-		existing, err := orderStore.GetOrderByExchangeID(exchangeID, trade.TradeID)
+		orderID := trade.TradeID
+		if trade.OrderID != "" {
+			orderID = trade.OrderID
+		}
+
+		existing, err := orderStore.GetOrderByExchangeID(exchangeID, orderID)
 		if err == nil && existing != nil {
-			continue // Trade already exists, skip
+			// If this order already exists (immediate record), still record fill but skip position builder
+			updated, updateErr := orderStore.UpdateSyntheticFillForOrder(
+				exchangeID, orderID, trade.TradeID,
+				trade.Price, trade.Quantity, trade.Price*trade.Quantity,
+				trade.Fee, trade.RealizedPnL, trade.Time,
+			)
+			if updateErr != nil {
+				logger.Infof("  ⚠️ Failed to update synthetic fill for order %s: %v", orderID, updateErr)
+			}
+			if updated {
+				syncedCount++
+				continue
+			}
+
+			fills, fillsErr := orderStore.GetOrderFills(existing.ID)
+			if fillsErr == nil && len(fills) > 0 {
+				syncedCount++
+				continue
+			}
+
+			fillRecord := &store.TraderFill{
+				TraderID:        traderID,
+				ExchangeID:      exchangeID,
+				ExchangeType:    exchangeType,
+				OrderID:         existing.ID,
+				ExchangeOrderID: orderID,
+				ExchangeTradeID: trade.TradeID,
+				Symbol:          market.Normalize(trade.Symbol),
+				Side:            strings.ToUpper(trade.Side),
+				Price:           trade.Price,
+				Quantity:        trade.Quantity,
+				QuoteQuantity:   trade.Price * trade.Quantity,
+				Commission:      trade.Fee,
+				CommissionAsset: "USDT",
+				RealizedPnL:     trade.RealizedPnL,
+				IsMaker:         false,
+				CreatedAt:       trade.Time,
+			}
+
+			if err := orderStore.CreateFill(fillRecord); err != nil {
+				logger.Infof("  ⚠️ Failed to sync fill for trade %s: %v", trade.TradeID, err)
+			}
+
+			syncedCount++
+			continue
 		}
 
 		// Normalize symbol
@@ -150,7 +242,7 @@ func (t *FuturesTrader) SyncOrdersFromBinance(traderID string, exchangeID string
 			TraderID:        traderID,
 			ExchangeID:      exchangeID,
 			ExchangeType:    exchangeType,
-			ExchangeOrderID: trade.TradeID,
+			ExchangeOrderID: orderID,
 			Symbol:          symbol,
 			Side:            side,
 			PositionSide:    positionSide,
@@ -179,7 +271,7 @@ func (t *FuturesTrader) SyncOrdersFromBinance(traderID string, exchangeID string
 			ExchangeID:      exchangeID,
 			ExchangeType:    exchangeType,
 			OrderID:         orderRecord.ID,
-			ExchangeOrderID: trade.TradeID,
+			ExchangeOrderID: orderID,
 			ExchangeTradeID: trade.TradeID,
 			Symbol:          symbol,
 			Side:            side,
@@ -197,16 +289,20 @@ func (t *FuturesTrader) SyncOrdersFromBinance(traderID string, exchangeID string
 			logger.Infof("  ⚠️ Failed to sync fill for trade %s: %v", trade.TradeID, err)
 		}
 
-		// Create/update position record using PositionBuilder
-		if err := posBuilder.ProcessTrade(
-			traderID, exchangeID, exchangeType,
-			symbol, positionSide, orderAction,
-			trade.Quantity, trade.Price, trade.Fee, trade.RealizedPnL,
-			trade.Time, trade.TradeID,
-		); err != nil {
-			logger.Infof("  ⚠️ Failed to sync position for trade %s: %v", trade.TradeID, err)
-		} else {
-			logger.Infof("  📍 Position updated for trade: %s (action: %s, qty: %.6f)", trade.TradeID, orderAction, trade.Quantity)
+		// Create/update position record using PositionBuilder (skip if already recorded immediately)
+		if exists, err := positionStore.HasOrderID(traderID, orderID); err != nil {
+			logger.Infof("  ⚠️ Failed to check position by order ID: %v", err)
+		} else if !exists {
+			if err := posBuilder.ProcessTrade(
+				traderID, exchangeID, exchangeType,
+				symbol, positionSide, orderAction,
+				trade.Quantity, trade.Price, trade.Fee, trade.RealizedPnL,
+				trade.Time, trade.TradeID,
+			); err != nil {
+				logger.Infof("  ⚠️ Failed to sync position for trade %s: %v", trade.TradeID, err)
+			} else {
+				logger.Infof("  📍 Position updated for trade: %s (action: %s, qty: %.6f)", trade.TradeID, orderAction, trade.Quantity)
+			}
 		}
 
 		syncedCount++
@@ -282,6 +378,10 @@ func (t *FuturesTrader) StartOrderSync(traderID string, exchangeID string, excha
 	ticker := time.NewTicker(interval)
 	go func() {
 		for range ticker.C {
+			if isBinanceSyncDisabled(exchangeID) {
+				logger.Infof("⚠️  Binance order sync disabled (too many failures). Falling back to immediate recording.")
+				return
+			}
 			if err := t.SyncOrdersFromBinance(traderID, exchangeID, exchangeType, st); err != nil {
 				logger.Infof("⚠️  Binance order sync failed: %v", err)
 			}

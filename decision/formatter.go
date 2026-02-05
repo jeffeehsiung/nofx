@@ -18,12 +18,6 @@ import (
 
 // ========== 中文格式化函数 ==========
 
-// formatHeaderZH 格式化头部信息（中文）
-func formatHeaderZH(ctx *Context) string {
-	return fmt.Sprintf("# 📊 交易决策请求\n\n时间: %s | 周期: #%d | 运行时长: %d 分钟\n\n",
-		ctx.CurrentTime, ctx.CallCount, ctx.RuntimeMinutes)
-}
-
 // formatAccountZH 格式化账户信息（中文）
 func formatAccountZH(ctx *Context) string {
 	acc := ctx.Account
@@ -626,12 +620,6 @@ func formatQuantDataZH(data *QuantData) string {
 
 // ========== 英文格式化函数 ==========
 
-// formatHeaderEN 格式化头部信息（英文）
-func formatHeaderEN(ctx *Context) string {
-	return fmt.Sprintf("# 📊 Trading Decision Request\n\nTime: %s | Period: #%d | Runtime: %d minutes\n\n",
-		ctx.CurrentTime, ctx.CallCount, ctx.RuntimeMinutes)
-}
-
 // formatAccountEN 格式化账户信息（英文）
 func formatAccountEN(ctx *Context) string {
 	acc := ctx.Account
@@ -963,35 +951,6 @@ func getOIInterpretationEN(oiChange, priceChange string) string {
 	} else if oiChange == "decrease" && priceChange == "down" {
 		return OIInterpretation.OIDown_PriceDown.EN
 	}
-	return ""
-}
-
-// formatPerformanceFeedbackZH formats performance feedback for Chinese prompts
-func formatPerformanceFeedbackZH(feedback interface{}) string {
-	if feedback == nil {
-		return ""
-	}
-
-	// Call the formatting function via type assertion
-	// The feedback is actually *backtest.FeedbackAnalysis
-	if formatter, ok := feedback.(interface{ FormatForPrompt(lang string) string }); ok {
-		return formatter.FormatForPrompt("zh")
-	}
-
-	return ""
-}
-
-// formatPerformanceFeedbackEN formats performance feedback for English prompts
-func formatPerformanceFeedbackEN(feedback interface{}) string {
-	if feedback == nil {
-		return ""
-	}
-
-	// Call the formatting function via type assertion
-	if formatter, ok := feedback.(interface{ FormatForPrompt(lang string) string }); ok {
-		return formatter.FormatForPrompt("en")
-	}
-
 	return ""
 }
 

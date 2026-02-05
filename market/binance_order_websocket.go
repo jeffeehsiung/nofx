@@ -24,7 +24,6 @@ type BinanceOrderWebSocket struct {
 	heartbeatTicker    *time.Ticker
 	heartbeatInterval  time.Duration
 	testnet            bool
-	reconnectCh        chan struct{} // For triggering reconnects
 }
 
 // BinanceAccountUpdate represents account and order updates from Binance

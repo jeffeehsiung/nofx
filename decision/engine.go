@@ -890,19 +890,26 @@ func (e *StrategyEngine) FetchOIRankingData() *provider.OIRankingData {
 			symbolsData, _, binanceErr := provider.GetOITopSymbolsWithFallback(limit, false)
 			if binanceErr == nil && len(symbolsData) > 0 {
 				// Convert symbols to OIRankingData format
-				oiPositions := make([]provider.OIPosition, 0, len(symbolsData))
-				for i, symbol := range symbolsData {
+				topCount := limit
+				if topCount > len(symbolsData) {
+					topCount = len(symbolsData)
+				}
+
+				oiPositions := make([]provider.OIPosition, 0, topCount)
+				for i := 0; i < topCount && i < len(symbolsData); i++ {
 					oiPositions = append(oiPositions, provider.OIPosition{
-						Symbol: symbol,
+						Symbol: symbolsData[i],
 						Rank:   i + 1,
 					})
 				}
+
 				binanceData := &provider.OIRankingData{
 					Duration:     duration,
 					TopPositions: oiPositions,
+					LowPositions: []provider.OIPosition{}, // Empty low positions for Binance fallback
 					FetchedAt:    time.Now(),
 				}
-				logger.Infof("✓ Using Binance momentum OI ranking fallback (%d positions)", len(binanceData.TopPositions))
+				logger.Infof("✓ Using Binance momentum OI ranking fallback (%d top positions)", len(binanceData.TopPositions))
 				return binanceData
 			}
 			if binanceErr != nil {
@@ -1266,6 +1273,7 @@ func extractDecisions(response string) ([]Decision, error) {
 	jsonContent = compactArrayOpen(jsonContent)
 	jsonContent = fixMissingQuotes(jsonContent)
 	jsonContent = strings.ReplaceAll(jsonContent, "~", "")
+	jsonContent = removeNumberThousandSeparators(jsonContent)
 
 	if err := validateJSONFormat(jsonContent); err != nil {
 		return nil, fmt.Errorf("JSON format validation failed: %w\nJSON content: %s\nFull response:\n%s", err, jsonContent, response)
@@ -1301,6 +1309,53 @@ func fixMissingQuotes(jsonStr string) string {
 	jsonStr = strings.ReplaceAll(jsonStr, "　", " ")
 
 	return jsonStr
+}
+
+func removeNumberThousandSeparators(jsonStr string) string {
+	// Remove thousand separators from JSON numbers: "price": 7,787 -> "price": 7787
+	// Only remove commas between digits when they're in numeric JSON value contexts
+	// (after : or [ and before } or , or ])
+	// Skip commas inside quoted strings - they're legitimate text separators
+
+	var result strings.Builder
+	inQuotes := false
+	escape := false
+
+	for i := 0; i < len(jsonStr); i++ {
+		ch := jsonStr[i]
+
+		// Track if we're inside a quoted string
+		if ch == '"' && !escape {
+			inQuotes = !inQuotes
+		}
+		escape = (ch == '\\' && !escape)
+
+		// Only remove comma if it's a thousand separator outside quotes
+		if !inQuotes && ch == ',' &&
+			i > 0 && i < len(jsonStr)-1 &&
+			jsonStr[i-1] >= '0' && jsonStr[i-1] <= '9' &&
+			jsonStr[i+1] >= '0' && jsonStr[i+1] <= '9' {
+			// Check if this looks like a number context (preceded by : or [ and followed by digit)
+			// This filters out commas in quoted reasoning text
+			foundNumberContext := false
+			for j := i - 2; j >= 0; j-- {
+				if jsonStr[j] == ':' || jsonStr[j] == '[' {
+					foundNumberContext = true
+					break
+				}
+				if jsonStr[j] == '"' || jsonStr[j] == '}' {
+					break
+				}
+			}
+
+			if foundNumberContext {
+				continue // Skip this thousand separator comma
+			}
+		}
+
+		result.WriteByte(ch)
+	}
+	return result.String()
 }
 
 func validateJSONFormat(jsonStr string) error {

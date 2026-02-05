@@ -659,7 +659,6 @@ func GetTopCoinsByPriceChange(limit int) ([]string, error) {
 	// Parse and sort by price change % (descending)
 	type changeEntry struct {
 		symbol        string
-		priceChange   float64
 		volume        float64
 		changePercent float64
 	}
