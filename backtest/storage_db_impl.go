@@ -7,7 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"nofx/store"
@@ -252,12 +253,28 @@ func loadTradeEventsDB(runID string) ([]TradeEvent, error) {
 	return events, rows.Err()
 }
 
-// isTraderID checks if the ID looks like a trader UUID (contains hyphens)
+// isTraderID checks if the ID looks like a trader ID (format: exchangeShort_aiModel_timestamp)
 func isTraderID(id string) bool {
-	// UUIDs have format: 8-4-4-4-12 (e.g., "550e8400-e29b-41d4-a716-446655440000")
+	// Trader IDs have format: "{exchangeShort}_{aiModel}_{timestamp}"
+	// Example: "dde58ab4_deepseek_1770374002" or with UUID: "dde58ab4_uuid_deepseek_1770374002"
 	// Backtest run IDs have format: "bt_20260122_093934"
-	uuidPattern := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-	return uuidPattern.MatchString(id)
+
+	// If it starts with "bt_", it's a backtest run ID
+	if strings.HasPrefix(id, "bt_") {
+		return false
+	}
+
+	// Trader IDs contain underscores and end with a unix timestamp (all digits after last underscore)
+	// Check if the last segment after underscore is numeric (unix timestamp)
+	parts := strings.Split(id, "_")
+	if len(parts) < 2 {
+		return false
+	}
+
+	lastPart := parts[len(parts)-1]
+	// Unix timestamps are all digits and typically 9-10 digits
+	_, err := strconv.ParseInt(lastPart, 10, 64)
+	return err == nil && len(lastPart) >= 9
 }
 
 // loadTradeEventsFromLiveTrading loads trade events from live trading tables (trader_orders + trader_fills)
