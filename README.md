@@ -115,7 +115,7 @@ nofx/
 ├── market/                    # Market data & microstructure ⭐ KEY MODULE
 │   ├── api_client.go         # Exchange API client
 │   ├── data.go               # Market data aggregation 🚀 OPTIMIZED
-│   ├── microstructure.go     # Order book analysis 🔥 OPTIMIZED
+│   ├── microstructure.go     # Order book analysis 🔥 NEW
 │   ├── timeframe.go          # Multi-timeframe logic
 │   ├── *_websocket.go        # Real-time data streams
 │   └── order_book_monitor.go # Liquidity monitoring 🚀 OPTIMIZED
