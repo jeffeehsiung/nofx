@@ -10,6 +10,7 @@ import (
 	"nofx/store"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -659,8 +660,14 @@ func (fg *FeedbackGenerator) buildLLMFullAnalysisPrompt(analysis *FeedbackAnalys
 
 func (fg *FeedbackGenerator) parseLLMEnhancementResponse(text string) (*llmFeedbackResponse, error) {
 	clean := stripJSONFences(text)
+
+	// Try to fix common JSON issues
+	clean = fixCommonJSONIssues(clean)
+
 	var resp llmFeedbackResponse
 	if err := json.Unmarshal([]byte(clean), &resp); err != nil {
+		// Log the cleaned JSON for debugging
+		logger.Infof("[FeedbackGenerator] Failed to parse LLM response. Cleaned JSON: %s", clean)
 		return nil, err
 	}
 	return &resp, nil
@@ -672,6 +679,22 @@ func stripJSONFences(text string) string {
 	clean = strings.TrimPrefix(clean, "```")
 	clean = strings.TrimSuffix(clean, "```")
 	return strings.TrimSpace(clean)
+}
+
+func fixCommonJSONIssues(text string) string {
+	// Remove trailing commas before closing braces/brackets
+	// Pattern: ,\s*} or ,\s*]
+	text = regexp.MustCompile(`,(\s*[}\]])`).ReplaceAllString(text, "$1")
+
+	// Remove any control characters that might break JSON parsing
+	text = strings.Map(func(r rune) rune {
+		if r < 32 && r != '\n' && r != '\r' && r != '\t' {
+			return -1
+		}
+		return r
+	}, text)
+
+	return text
 }
 
 func appendLLMExtraOrderFields(sb *strings.Builder, order *decision.RecentOrder) {
