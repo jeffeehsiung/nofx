@@ -1628,7 +1628,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
               onClick={() => setPromptLabTraderId(null)}
               aria-label="Close"
             >
-              ×
+              x
             </button>
             <LiveTraderPromptLab traderId={promptLabTraderId} />
           </div>
@@ -1644,7 +1644,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
               onClick={() => setAnalysisTraderId(null)}
               aria-label="Close"
             >
-              ×
+              x
             </button>
             <div className="mb-4">
               <h2 className="text-xl font-bold" style={{ color: '#EAECEF' }}>

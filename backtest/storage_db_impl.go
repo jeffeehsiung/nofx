@@ -229,10 +229,13 @@ func appendTradeEventDB(runID string, event TradeEvent) error {
 
 func loadTradeEventsDB(runID string) ([]TradeEvent, error) {
 	// Check if runID is a trader ID (UUID format) - if so, load from live trading tables
-	if isTraderID(runID) {
+	isTrader := isTraderID(runID)
+	if isTrader {
+		fmt.Printf("[DEBUG] loadTradeEventsDB: %s detected as trader ID, loading from live trading tables\n", runID)
 		return loadTradeEventsFromLiveTrading(runID)
 	}
 
+	fmt.Printf("[DEBUG] loadTradeEventsDB: %s detected as backtest run ID, loading from backtest_trades\n", runID)
 	// Otherwise load from backtest_trades table
 	rows, err := persistenceDB.Query(`
 		SELECT ts, symbol, action, side, qty, price, fee, slippage, order_value, realized_pnl, leverage, cycle, position_after, liquidation, note
