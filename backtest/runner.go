@@ -958,6 +958,28 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 				}
 				logger.Infof("✅ Generated feedback analysis at cycle %d: Total Return %.2f%%, Win Rate %.1f%%",
 					callCount, feedback.TotalReturnPct, feedback.WinRate)
+				// Calibrate failure thresholds from recent backtest outcomes
+				if r.feedbackGenerator != nil {
+					if events, err := LoadTradeEvents(r.cfg.RunID); err == nil && len(events) > 0 {
+						closed := r.feedbackGenerator.extractClosedPositions(events)
+						if len(closed) >= 30 {
+							outcomes := make([]decision.TradeOutcome, 0, len(closed))
+							for _, pos := range closed {
+								outcomes = append(outcomes, tradeOutcomeFromClosedPosition(pos))
+							}
+							// Keep only the most recent samples for calibration
+							if len(outcomes) > 500 {
+								outcomes = outcomes[len(outcomes)-500:]
+							}
+							// Use persistent calibrator (reuse across cycles)
+							if err := r.thresholdCalibrator.CalibrateFromHistory(outcomes); err == nil {
+								r.failureThresholds = r.thresholdCalibrator.ApplyToAnalyzer()
+								logger.Infof("📊 Calibrated backtest failure thresholds from %d trades: %s",
+									len(outcomes), r.thresholdCalibrator.GetCalibrationSummary())
+							}
+						}
+					}
+				}
 				// Optimize factor weights based on feedback
 				if r.factorOptimizer.ShouldOptimize(callCount, len(r.account.Positions())) {
 					if err := r.factorOptimizer.OptimizeWeights(feedback, callCount); err != nil {

@@ -9,7 +9,7 @@
 
 > **Why NOFX+?** While NOFX pioneered LLM-driven trading, NOFX+ adds **market microstructure intelligence, adaptive learning, and enterprise reliability** missing from the original implementation.
 >
-> **Welcome!** This guide will take you from zero to complete mastery of the NOFX codebase.
+> **Welcome!** This guide will take you from zero to complete mastery of the NOFX+ codebase.
 
 ---
 
