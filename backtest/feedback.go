@@ -686,6 +686,16 @@ func fixCommonJSONIssues(text string) string {
 	// Pattern: ,\s*} or ,\s*]
 	text = regexp.MustCompile(`,(\s*[}\]])`).ReplaceAllString(text, "$1")
 
+	// Remove thousands separators in numbers (e.g., "1,000" -> "1000")
+	// Pattern: digit, comma, three digits
+	text = regexp.MustCompile(`(\d),(\d{3})`).ReplaceAllString(text, "${1}${2}")
+
+	// Fix double colons (e.g., "key":: "value" -> "key": "value")
+	text = regexp.MustCompile(`:+`).ReplaceAllString(text, ":")
+
+	// Remove colons after closing brackets/braces (e.g., ]: -> ])
+	text = regexp.MustCompile(`([}\]]):`).ReplaceAllString(text, "$1")
+
 	// Remove any control characters that might break JSON parsing
 	text = strings.Map(func(r rune) rune {
 		if r < 32 && r != '\n' && r != '\r' && r != '\t' {
