@@ -9,7 +9,9 @@
 
 > **Why NOFX+?** While NOFX pioneered LLM-driven trading, NOFX+ adds **LLM-evolve feedback loops, prompt variant evolution, market microstructure intelligence, and adaptive threshold calibration** missing from the original implementation.
 >
-> **Welcome!** This guide will take you from zero to complete mastery of the NOFX+ codebase.
+> **Welcome!** This guide will take you from zero to complete mastery of the [NOFX+ codebase](https://github.com/jeffeehsiung/nofxplus).
+
+> ⭐ **If you find NOFX+ useful, please give the repo a star.**
 
 ---
 
