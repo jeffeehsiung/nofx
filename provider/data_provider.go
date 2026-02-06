@@ -49,11 +49,21 @@ type AI500APIResponse struct {
 
 // SetAI500API sets AI500 data provider API
 func SetAI500API(apiURL string) {
+	// Migrate old URL to new base
+	if strings.Contains(apiURL, "nofxaios.com:30006") {
+		apiURL = strings.Replace(apiURL, "http://nofxaios.com:30006", "https://nofxos.ai", 1)
+		log.Printf("🔄 Migrated AI500 API URL to new base: https://nofxos.ai")
+	}
 	ai500Config.APIURL = apiURL
 }
 
 // SetOITopAPI sets OI Top API
 func SetOITopAPI(apiURL string) {
+	// Migrate old URL to new base
+	if strings.Contains(apiURL, "nofxaios.com:30006") {
+		apiURL = strings.Replace(apiURL, "http://nofxaios.com:30006", "https://nofxos.ai", 1)
+		log.Printf("🔄 Migrated OI Top API URL to new base: https://nofxos.ai")
+	}
 	oiTopConfig.APIURL = apiURL
 }
 
@@ -331,22 +341,45 @@ func fetchOITop() ([]OIPosition, error) {
 		return nil, fmt.Errorf("OI Top API returned error (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var response OITopAPIResponse
-	if err := json.Unmarshal(body, &response); err != nil {
+	// Try new format first (https://nofxos.ai uses "success": true)
+	var newResponse struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Positions      []OIPosition `json:"positions"`
+			Count          int          `json:"count"`
+			Exchange       string       `json:"exchange"`
+			TimeRange      string       `json:"time_range"`
+			TimeRangeParam string       `json:"time_range_param"`
+			RankType       string       `json:"rank_type"`
+			Limit          int          `json:"limit"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &newResponse); err == nil && newResponse.Success {
+		if len(newResponse.Data.Positions) == 0 {
+			return nil, fmt.Errorf("OI Top position list is empty")
+		}
+		log.Printf("✓ Successfully fetched %d OI Top coins (time range: %s, type: %s)",
+			len(newResponse.Data.Positions), newResponse.Data.TimeRange, newResponse.Data.RankType)
+		return newResponse.Data.Positions, nil
+	}
+
+	// Try old format (http://nofxaios.com:30006 used "code": 0)
+	var oldResponse OITopAPIResponse
+	if err := json.Unmarshal(body, &oldResponse); err != nil {
 		return nil, fmt.Errorf("OI Top JSON parsing failed: %w", err)
 	}
 
-	if response.Code != 0 {
-		return nil, fmt.Errorf("OI Top API returned error code: %d", response.Code)
+	if oldResponse.Code != 0 {
+		return nil, fmt.Errorf("OI Top API returned error code: %d", oldResponse.Code)
 	}
 
-	if len(response.Data.Positions) == 0 {
+	if len(oldResponse.Data.Positions) == 0 {
 		return nil, fmt.Errorf("OI Top position list is empty")
 	}
 
 	log.Printf("✓ Successfully fetched %d OI Top coins (time range: %s, type: %s)",
-		len(response.Data.Positions), response.Data.TimeRange, response.Data.RankType)
-	return response.Data.Positions, nil
+		len(oldResponse.Data.Positions), oldResponse.Data.TimeRange, oldResponse.Data.RankType)
+	return oldResponse.Data.Positions, nil
 }
 
 // GetOITopSymbols retrieves OI Top coin symbol list

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"nofx/config"
 )
 
 // StrategyStore strategy storage
@@ -1178,10 +1180,10 @@ func GetDefaultStrategyConfig(lang string) StrategyConfig {
 			SourceType:            "coinpool",
 			UseCoinPool:           true,
 			CoinPoolLimit:         10,
-			CoinPoolAPIURL:        "http://nofxaios.com:30006/api/ai500/list?auth=cm_568c67eae410d912c54c",
+			CoinPoolAPIURL:        config.GetDefaultCoinPoolAPIURL(),
 			UseOITop:              false,
 			OITopLimit:            20,
-			OITopAPIURL:           "http://nofxaios.com:30006/api/oi/top-ranking?limit=20&duration=1h&auth=cm_568c67eae410d912c54c",
+			OITopAPIURL:           config.GetDefaultOITopAPIURL(20, "1h"),
 			EnableBinanceFallback: true, // Enable automatic fallback to Binance free API
 		},
 		Indicators: IndicatorConfig{
@@ -1209,12 +1211,12 @@ func GetDefaultStrategyConfig(lang string) StrategyConfig {
 			MACDSlowPeriod:     26, // default MACD slow period
 			BOLLPeriods:        []int{20},
 			EnableQuantData:    true,
-			QuantDataAPIURL:    "http://nofxaios.com:30006/api/coin/{symbol}?include=netflow,oi,price&auth=cm_568c67eae410d912c54c",
+			QuantDataAPIURL:    config.GetDefaultQuantDataAPIURL(),
 			EnableQuantOI:      true,
 			EnableQuantNetflow: true,
 			// OI ranking data - market-wide OI increase/decrease rankings
 			EnableOIRanking:   true,
-			OIRankingAPIURL:   "http://nofxaios.com:30006",
+			OIRankingAPIURL:   config.GetDefaultOIRankingBaseURL(),
 			OIRankingDuration: "1h",
 			OIRankingLimit:    10,
 		},

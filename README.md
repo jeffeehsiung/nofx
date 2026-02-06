@@ -260,6 +260,8 @@ We introduced a **LLM-evolve learning stack** that:
 3. `market/timeframe.go` - Multi-timeframe logic
 4. `market/binance_websocket.go` - Real-time streams
 
+> ⚠️ **Data Source Note**: The original NOFX quant and OI data pooling API (`http://nofxaios.com:30006/api`) is currently down or inaccessible. NOFX+ uses a **DIY Binance + Coinglass method** for market data aggregation instead. This provides direct access to exchange data with enhanced reliability.
+
 ---
 
 ## 6. Trade Failure Analysis & Feedback Loop
@@ -371,6 +373,8 @@ echo "Found $total functions"
 ---
 
 ## 9. Getting Started
+
+> ⚠️ **Important Data Source Update**: The original NOFX data pooling API (`http://nofxaios.com:30006/api`) is no longer accessible. NOFX+ implements a **Binance + Coinglass + DIY method** for reliable market data, Open Interest (OI), and quantitative metrics.
 
 ### Quick Start (5 Minutes)
 ```bash

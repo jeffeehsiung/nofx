@@ -787,14 +787,24 @@ func (e *StrategyEngine) FetchQuantData(symbol string) (*QuantData, error) {
 			if resp.StatusCode == http.StatusOK {
 				body, err := io.ReadAll(resp.Body)
 				if err == nil {
-					var apiResp struct {
+					// Try new format first (https://nofxos.ai uses "success": true)
+					var newApiResp struct {
+						Success bool       `json:"success"`
+						Data    *QuantData `json:"data"`
+					}
+					if err := json.Unmarshal(body, &newApiResp); err == nil && newApiResp.Success && newApiResp.Data != nil {
+						// Success - return external API data (new format)
+						return newApiResp.Data, nil
+					}
+
+					// Try old format (http://nofxaios.com:30006 used "code": 0)
+					var oldApiResp struct {
 						Code int        `json:"code"`
 						Data *QuantData `json:"data"`
 					}
-
-					if err := json.Unmarshal(body, &apiResp); err == nil && apiResp.Code == 0 {
-						// Success - return external API data
-						return apiResp.Data, nil
+					if err := json.Unmarshal(body, &oldApiResp); err == nil && oldApiResp.Code == 0 {
+						// Success - return external API data (old format)
+						return oldApiResp.Data, nil
 					}
 				}
 			}
@@ -850,7 +860,7 @@ func (e *StrategyEngine) FetchOIRankingData() *provider.OIRankingData {
 
 	baseURL := indicators.OIRankingAPIURL
 	if baseURL == "" {
-		baseURL = "http://nofxaios.com:30006"
+		baseURL = config.DefaultBaseURL
 	}
 
 	// Get auth key from existing API URL or use default

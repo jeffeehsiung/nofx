@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Plus, X, Database, TrendingUp, List, Link, AlertCircle } from 'lucide-react'
 import type { CoinSourceConfig } from '../../types'
+import { getDefaultCoinPoolAPIURL, getDefaultOITopAPIURL } from '../../config/apiConstants'
 
-// Default API URLs for data sources
-const DEFAULT_COIN_POOL_API_URL = 'http://nofxaios.com:30006/api/ai500/list?auth=cm_568c67eae410d912c54c'
-const DEFAULT_OI_TOP_API_URL = 'http://nofxaios.com:30006/api/oi/top-ranking?limit=20&duration=1h&auth=cm_568c67eae410d912c54c'
+// Default API URLs for data sources (using new https://nofxos.ai base URL)
+const DEFAULT_COIN_POOL_API_URL = getDefaultCoinPoolAPIURL()
+const DEFAULT_OI_TOP_API_URL = getDefaultOITopAPIURL(20, '1h')
 
 interface CoinSourceEditorProps {
   config: CoinSourceConfig
