@@ -1,10 +1,10 @@
 import { Clock, Activity, Database, TrendingUp, BarChart2, Info, Lock, LineChart } from 'lucide-react'
 import type { IndicatorConfig } from '../../types'
+import { getDefaultQuantDataAPIURL, getDefaultOIRankingBaseURL } from '../../config/apiConstants'
 
 // Default API URL for quant data (must contain {symbol} placeholder)
-const DEFAULT_QUANT_DATA_API_URL = 'http://nofxaios.com:30006/api/coin/{symbol}?include=netflow,oi,price&auth=cm_568c67eae410d912c54c'
-// Default API base URL for OI ranking data
-const DEFAULT_OI_RANKING_API_URL = 'http://nofxaios.com:30006'
+const DEFAULT_QUANT_DATA_API_URL = getDefaultQuantDataAPIURL()
+const DEFAULT_OI_RANKING_API_URL = getDefaultOIRankingBaseURL()
 
 interface IndicatorEditorProps {
   config: IndicatorConfig
