@@ -2,12 +2,12 @@
 
 ## 🚀 From NOFX to NOFX+ - The Production Evolution
 
-**NOFX+** is a **production-hardened fork** of the original NOFX trading system that:
+**NOFX+ (nofxplus)** is a **production-hardened fork** of the original NOFX trading system that:
 - Fixes **17 critical issues** [See Merge Request Logs](docs/nofx-issue-fixed-logs.md)
-- Adds **six algorithmic enhancements**
+- Adds **LLM-evolve feedback + prompt variants**, **dynamic threshold calibration**, **failure analysis**, and **microstructure intelligence**
 - Delivers **institutional-grade trading performance**
 
-> **Why NOFX+?** While NOFX pioneered LLM-driven trading, NOFX+ adds **market microstructure intelligence, adaptive learning, and enterprise reliability** missing from the original implementation.
+> **Why NOFX+?** While NOFX pioneered LLM-driven trading, NOFX+ adds **LLM-evolve feedback loops, prompt variant evolution, market microstructure intelligence, and adaptive threshold calibration** missing from the original implementation.
 >
 > **Welcome!** This guide will take you from zero to complete mastery of the NOFX+ codebase.
 
@@ -75,11 +75,20 @@ decision/engine.go         # AI decision making (lines 1-200)
                                     ↓
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                  EXECUTION & LEARNING LOOP                              │
-│  [Smart Execution] → [Bayesian Learning] → [Prompt Evolution]           │
+│  [Smart Execution] → [LLM-Enhanced Feedback] → [Prompt Evolution]       │
 │         ↑                    ↓                    ↓                     │
-│  [Compliance Tracking] ← [Feedback Analysis] ← [Pattern Detection]      │
+│  [Compliance Tracking] ← [Failure Analysis] ← [Threshold Calibration]   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Data-driven failure analysis replaces magic numbers:**
+The feedback system automatically analyzes your live trading performance and provides:
+1. **Real-time Performance Metrics** - Win rate, profit factor, Sharpe ratio, drawdown
+2. **Pattern Recognition** - Success and failure patterns identified from recent trades
+3. **AI-Generated Insights** - LLM-powered analysis of what's working and what needs improvement
+4. **Actionable Recommendations** - Specific rules and adjustments based on performance data
+5. **Prompt Evolution** - Continuously optimizes the trading prompt based on feedback
+6. **Dynamic Threshold Calibration** - Uses trade outcome metrics to calibrate decision thresholds based on market microstructure and performance patterns
 
 ---
 
@@ -113,6 +122,12 @@ nofx/
 ├── backtest/                  # Backtesting engine ⭐ KEY MODULE
 │   ├── manager.go            # Backtest orchestration 🚀 OPTIMIZED
 │   ├── runner.go             # Simulation execution 🚀 OPTIMIZED
+│   ├── feedback.go           # LLM-evolve feedback system 🔥 NEW
+│   ├── prompt_optimizer.go   # Prompt variant evolution 🔥 NEW
+│   ├── factor_optimizer.go   # Risk control optimization 🔥 NEW
+│   ├── compliance_tracker.go # Reinforcement compliance tracking 🔥 NEW
+│   ├── smart_heuristics.go   # Adaptive position sizing 🔥 NEW
+│   ├── calibration.go        # Threshold calibration pipeline 🔥 NEW
 │   ├── account.go            # Position & PnL tracking 🚀 OPTIMIZED
 │   ├── metrics.go            # Performance metrics 🚀 OPTIMIZED
 │   └── persistence_db.go     # Results storage
@@ -121,6 +136,7 @@ nofx/
 │   ├── trader.go             # Trader persistence 🚀 OPTIMIZED
 │   ├── position.go           # Position tracking 🚀 OPTIMIZED
 │   └── position_builder.go   # Position lifecycle
+│   └── trade_outcome.go       # Trade outcome metrics 🔥 NEW
 ├── api/                       # REST API server
 │   ├── server.go             # API routes and handlers 🚀 OPTIMIZED
 │   ├── strategy.go           # Strategy endpoints 🚀 OPTIMIZED
@@ -148,7 +164,7 @@ nofx/
 ---
 
 
-## 4. NOFX Feedback Mechanism Benchmark
+## 4. NOFX+ Learning Systems Benchmark
 ### NOFX+: AI Trading That Actually Learns
 
 #### 📊 The Performance
@@ -160,26 +176,28 @@ nofx/
 - 📉 **0.19** Profit Factor (losing $5 for every $1 made)
 - 📉 **27.9%** max drawdown
 
-**With NOFX+ Feedback Analysis** (Enabled at cycle 156):
+**With NOFX+ LLM-Evolve Feedback** (Enabled at cycle 156):
 - 📈 **+11.6%** total return (**+39.5% improvement**)
 - 📈 **66.7%** win rate (**+91% improvement**)
 - 📈 **3.35** Profit Factor (making $3.35 for every $1 lost)
 - 📈 **4.9%** max drawdown (**82% reduction**)
 - 📈 **ETHUSDT**: 100% win rate (3/3 trades)
 
-**With NOFX+ Feedback Analysis + Prompt Evolution** (Enabled at cycle 34):
+**With NOFX+ Feedback + Prompt Evolution** (Enabled at cycle 34):
 - 📈 **+12.5%** total return (**+7.6% improvement than Feedback Analysis only**)
 - 📈 **61.5%** win rate
 - 📈 **6.13** Profit Factor (**+183% improvement than Feedback Analysis only**)
 - 📈 **4.3%** max drawdown (**12% reduction than Feedback Analysis only**)
 - 📈 **BNBUSDT & DOGEUSDT**: 100% win rate (5/5 trades)
 
-### The NOFX+ Feedback System
-We introduced a **feedback analysis mechanism** that:
-1. **Analyzes every trade**
-2. **Identifies why trades fail** (using volume, OI, spread analysis)
+### The NOFX+ Learning Stack (What Changed)
+We introduced a **LLM-evolve learning stack** that:
+1. **Analyzes every trade** with microstructure-aware evidence
+2. **Explains failures** via deterministic failure analysis
 3. **Calibrates thresholds dynamically** (no more magic numbers)
-4. **Provides actionable feedback** to the AI every 10 cycles
+4. **Evolves prompt variants** to improve decision quality over time
+5. **Feeds calibrated thresholds** back into the decision context
+6. **Optimizes risk controls** via the factor optimizer (inner-loop tuning)
 
 ### The Results
 ```json
@@ -247,10 +265,25 @@ We introduced a **feedback analysis mechanism** that:
 ## 6. Trade Failure Analysis & Feedback Loop
 
 ### System Overview
-**Data-driven failure analysis replaces magic numbers:**
 
 ```
-Historical Trades (20+)
+Trading Execution
+    ↓
+Trader.DoCycle()
+    ↓
+Calculate Stats & Historical Trades (20+)
+    ↓
+Check: TotalTrades >= MinDecisionsForFeedback?
+    ↓ YES
+Analyze winning/losing patterns
+    ↓
+FeedbackGenerator.Generate(LLM)Feedback
+    ↓
+Return FeedbackAnalysis & Actionable Recommendations
+    ↓
+Store in lastFeedback & save to disk
+    ↓
+PromptOptimizer uses feedback to evolve prompts
         ↓
    Trade Outcome Metrics
    (volume, OI, spread, depth)
@@ -259,11 +292,10 @@ Historical Trades (20+)
    (Find optimal thresholds)
         ↓
    Calibrated Thresholds
-        ↓
-   Analyze New Trades
-   (Why did it fail?)
-        ↓
-   Actionable Recommendations
+    ↓
+Compliance Tracking
+    ↓
+Next decision uses evolved prompt
 ```
 
 ---
@@ -294,33 +326,29 @@ Historical Trades (20+)
 
 ### 8.1 How to Find Unused Code
 
-**Method 1: Use `staticcheck`**
+**Method 1: Use `make lint`**
 ```bash
-go install honnef.co/go/tools/cmd/staticcheck@latest
-staticcheck ./...
-
-# Look for:
-# - U1000: unused function
-# - U1001: unused variable
-# - U1002: unused constant
-```
-
-**Method 2: Use `golangci-lint`**
-```bash
-brew install golangci-lint  # macOS
-# or: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-
-golangci-lint run --enable=unused,deadcode,structcheck,varcheck
-golangci-lint run --enable=unused > unused_report.txt
-```
-
-**Method 3: Manual Audit**
-```bash
-# Find all exported functions
-grep -rn "^func [A-Z]" --include="*.go" . > all_functions.txt
+# Run linter to find unused code
+make lint
+# Check output for "unused" warnings
 ```
 
 ### 8.2 Complete Audit Script
+**Method 1: Use `make lint`**
+```bash
+# Run linter to find unused code
+make lint
+# Check output for "unused" warnings
+# Check output for "staticcheck" warnings
+# Check output for "errcheck" warnings
+```
+**Method 2: Use `make fmt`**
+```bash
+# Run formatter to format code
+make fmt
+# Check for any formatting issues
+```
+**Method 3: Custom Audit Script**
 ```bash
 #!/bin/bash
 # audit_unused.sh
@@ -347,14 +375,16 @@ echo "Found $total functions"
 ### Quick Start (5 Minutes)
 ```bash
 # 1. Clone repository
-git clone https://github.com/yourusername/nofx-plus.git
-cd nofx-plus
+git clone https://github.com/yourusername/nofxplus.git
+cd nofxplus
 
 # 2. Setup configuration
 cp .env.example .env
 # Edit with your API keys
 
 # 3. Start
+make clean
+go clean --cache
 make build
 make build-frontend
 make run                 # Start backend
@@ -369,12 +399,23 @@ open http://localhost:3000
 ## 10. Contributing
 
 ### Areas Needing Improvement
-1. **More exchange integrations** (Kraken, Coinbase, etc.)
-2. **Additional microstructure indicators**
-3. **Enhanced feedback strategy**
-4. **Advanced machine learning models**
-5. **Enhanced frontend visualizations**
-6. **More comprehensive testing**
+1. **Architecture refactoring for modularity**
+2. **Enhanced code quality, design pattern, and documentation**
+3. **More comprehensive testing**
+4. **More exchange integrations** (Kraken, Coinbase, etc.)
+5. **Additional microstructure indicators**
+6. **Advanced machine learning models**
+
+### Core Team
+
+##### **NOFX+**
+- **Jeffee Hsiung** - [jeffeehsiung](https://github.com/jeffeehsiung) - Lead Developer & Architect
+**NOFX+ is built upon the groundbreaking work of the NOFX team, enhanced with production hardening, market microstructure intelligence, and adaptive learning algorithms developed through extensive backtesting and real trading experience.**
+
+##### **NOFX Team**
+- **Original NOFX development team** (see [NOFX GitHub](https://github.com/nofxaios))
+- **Tinkle** - [@Web3Tinkle](https://x.com/Web3Tinkle)
+- **Official Twitter** - [@nofx_official](https://x.com/nofx_official)
 
 ### Contribution Guidelines
 ```bash
