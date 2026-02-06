@@ -27,6 +27,8 @@
 8. [Code Audit & Unused Functions](#8-code-audit--unused-functions)
 9. [Getting Started](#9-getting-started)
 10. [Contributing](#10-contributing)
+11. [Screenshots](#11-screenshots)
+12. [NoFx Original Repo](#12-nofx-original-repo)
 
 ---
 
@@ -444,6 +446,25 @@ git checkout -b feature/your-feature
 
 ---
 
+## NoFx+ Screenshots
+
+### Live Traders w/ Prompt Variant Evolution & Feedback Analysis Display
+| Live Prompt Variants & Feedback | Concised Feedback Embedded in UserPrompt |
+|:---:|:---:|
+| <img src="screenshots/config-w-feedback-prompt.jpeg" width="400" alt="Traders - Prompt Variants & Feedback Buttons"/> | <img src="screenshots/dashboard-w-feedback.jpeg" width="400" alt="Traders - Concised Feedback Embedded in UserPrompt"/> |
+
+### Backtest
+| Backtest Feedback | Backtest Prompt Lab |
+|:---:|:---:|
+| <img src="screenshots/backtesst-template-feedback.png" width="400" alt="Feedback"/> | <img src="screenshots/backtest-prompt-lab.png" width="400" alt="Backtest Prompt Lab"/> |
+
+| Backtest Result + Feedback + Prompt Variants |
+|:---:|
+| <img src="screenshots/backtest-w-feedback-promptevo.jpeg" width="400" alt="Backtest Monthly Result"/> |
+
+
+---
+
 ## 📄 License
 
 MIT License - See [LICENSE](LICENSE) file for details.
@@ -456,7 +477,7 @@ Built upon the groundbreaking work of the **NOFX team**, enhanced with productio
 
 
 ---
-
+## 12. NOFX Original Repo
 # 🚀 Original NOFX (shout out to the team!)
 
 ---
