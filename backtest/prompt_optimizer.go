@@ -223,6 +223,9 @@ func (po *PromptOptimizer) SaveVariantToDB(variant *PromptVariant) error {
 	if po.Storage == nil || po.RunID == "" {
 		return nil // Skip if storage not configured
 	}
+	if err := po.Storage.EnsureRunExists(po.RunID); err != nil {
+		return err
+	}
 
 	metrics := po.PerformanceData[variant.ID]
 	if metrics == nil {

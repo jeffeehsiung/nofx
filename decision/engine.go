@@ -796,16 +796,6 @@ func (e *StrategyEngine) FetchQuantData(symbol string) (*QuantData, error) {
 						// Success - return external API data (new format)
 						return newApiResp.Data, nil
 					}
-
-					// Try old format (http://nofxaios.com:30006 used "code": 0)
-					var oldApiResp struct {
-						Code int        `json:"code"`
-						Data *QuantData `json:"data"`
-					}
-					if err := json.Unmarshal(body, &oldApiResp); err == nil && oldApiResp.Code == 0 {
-						// Success - return external API data (old format)
-						return oldApiResp.Data, nil
-					}
 				}
 			}
 		}

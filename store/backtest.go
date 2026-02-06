@@ -302,6 +302,19 @@ func (s *BacktestStore) SaveRunMetadata(meta *RunMetadata) error {
 	return err
 }
 
+// EnsureRunExists guarantees a minimal backtest_runs row for FK integrity.
+func (s *BacktestStore) EnsureRunExists(runID string) error {
+	if runID == "" {
+		return nil
+	}
+	_, err := s.db.Exec(`
+		INSERT INTO backtest_runs (run_id)
+		VALUES (?)
+		ON CONFLICT(run_id) DO NOTHING
+	`, runID)
+	return err
+}
+
 // LoadRunMetadata loads run metadata
 func (s *BacktestStore) LoadRunMetadata(runID string) (*RunMetadata, error) {
 	var (

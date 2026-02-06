@@ -358,28 +358,11 @@ func fetchOITop() ([]OIPosition, error) {
 		if len(newResponse.Data.Positions) == 0 {
 			return nil, fmt.Errorf("OI Top position list is empty")
 		}
-		log.Printf("✓ Successfully fetched %d OI Top coins (time range: %s, type: %s)",
-			len(newResponse.Data.Positions), newResponse.Data.TimeRange, newResponse.Data.RankType)
-		return newResponse.Data.Positions, nil
-	}
-
-	// Try old format (http://nofxaios.com:30006 used "code": 0)
-	var oldResponse OITopAPIResponse
-	if err := json.Unmarshal(body, &oldResponse); err != nil {
-		return nil, fmt.Errorf("OI Top JSON parsing failed: %w", err)
-	}
-
-	if oldResponse.Code != 0 {
-		return nil, fmt.Errorf("OI Top API returned error code: %d", oldResponse.Code)
-	}
-
-	if len(oldResponse.Data.Positions) == 0 {
-		return nil, fmt.Errorf("OI Top position list is empty")
 	}
 
 	log.Printf("✓ Successfully fetched %d OI Top coins (time range: %s, type: %s)",
-		len(oldResponse.Data.Positions), oldResponse.Data.TimeRange, oldResponse.Data.RankType)
-	return oldResponse.Data.Positions, nil
+		len(newResponse.Data.Positions), newResponse.Data.TimeRange, newResponse.Data.RankType)
+	return newResponse.Data.Positions, nil
 }
 
 // GetOITopSymbols retrieves OI Top coin symbol list
