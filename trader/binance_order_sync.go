@@ -87,6 +87,9 @@ func (t *FuturesTrader) SyncOrdersFromBinance(traderID string, exchangeID string
 		logger.Infof("  ⚠️ Failed to get commission symbols: %v, falling back to positions", err)
 		// Fallback: only sync symbols with active positions
 		changedSymbols = t.getPositionSymbols()
+	} else if len(changedSymbols) == 0 {
+		logger.Infof("  ⚠️ Commission history returned no symbols, falling back to positions")
+		changedSymbols = t.getPositionSymbols()
 	}
 
 	if len(changedSymbols) == 0 {
