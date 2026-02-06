@@ -176,14 +176,14 @@ nofx/
 - 📉 **0.19** Profit Factor (losing $5 for every $1 made)
 - 📉 **27.9%** max drawdown
 
-**With NOFX+ LLM-Evolve Feedback** (Enabled at cycle 156):
+**With NOFX+ Feedback** (Enabled at cycle 156):
 - 📈 **+11.6%** total return (**+39.5% improvement**)
 - 📈 **66.7%** win rate (**+91% improvement**)
 - 📈 **3.35** Profit Factor (making $3.35 for every $1 lost)
 - 📈 **4.9%** max drawdown (**82% reduction**)
 - 📈 **ETHUSDT**: 100% win rate (3/3 trades)
 
-**With NOFX+ Feedback + Prompt Evolution** (Enabled at cycle 34):
+**With NOFX+ LLM-Evolve Feedback + System Prompt Evolution** (Enabled at cycle 34):
 - 📈 **+12.5%** total return (**+7.6% improvement than Feedback Analysis only**)
 - 📈 **61.5%** win rate
 - 📈 **6.13** Profit Factor (**+183% improvement than Feedback Analysis only**)
@@ -208,7 +208,7 @@ We introduced a **LLM-evolve learning stack** that:
     "profit_factor": "+3,263%",
     "max_drawdown": "-85%",
     "avg_win_size": "+150%",
-    "avg_loss_size": "-40%"
+    "avg_loss_size": "-20%"
   }
 }
 ```
