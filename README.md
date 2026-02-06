@@ -374,6 +374,8 @@ echo "Found $total functions"
 
 > ⚠️ **Important Data Source Update**: The original NOFX data pooling API (`http://nofxaios.com:30006/api`) is no longer accessible. NOFX+ implements a **Binance + Coinglass + DIY method** for reliable market data, Open Interest (OI), and quantitative metrics.
 
+> 💡 **Recommended Workflow**: **Run a backtest first before starting live trading**. Live trading will load strategy parameters from your backtest results if available. Starting without a backtest means creating a fresh strategy from scratch, requiring **~1 week of live trading data** before the feedback mechanism can optimize your strategy, and **even longer for prompt evolution** to take effect. This is because we need sufficient behavioral data to statistically optimize your strategy and decision thresholds.
+
 ### Quick Start (5 Minutes)
 ```bash
 # 1. Clone repository
