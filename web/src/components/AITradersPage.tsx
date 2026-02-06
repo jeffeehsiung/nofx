@@ -144,6 +144,11 @@ function truncateAddress(address: string, startLen = 6, endLen = 4): string {
   return `${address.slice(0, startLen)}...${address.slice(-endLen)}`
 }
 
+type TraderSettings = {
+  enableFeedback: boolean
+  enablePromptEvolution: boolean
+}
+
 export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
   const { language } = useLanguage()
   const { user, token } = useAuth()
@@ -157,6 +162,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
   const [editingExchange, setEditingExchange] = useState<string | null>(null)
   const [editingTrader, setEditingTrader] = useState<any>(null)
   const [settingsTrader, setSettingsTrader] = useState<any>(null)
+  const [settingsInitial, setSettingsInitial] = useState<TraderSettings | null>(null)
   const [allModels, setAllModels] = useState<AIModel[]>([])
   const [allExchanges, setAllExchanges] = useState<Exchange[]>([])
   const [supportedModels, setSupportedModels] = useState<AIModel[]>([])
@@ -401,8 +407,11 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         strategy_id: data.strategy_id,
         initial_balance: data.initial_balance,
         scan_interval_minutes: data.scan_interval_minutes,
+        trading_mode: data.trading_mode,
         is_cross_margin: data.is_cross_margin,
         show_in_competition: data.show_in_competition,
+        enable_feedback: data.enable_feedback,
+        enable_prompt_evolution: data.enable_prompt_evolution,
       }
 
       console.log('🔥 handleSaveEditTrader - data:', data)
@@ -421,6 +430,60 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     } catch (error) {
       console.error('Failed to update trader:', error)
       toast.error(t('updateTraderFailed', language))
+    }
+  }
+
+  const handleOpenSettingsModal = async (trader: TraderInfo) => {
+    setSettingsTrader(trader)
+    setShowSettingsModal(true)
+    setSettingsInitial(null)
+    try {
+      const config = await api.getTraderConfig(trader.trader_id)
+      setSettingsInitial({
+        enableFeedback: config.enable_feedback ?? true,
+        enablePromptEvolution: config.enable_prompt_evolution ?? true,
+      })
+    } catch (error) {
+      console.error('Failed to fetch trader config for settings:', error)
+      toast.error(t('getTraderConfigFailed', language))
+    }
+  }
+
+  const handleSaveTraderSettings = async (
+    traderId: string,
+    settings: TraderSettings
+  ) => {
+    try {
+      const config = await api.getTraderConfig(traderId)
+      const request: CreateTraderRequest = {
+        name: config.trader_name,
+        ai_model_id: config.ai_model,
+        exchange_id: config.exchange_id,
+        strategy_id: config.strategy_id,
+        initial_balance: config.initial_balance,
+        scan_interval_minutes: config.scan_interval_minutes,
+        trading_mode: config.trading_mode,
+        is_cross_margin: config.is_cross_margin,
+        show_in_competition: config.show_in_competition,
+        enable_feedback: settings.enableFeedback,
+        enable_prompt_evolution: settings.enablePromptEvolution,
+        btc_eth_leverage: config.btc_eth_leverage,
+        altcoin_leverage: config.altcoin_leverage,
+        trading_symbols: config.trading_symbols,
+        custom_prompt: config.custom_prompt,
+        override_base_prompt: config.override_base_prompt,
+        system_prompt_template: config.system_prompt_template,
+        use_coin_pool: config.use_coin_pool,
+        use_oi_top: config.use_oi_top,
+      }
+
+      await api.updateTrader(traderId, request)
+      toast.success(language === 'zh' ? '设置已保存' : 'Settings saved')
+      await mutateTraders()
+    } catch (error) {
+      console.error('Failed to update trader settings:', error)
+      toast.error(t('updateTraderFailed', language))
+      throw error
     }
   }
 
@@ -1418,8 +1481,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
 
                     <button
                       onClick={() => {
-                        setSettingsTrader(trader)
-                        setShowSettingsModal(true)
+                        handleOpenSettingsModal(trader)
                       }}
                       className="px-2 md:px-3 py-1.5 md:py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105 flex items-center gap-1 whitespace-nowrap"
                       style={{
@@ -1538,14 +1600,14 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
           isOpen={showSettingsModal}
           traderId={settingsTrader.trader_id}
           traderName={settingsTrader.trader_name}
+          initialSettings={settingsInitial || undefined}
           onClose={() => {
             setShowSettingsModal(false)
             setSettingsTrader(null)
+            setSettingsInitial(null)
           }}
           onSave={async (settings) => {
-            console.log('Trader settings:', settingsTrader.trader_id, settings)
-            // TODO: Save settings to backend when API is implemented
-            toast.success(language === 'zh' ? '设置已保存' : 'Settings saved')
+            await handleSaveTraderSettings(settingsTrader.trader_id, settings)
           }}
         />
       )}

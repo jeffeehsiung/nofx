@@ -420,6 +420,9 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	if st != nil {
 		if err := at.promptOptimizer.LoadState(config.ID); err != nil {
 			logger.Infof("[%s] No saved optimizer state found, starting fresh", config.Name)
+		} else {
+			// Ensure live config overrides stored state toggle
+			at.promptOptimizer.Config.EnableOptimization = optimizerConfig.EnableOptimization
 		}
 	}
 

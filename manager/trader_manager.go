@@ -661,6 +661,8 @@ func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg 
 		TradingMode:           traderCfg.TradingMode, // Trading mode/variant
 		IsCrossMargin:         traderCfg.IsCrossMargin,
 		ShowInCompetition:     traderCfg.ShowInCompetition,
+		EnableFeedback:        traderCfg.EnableFeedback,
+		EnablePromptEvolution: traderCfg.EnablePromptEvolution,
 		StrategyConfig:        strategyConfig,
 	}
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"time"
 
 	"nofx/store"
@@ -226,6 +227,12 @@ func appendTradeEventDB(runID string, event TradeEvent) error {
 }
 
 func loadTradeEventsDB(runID string) ([]TradeEvent, error) {
+	// Check if runID is a trader ID (UUID format) - if so, load from live trading tables
+	if isTraderID(runID) {
+		return loadTradeEventsFromLiveTrading(runID)
+	}
+
+	// Otherwise load from backtest_trades table
 	rows, err := persistenceDB.Query(`
 		SELECT ts, symbol, action, side, qty, price, fee, slippage, order_value, realized_pnl, leverage, cycle, position_after, liquidation, note
 		FROM backtest_trades WHERE run_id = ? ORDER BY ts ASC
@@ -243,6 +250,143 @@ func loadTradeEventsDB(runID string) ([]TradeEvent, error) {
 		events = append(events, event)
 	}
 	return events, rows.Err()
+}
+
+// isTraderID checks if the ID looks like a trader UUID (contains hyphens)
+func isTraderID(id string) bool {
+	// UUIDs have format: 8-4-4-4-12 (e.g., "550e8400-e29b-41d4-a716-446655440000")
+	// Backtest run IDs have format: "bt_20260122_093934"
+	uuidPattern := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	return uuidPattern.MatchString(id)
+}
+
+// loadTradeEventsFromLiveTrading loads trade events from live trading tables (trader_orders + trader_fills)
+func loadTradeEventsFromLiveTrading(traderID string) ([]TradeEvent, error) {
+	// Query trader_orders joined with trader_fills to get complete trade information
+	// We use fills as the primary source since they represent actual executions
+	rows, err := persistenceDB.Query(`
+		SELECT
+			f.created_at,
+			f.symbol,
+			o.order_action,
+			f.side,
+			f.quantity,
+			f.price,
+			f.commission,
+			f.realized_pnl,
+			o.leverage,
+			f.quote_quantity
+		FROM trader_fills f
+		JOIN trader_orders o ON f.order_id = o.id
+		WHERE f.trader_id = ?
+		ORDER BY f.created_at ASC
+	`, traderID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query live trading fills: %w", err)
+	}
+	defer rows.Close()
+
+	events := make([]TradeEvent, 0)
+	cycle := 0
+	positionTracker := make(map[string]float64) // symbol -> current position
+
+	for rows.Next() {
+		var (
+			createdAt     time.Time
+			symbol        string
+			orderAction   string
+			side          string
+			quantity      float64
+			price         float64
+			commission    float64
+			realizedPnL   float64
+			leverage      int
+			quoteQuantity float64
+		)
+
+		if err := rows.Scan(&createdAt, &symbol, &orderAction, &side, &quantity, &price, &commission, &realizedPnL, &leverage, &quoteQuantity); err != nil {
+			return nil, fmt.Errorf("failed to scan fill: %w", err)
+		}
+
+		// Determine action (open/close/add) from order_action
+		var action string
+		posKey := symbol
+
+		switch orderAction {
+		case "OPEN_LONG", "OPEN_SHORT":
+			action = "open"
+			if positionTracker[posKey] != 0 {
+				action = "add" // Adding to existing position
+			}
+			cycle++
+		case "CLOSE_LONG", "CLOSE_SHORT", "STOP_LOSS", "TAKE_PROFIT":
+			action = "close"
+		case "ADD_LONG", "ADD_SHORT":
+			action = "add"
+			cycle++
+		default:
+			// Fallback: if there's realized PnL, it's likely a close
+			if realizedPnL != 0 {
+				action = "close"
+			} else if positionTracker[posKey] != 0 {
+				action = "add"
+				cycle++
+			} else {
+				action = "open"
+				cycle++
+			}
+		}
+
+		// Update position tracker
+		switch action {
+		case "open", "add":
+			if side == "BUY" {
+				positionTracker[posKey] += quantity
+			} else {
+				positionTracker[posKey] -= quantity
+			}
+		case "close":
+			if side == "BUY" {
+				positionTracker[posKey] += quantity // Buy to close short
+			} else {
+				positionTracker[posKey] -= quantity // Sell to close long
+			}
+		}
+
+		// Determine position side from order action or current position
+		positionSide := "long"
+		if orderAction == "OPEN_SHORT" || orderAction == "CLOSE_SHORT" || orderAction == "ADD_SHORT" {
+			positionSide = "short"
+		} else if positionTracker[posKey] < 0 {
+			positionSide = "short"
+		}
+
+		event := TradeEvent{
+			Timestamp:       createdAt.UnixMilli(),
+			Symbol:          symbol,
+			Action:          action,
+			Side:            positionSide,
+			Quantity:        quantity,
+			Price:           price,
+			Fee:             commission,
+			Slippage:        0, // Not tracked in live trading fills
+			OrderValue:      quoteQuantity,
+			RealizedPnL:     realizedPnL,
+			Leverage:        leverage,
+			Cycle:           cycle,
+			PositionAfter:   positionTracker[posKey],
+			LiquidationFlag: false,
+			Note:            fmt.Sprintf("live:%s", orderAction),
+		}
+
+		events = append(events, event)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating fills: %w", err)
+	}
+
+	return events, nil
 }
 
 func saveMetricsDB(runID string, metrics *Metrics) error {

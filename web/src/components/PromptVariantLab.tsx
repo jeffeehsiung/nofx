@@ -414,14 +414,14 @@ export function PromptVariantLab({ type, resourceId }: PromptVariantLabProps) {
                       {language === 'zh' ? '总收益率' : 'Return'}
                     </span>
                     <span className={variant.totalReturn >= 0 ? 'text-green-400' : 'text-red-400'}>
-                      {(variant.totalReturn * 100).toFixed(2)}%
+                      {variant.totalReturn.toFixed(2)}%
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-slate-400">
                       {language === 'zh' ? '胜率' : 'Win Rate'}
                     </span>
-                    <span className="text-white">{(variant.winRate * 100).toFixed(1)}%</span>
+                    <span className="text-white">{variant.winRate.toFixed(1)}%</span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-slate-400">

@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"nofx/logger"
 	"strings"
 	"time"
@@ -15,21 +16,23 @@ type TraderStore struct {
 
 // Trader trader configuration
 type Trader struct {
-	ID                  string    `json:"id"`
-	UserID              string    `json:"user_id"`
-	Name                string    `json:"name"`
-	AIModelID           string    `json:"ai_model_id"`
-	ExchangeID          string    `json:"exchange_id"`
-	StrategyID          string    `json:"strategy_id"` // Associated strategy ID
-	InitialBalance      float64   `json:"initial_balance"`
-	ScanIntervalMinutes int       `json:"scan_interval_minutes"`
-	TradingMode         string    `json:"trading_mode"` // Trading mode: "" (default/balanced), "aggressive", "conservative", "scalping"
-	IsRunning           bool      `json:"is_running"`
-	IsCrossMargin       bool      `json:"is_cross_margin"`
-	ShowInCompetition   bool      `json:"show_in_competition"` // Whether to show in competition page
-	PaperTrading        bool      `json:"paper_trading"`       // Paper trading / simulation mode
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	ID                    string    `json:"id"`
+	UserID                string    `json:"user_id"`
+	Name                  string    `json:"name"`
+	AIModelID             string    `json:"ai_model_id"`
+	ExchangeID            string    `json:"exchange_id"`
+	StrategyID            string    `json:"strategy_id"` // Associated strategy ID
+	InitialBalance        float64   `json:"initial_balance"`
+	ScanIntervalMinutes   int       `json:"scan_interval_minutes"`
+	TradingMode           string    `json:"trading_mode"` // Trading mode: "" (default/balanced), "aggressive", "conservative", "scalping"
+	IsRunning             bool      `json:"is_running"`
+	IsCrossMargin         bool      `json:"is_cross_margin"`
+	ShowInCompetition     bool      `json:"show_in_competition"`     // Whether to show in competition page
+	PaperTrading          bool      `json:"paper_trading"`           // Paper trading / simulation mode
+	EnableFeedback        bool      `json:"enable_feedback"`         // Enable feedback analysis
+	EnablePromptEvolution bool      `json:"enable_prompt_evolution"` // Enable prompt evolution
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
 
 	// Following fields are deprecated, kept for backward compatibility, new traders should use StrategyID
 	BTCETHLeverage       int    `json:"btc_eth_leverage,omitempty"`
@@ -62,6 +65,8 @@ func (s *TraderStore) initTables() error {
         scan_interval_minutes INTEGER DEFAULT 3,
 		trading_mode TEXT DEFAULT '',
         is_running BOOLEAN DEFAULT 0,
+		enable_feedback BOOLEAN DEFAULT 1,
+		enable_prompt_evolution BOOLEAN DEFAULT 1,
         btc_eth_leverage INTEGER DEFAULT 5,
         altcoin_leverage INTEGER DEFAULT 5,
         trading_symbols TEXT DEFAULT '',
@@ -102,7 +107,38 @@ func (s *TraderStore) initTables() error {
 		logger.Infof("Trader FK migration skipped (likely already migrated): %v", err)
 	}
 
+	// Add potentially missing columns (backward compatibility)
+	s.addColumnIfNotExists("traders", "enable_feedback", "BOOLEAN DEFAULT 1")
+	s.addColumnIfNotExists("traders", "enable_prompt_evolution", "BOOLEAN DEFAULT 1")
+
 	return nil
+}
+
+func (s *TraderStore) addColumnIfNotExists(table, column, definition string) {
+	rows, err := s.db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt interface{}
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			continue
+		}
+		if name == column {
+			return // Column already exists
+		}
+	}
+
+	if _, err := s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition)); err != nil {
+		return
+	}
 }
 
 // migrateTradersRemoveFK removes FOREIGN KEY constraint from traders table if it exists
@@ -130,7 +166,10 @@ func (s *TraderStore) migrateTradersRemoveFK() error {
 			exchange_id TEXT NOT NULL,
 			initial_balance REAL NOT NULL,
 			scan_interval_minutes INTEGER DEFAULT 3,
+			trading_mode TEXT DEFAULT '',
 			is_running BOOLEAN DEFAULT 0,
+			enable_feedback BOOLEAN DEFAULT 1,
+			enable_prompt_evolution BOOLEAN DEFAULT 1,
 			btc_eth_leverage INTEGER DEFAULT 5,
 			altcoin_leverage INTEGER DEFAULT 5,
 			trading_symbols TEXT DEFAULT '',
@@ -141,6 +180,8 @@ func (s *TraderStore) migrateTradersRemoveFK() error {
 			system_prompt_template TEXT DEFAULT 'gen1',
 			is_cross_margin BOOLEAN DEFAULT 1,
 			strategy_id TEXT DEFAULT '',
+			show_in_competition BOOLEAN DEFAULT 1,
+			paper_trading BOOLEAN DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
@@ -148,10 +189,12 @@ func (s *TraderStore) migrateTradersRemoveFK() error {
 		-- Copy data from old table
 		INSERT OR IGNORE INTO traders_new
 		SELECT id, user_id, name, ai_model_id, exchange_id, initial_balance,
-		       scan_interval_minutes, is_running, btc_eth_leverage, altcoin_leverage,
-		       trading_symbols, use_coin_pool, use_oi_top, custom_prompt,
-		       override_base_prompt, system_prompt_template, is_cross_margin,
-		       COALESCE(strategy_id, ''), created_at, updated_at
+		       scan_interval_minutes, '' as trading_mode, is_running,
+		       1 as enable_feedback, 1 as enable_prompt_evolution,
+		       btc_eth_leverage, altcoin_leverage, trading_symbols, use_coin_pool,
+		       use_oi_top, custom_prompt, override_base_prompt, system_prompt_template,
+		       is_cross_margin, COALESCE(strategy_id, ''), 1 as show_in_competition,
+		       0 as paper_trading, created_at, updated_at
 		FROM traders;
 
 		-- Drop old table
@@ -188,12 +231,15 @@ func (s *TraderStore) decrypt(encrypted string) string {
 func (s *TraderStore) Create(trader *Trader) error {
 	_, err := s.db.Exec(`
 		INSERT INTO traders (id, user_id, name, ai_model_id, exchange_id, strategy_id, initial_balance,
-		                     scan_interval_minutes, trading_mode, is_running, is_cross_margin, show_in_competition, paper_trading,
+		                     scan_interval_minutes, trading_mode, is_running, enable_feedback, enable_prompt_evolution,
+		                     is_cross_margin, show_in_competition, paper_trading,
 		                     btc_eth_leverage, altcoin_leverage, trading_symbols, use_coin_pool,
 		                     use_oi_top, custom_prompt, override_base_prompt, system_prompt_template)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, trader.ID, trader.UserID, trader.Name, trader.AIModelID, trader.ExchangeID, trader.StrategyID,
-		trader.InitialBalance, trader.ScanIntervalMinutes, trader.TradingMode, trader.IsRunning, trader.IsCrossMargin, trader.ShowInCompetition, trader.PaperTrading,
+		trader.InitialBalance, trader.ScanIntervalMinutes, trader.TradingMode, trader.IsRunning,
+		trader.EnableFeedback, trader.EnablePromptEvolution,
+		trader.IsCrossMargin, trader.ShowInCompetition, trader.PaperTrading,
 		trader.BTCETHLeverage, trader.AltcoinLeverage, trader.TradingSymbols, trader.UseCoinPool,
 		trader.UseOITop, trader.CustomPrompt, trader.OverrideBasePrompt, trader.SystemPromptTemplate)
 	return err
@@ -203,7 +249,8 @@ func (s *TraderStore) Create(trader *Trader) error {
 func (s *TraderStore) List(userID string) ([]*Trader, error) {
 	rows, err := s.db.Query(`
 		SELECT id, user_id, name, ai_model_id, exchange_id, COALESCE(strategy_id, ''),
-		       initial_balance, scan_interval_minutes, COALESCE(trading_mode, ''), is_running, COALESCE(is_cross_margin, 1),
+		       initial_balance, scan_interval_minutes, COALESCE(trading_mode, ''), is_running,
+		       COALESCE(enable_feedback, 1), COALESCE(enable_prompt_evolution, 1), COALESCE(is_cross_margin, 1),
 		       COALESCE(show_in_competition, 1), COALESCE(paper_trading, 0),
 		       COALESCE(btc_eth_leverage, 5), COALESCE(altcoin_leverage, 5), COALESCE(trading_symbols, ''),
 		       COALESCE(use_coin_pool, 0), COALESCE(use_oi_top, 0), COALESCE(custom_prompt, ''),
@@ -222,7 +269,8 @@ func (s *TraderStore) List(userID string) ([]*Trader, error) {
 		var createdAt, updatedAt string
 		err := rows.Scan(
 			&t.ID, &t.UserID, &t.Name, &t.AIModelID, &t.ExchangeID, &t.StrategyID,
-			&t.InitialBalance, &t.ScanIntervalMinutes, &t.TradingMode, &t.IsRunning, &t.IsCrossMargin,
+			&t.InitialBalance, &t.ScanIntervalMinutes, &t.TradingMode, &t.IsRunning,
+			&t.EnableFeedback, &t.EnablePromptEvolution, &t.IsCrossMargin,
 			&t.ShowInCompetition, &t.PaperTrading,
 			&t.BTCETHLeverage, &t.AltcoinLeverage, &t.TradingSymbols,
 			&t.UseCoinPool, &t.UseOITop, &t.CustomPrompt, &t.OverrideBasePrompt,
@@ -263,6 +311,8 @@ func (s *TraderStore) Update(trader *Trader) error {
 			initial_balance = CASE WHEN ? > 0 THEN ? ELSE initial_balance END,
 			scan_interval_minutes = CASE WHEN ? > 0 THEN ? ELSE scan_interval_minutes END,
 			trading_mode = ?,
+			enable_feedback = ?,
+			enable_prompt_evolution = ?,
 			is_cross_margin = ?,
 			show_in_competition = ?,
 			paper_trading = ?,
@@ -272,6 +322,7 @@ func (s *TraderStore) Update(trader *Trader) error {
 		trader.InitialBalance, trader.InitialBalance,
 		trader.ScanIntervalMinutes, trader.ScanIntervalMinutes,
 		trader.TradingMode,
+		trader.EnableFeedback, trader.EnablePromptEvolution,
 		trader.IsCrossMargin, trader.ShowInCompetition, trader.PaperTrading,
 		trader.ID, trader.UserID)
 	return err
@@ -312,7 +363,8 @@ func (s *TraderStore) GetFullConfig(userID, traderID string) (*TraderFullConfig,
 	err := s.db.QueryRow(`
 		SELECT
 			t.id, t.user_id, t.name, t.ai_model_id, t.exchange_id, COALESCE(t.strategy_id, ''),
-			t.initial_balance, t.scan_interval_minutes, t.is_running, COALESCE(t.is_cross_margin, 1),
+			t.initial_balance, t.scan_interval_minutes, t.is_running,
+			COALESCE(t.enable_feedback, 1), COALESCE(t.enable_prompt_evolution, 1), COALESCE(t.is_cross_margin, 1),
 			COALESCE(t.show_in_competition, 1), COALESCE(t.paper_trading, 0),
 			COALESCE(t.btc_eth_leverage, 5), COALESCE(t.altcoin_leverage, 5), COALESCE(t.trading_symbols, ''),
 			COALESCE(t.use_coin_pool, 0), COALESCE(t.use_oi_top, 0), COALESCE(t.custom_prompt, ''),
@@ -330,7 +382,8 @@ func (s *TraderStore) GetFullConfig(userID, traderID string) (*TraderFullConfig,
 		WHERE t.id = ? AND t.user_id = ?
 	`, traderID, userID).Scan(
 		&trader.ID, &trader.UserID, &trader.Name, &trader.AIModelID, &trader.ExchangeID, &trader.StrategyID,
-		&trader.InitialBalance, &trader.ScanIntervalMinutes, &trader.IsRunning, &trader.IsCrossMargin,
+		&trader.InitialBalance, &trader.ScanIntervalMinutes, &trader.IsRunning,
+		&trader.EnableFeedback, &trader.EnablePromptEvolution, &trader.IsCrossMargin,
 		&trader.ShowInCompetition, &trader.PaperTrading,
 		&trader.BTCETHLeverage, &trader.AltcoinLeverage, &trader.TradingSymbols,
 		&trader.UseCoinPool, &trader.UseOITop, &trader.CustomPrompt, &trader.OverrideBasePrompt,

@@ -399,7 +399,7 @@ func (lr *llmFeedbackResponse) UnmarshalJSON(data []byte) error {
 		FailurePatterns    interface{} `json:"failure_patterns"`
 		KeyInsights        []string    `json:"key_insights"`
 		RecommendedActions []string    `json:"recommended_actions"`
-		MarketConditions   string      `json:"market_conditions"`
+		MarketConditions   interface{} `json:"market_conditions"` // Can be string or array
 	}{
 		KeyInsights:        []string{},
 		RecommendedActions: []string{},
@@ -469,8 +469,24 @@ func (lr *llmFeedbackResponse) UnmarshalJSON(data []byte) error {
 		lr.RecommendedActions = aux.RecommendedActions
 	}
 
-	// Handle market_conditions
-	lr.MarketConditions = aux.MarketConditions
+	// Handle market_conditions - can be string or array
+	if aux.MarketConditions != nil {
+		switch v := aux.MarketConditions.(type) {
+		case string:
+			lr.MarketConditions = v
+		case []interface{}:
+			// Join array elements into comma-separated string
+			conditions := make([]string, 0, len(v))
+			for _, item := range v {
+				if str, ok := item.(string); ok {
+					conditions = append(conditions, str)
+				}
+			}
+			lr.MarketConditions = strings.Join(conditions, ", ")
+		default:
+			lr.MarketConditions = ""
+		}
+	}
 
 	return nil
 }
