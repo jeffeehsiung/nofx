@@ -428,6 +428,12 @@ func GetOIRankingData(baseURL, authKey string, duration string, limit int) (*OIR
 		limit = 20
 	}
 
+	// Migrate legacy base URL if needed
+	if strings.Contains(baseURL, "nofxaios.com:30006") {
+		baseURL = strings.Replace(baseURL, "http://nofxaios.com:30006", "https://nofxos.ai", 1)
+		log.Printf("🔄 Migrated OI ranking base URL to new base: https://nofxos.ai")
+	}
+
 	result := &OIRankingData{
 		Duration:  duration,
 		FetchedAt: time.Now(),
