@@ -163,9 +163,10 @@ type AutoTrader struct {
 	promptOptimizer *backtest.PromptOptimizer // Evolves prompt strategies based on performance
 	promptVariantID string                    // Current prompt variant ID
 	// Analysis systems (same as backtests)
-	feedbackGenerator *backtest.FeedbackGenerator // Analyzes trading feedback
-	factorOptimizer   *backtest.FactorOptimizer   // Analyzes performance factors
-	complianceTracker *backtest.ComplianceTracker // Tracks compliance metrics
+	feedbackGenerator   *backtest.FeedbackGenerator   // Analyzes trading feedback
+	factorOptimizer     *backtest.FactorOptimizer     // Analyzes performance factors
+	complianceTracker   *backtest.ComplianceTracker   // Tracks compliance metrics
+	thresholdCalibrator *decision.ThresholdCalibrator // Persistent calibrator that learns from trade history
 
 	// Feedback cycle management (avoid regenerating every cycle)
 	lastFeedback      *backtest.FeedbackAnalysis // Last generated feedback analysis
@@ -442,7 +443,9 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	at.feedbackCycle = 0
 	// Initialize default failure thresholds (will be calibrated over time)
 	at.failureThresholds = decision.DefaultFailureThresholds()
-	logger.Infof("✓ [%s] Analysis systems initialized: Feedback, Factor Optimizer, Compliance Tracker", config.Name)
+	// Initialize persistent threshold calibrator (learns from trade history)
+	at.thresholdCalibrator = decision.NewThresholdCalibrator()
+	logger.Infof("✓ [%s] Analysis systems initialized: Feedback, Factor Optimizer, Compliance Tracker, ThresholdCalibrator", config.Name)
 
 	return at, nil
 }
@@ -1236,33 +1239,31 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 							at.name, stats.TotalTrades, feedback.TotalReturnPct, feedback.WinRate)
 						// Calibrate failure thresholds from trading history (every 5 trades)
 						if stats.TotalTrades >= 10 {
-							if recentTrades, err := at.store.Position().GetRecentTrades(at.id, 500); err == nil && len(recentTrades) > 0 {
-								calibrator := decision.NewThresholdCalibrator()
-								outcomes := make([]decision.TradeOutcome, 0, len(recentTrades))
-								for _, trade := range recentTrades {
-									holdingMinutes := 0
-									if trade.ExitTime > 0 && trade.EntryTime > 0 && trade.ExitTime > trade.EntryTime {
-										holdingMinutes = int(time.Unix(trade.ExitTime, 0).Sub(time.Unix(trade.EntryTime, 0)).Minutes())
+							// Load recent trade outcomes (these were saved with real microstructure data during position close)
+							if recentOutcomes, err := at.store.TradeOutcome().GetRecent(500); err == nil && len(recentOutcomes) > 0 {
+								// Convert store.TradeOutcome to decision.TradeOutcome
+								outcomes := make([]decision.TradeOutcome, len(recentOutcomes))
+								for i, outcome := range recentOutcomes {
+									outcomes[i] = decision.TradeOutcome{
+										Symbol:            outcome.Symbol,
+										Profitable:        outcome.Profitable,
+										VolumeAtEntry:     outcome.VolumeAtEntry,
+										OIAtEntry:         outcome.OIAtEntry,
+										VolumeDuringTrade: outcome.VolumeDuringTrade,
+										OIDuringTrade:     outcome.OIDuringTrade,
+										EntrySpread:       outcome.EntrySpread,
+										ExitSpread:        outcome.ExitSpread,
+										EntryDepth:        outcome.EntryDepth,
+										ExitDepth:         outcome.ExitDepth,
+										HoldingMinutes:    outcome.HoldingMinutes,
+										PnLPct:            outcome.PnLPct,
 									}
-									outcomes = append(outcomes, decision.TradeOutcome{
-										Symbol:            trade.Symbol,
-										Profitable:        trade.RealizedPnL > 0,
-										VolumeAtEntry:     1.0,
-										OIAtEntry:         0.0,
-										VolumeDuringTrade: 0.0,
-										OIDuringTrade:     0.0,
-										EntrySpread:       0.0,
-										ExitSpread:        0.0,
-										EntryDepth:        0.0,
-										ExitDepth:         0.0,
-										HoldingMinutes:    holdingMinutes,
-										PnLPct:            trade.PnLPct,
-									})
 								}
-								if err := calibrator.CalibrateFromHistory(outcomes); err == nil {
-									at.failureThresholds = calibrator.ApplyToAnalyzer()
-									logger.Infof("📊 [%s] Calibrated failure thresholds from %d trades: %s",
-										at.name, len(outcomes), calibrator.GetCalibrationSummary())
+								// Use persistent calibrator (reuse across cycles)
+								if err := at.thresholdCalibrator.CalibrateFromHistory(outcomes); err == nil {
+									at.failureThresholds = at.thresholdCalibrator.ApplyToAnalyzer()
+									logger.Infof("📊 [%s] Calibrated failure thresholds from %d trades (with microstructure data): %s",
+										at.name, len(outcomes), at.thresholdCalibrator.GetCalibrationSummary())
 								}
 							}
 						}
@@ -1333,20 +1334,21 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 					ctx.ComplianceFeedback = at.complianceTracker.GetComplianceFeedback(strategyLang)
 				}
 
-				// Attach calibrated thresholds (learned risk detection thresholds)
-				if at.failureThresholds != (decision.FailureThresholds{}) {
-					calibrator := decision.NewThresholdCalibrator()
-					calibrator.WeakVolumeThreshold = at.failureThresholds.WeakVolumeThreshold
-					calibrator.WeakOIThreshold = at.failureThresholds.WeakOIThreshold
-					calibrator.PrematureVolumeThreshold = at.failureThresholds.PrematureVolumeThreshold
-					calibrator.PrematureOIThreshold = at.failureThresholds.PrematureOIThreshold
-					calibrator.VolumeDecayThreshold = at.failureThresholds.VolumeDecayThreshold
-					calibrator.OIDecayThreshold = at.failureThresholds.OIDecayThreshold
-					calibrator.SpreadWorseningMultiple = at.failureThresholds.SpreadWorseningMultiple
-					calibrator.DepthReductionThreshold = at.failureThresholds.DepthReductionThreshold
-					calibrator.SampleSize = stats.TotalTrades
-					ctx.CalibratedThresholds = calibrator.GetThresholdsForLLM(strategyLang, 35)
-				}
+			}
+			// Attach calibrated thresholds (learned risk detection thresholds)
+			// Use persistent calibrator (avoids recreating every cycle)
+			if at.failureThresholds != (decision.FailureThresholds{}) {
+				// Update persistent calibrator's thresholds with current learned values
+				at.thresholdCalibrator.WeakVolumeThreshold = at.failureThresholds.WeakVolumeThreshold
+				at.thresholdCalibrator.WeakOIThreshold = at.failureThresholds.WeakOIThreshold
+				at.thresholdCalibrator.PrematureVolumeThreshold = at.failureThresholds.PrematureVolumeThreshold
+				at.thresholdCalibrator.PrematureOIThreshold = at.failureThresholds.PrematureOIThreshold
+				at.thresholdCalibrator.VolumeDecayThreshold = at.failureThresholds.VolumeDecayThreshold
+				at.thresholdCalibrator.OIDecayThreshold = at.failureThresholds.OIDecayThreshold
+				at.thresholdCalibrator.SpreadWorseningMultiple = at.failureThresholds.SpreadWorseningMultiple
+				at.thresholdCalibrator.DepthReductionThreshold = at.failureThresholds.DepthReductionThreshold
+				at.thresholdCalibrator.SampleSize = stats.TotalTrades
+				ctx.CalibratedThresholds = at.thresholdCalibrator.GetThresholdsForLLM(strategyLang, 35)
 			}
 
 			logger.Infof("📈 [%s] Trading stats: %d trades, %.1f%% win rate, PF=%.2f, Sharpe=%.2f, DD=%.1f%%",

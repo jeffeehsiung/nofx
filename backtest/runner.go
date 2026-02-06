@@ -66,11 +66,12 @@ type Runner struct {
 	lockStop chan struct{}
 
 	// Feedback loop components
-	feedbackGenerator *FeedbackGenerator
-	feedbackConfig    FeedbackConfig
-	lastFeedback      *FeedbackAnalysis
-	feedbackCycle     int // Track when feedback was last generated
-	failureThresholds decision.FailureThresholds
+	feedbackGenerator   *FeedbackGenerator
+	feedbackConfig      FeedbackConfig
+	lastFeedback        *FeedbackAnalysis
+	feedbackCycle       int // Track when feedback was last generated
+	failureThresholds   decision.FailureThresholds
+	thresholdCalibrator *decision.ThresholdCalibrator // Persistent calibrator that learns from trade history
 
 	// Advanced optimization systems
 	promptOptimizer   *PromptOptimizer
@@ -217,31 +218,33 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	promptOptimizer := NewPromptOptimizerWithAI(&defaultPrompt, promptOptimizationConfig, client, cfg.RunID, cfg.Storage)
 	factorOptimizer := NewFactorOptimizer(&riskcontrolConfig, DefaultFactorOptimizerConfig())
 	complianceTracker := NewComplianceTracker(DefaultComplianceConfig())
+	thresholdCalibrator := decision.NewThresholdCalibrator()
 
 	r := &Runner{
-		cfg:               cfg,
-		feed:              feed,
-		account:           account,
-		strategyEngine:    strategyEngine,
-		decisionLogDir:    dLogDir,
-		mcpClient:         client,
-		status:            RunStateCreated,
-		state:             state,
-		pauseCh:           make(chan struct{}, 1),
-		resumeCh:          make(chan struct{}, 1),
-		stopCh:            make(chan struct{}, 1),
-		doneCh:            make(chan struct{}),
-		createdAt:         createdAt,
-		aiCache:           aiCache,
-		cachePath:         cachePath,
-		feedbackGenerator: feedbackGenerator,
-		feedbackConfig:    feedbackConfig,
-		feedbackCycle:     0,
-		failureThresholds: failureThresholds,
-		promptOptimizer:   promptOptimizer,
-		factorOptimizer:   factorOptimizer,
-		complianceTracker: complianceTracker,
-		excursions:        make(map[string]*positionExcursion),
+		cfg:                 cfg,
+		feed:                feed,
+		account:             account,
+		strategyEngine:      strategyEngine,
+		decisionLogDir:      dLogDir,
+		mcpClient:           client,
+		status:              RunStateCreated,
+		state:               state,
+		pauseCh:             make(chan struct{}, 1),
+		resumeCh:            make(chan struct{}, 1),
+		stopCh:              make(chan struct{}, 1),
+		doneCh:              make(chan struct{}),
+		createdAt:           createdAt,
+		aiCache:             aiCache,
+		cachePath:           cachePath,
+		feedbackGenerator:   feedbackGenerator,
+		feedbackConfig:      feedbackConfig,
+		feedbackCycle:       0,
+		failureThresholds:   failureThresholds,
+		thresholdCalibrator: thresholdCalibrator,
+		promptOptimizer:     promptOptimizer,
+		factorOptimizer:     factorOptimizer,
+		complianceTracker:   complianceTracker,
+		excursions:          make(map[string]*positionExcursion),
 		// SMART: Initialize tracking fields for adaptive position sizing and confidence thresholds
 		symbolStats:      make(map[string]*SymbolStats),
 		modelPerformance: &ModelPerformance{},
@@ -1018,19 +1021,18 @@ func (r *Runner) buildDecisionContext(ts int64, marketData map[string]*market.Da
 			ctx.ComplianceFeedback = r.complianceTracker.GetComplianceFeedback(lang)
 
 			// Attach calibrated thresholds (learned risk detection thresholds)
-			// Create calibrator from current thresholds
-			calibrator := decision.NewThresholdCalibrator()
-			calibrator.WeakVolumeThreshold = r.failureThresholds.WeakVolumeThreshold
-			calibrator.WeakOIThreshold = r.failureThresholds.WeakOIThreshold
-			calibrator.PrematureVolumeThreshold = r.failureThresholds.PrematureVolumeThreshold
-			calibrator.PrematureOIThreshold = r.failureThresholds.PrematureOIThreshold
-			calibrator.VolumeDecayThreshold = r.failureThresholds.VolumeDecayThreshold
-			calibrator.OIDecayThreshold = r.failureThresholds.OIDecayThreshold
-			calibrator.SpreadWorseningMultiple = r.failureThresholds.SpreadWorseningMultiple
-			calibrator.DepthReductionThreshold = r.failureThresholds.DepthReductionThreshold
+			// Use persistent calibrator (avoids recreating every cycle)
+			r.thresholdCalibrator.WeakVolumeThreshold = r.failureThresholds.WeakVolumeThreshold
+			r.thresholdCalibrator.WeakOIThreshold = r.failureThresholds.WeakOIThreshold
+			r.thresholdCalibrator.PrematureVolumeThreshold = r.failureThresholds.PrematureVolumeThreshold
+			r.thresholdCalibrator.PrematureOIThreshold = r.failureThresholds.PrematureOIThreshold
+			r.thresholdCalibrator.VolumeDecayThreshold = r.failureThresholds.VolumeDecayThreshold
+			r.thresholdCalibrator.OIDecayThreshold = r.failureThresholds.OIDecayThreshold
+			r.thresholdCalibrator.SpreadWorseningMultiple = r.failureThresholds.SpreadWorseningMultiple
+			r.thresholdCalibrator.DepthReductionThreshold = r.failureThresholds.DepthReductionThreshold
 			// Use callCount as approximation for number of trades
-			calibrator.SampleSize = callCount
-			ctx.CalibratedThresholds = calibrator.GetThresholdsForLLM(lang, 35)
+			r.thresholdCalibrator.SampleSize = callCount
+			ctx.CalibratedThresholds = r.thresholdCalibrator.GetThresholdsForLLM(lang, 35)
 		}
 	}
 
