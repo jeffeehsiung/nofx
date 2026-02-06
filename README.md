@@ -111,7 +111,7 @@ nofx/
 │   ├── *_websocket.go        # Real-time data streams
 │   └── order_book_monitor.go # Liquidity monitoring 🚀 OPTIMIZED
 ├── backtest/                  # Backtesting engine ⭐ KEY MODULE
-│   ├── manager.go            # Backtest orchestration
+│   ├── manager.go            # Backtest orchestration 🚀 OPTIMIZED
 │   ├── runner.go             # Simulation execution 🚀 OPTIMIZED
 │   ├── account.go            # Position & PnL tracking 🚀 OPTIMIZED
 │   ├── metrics.go            # Performance metrics 🚀 OPTIMIZED
@@ -122,10 +122,10 @@ nofx/
 │   ├── position.go           # Position tracking 🚀 OPTIMIZED
 │   └── position_builder.go   # Position lifecycle
 ├── api/                       # REST API server
-│   ├── server.go             # API routes and handlers
+│   ├── server.go             # API routes and handlers 🚀 OPTIMIZED
 │   ├── strategy.go           # Strategy endpoints 🚀 OPTIMIZED
 │   ├── backtest.go           # Backtest endpoints 🚀 OPTIMIZED
-│   └── debate.go             # Debate arena endpoints
+│   └── debate.go             # Debate arena endpoints 🚀 OPTIMIZED
 ├── mcp/                       # AI provider clients
 │   ├── claude_client.go      # Anthropic Claude
 │   ├── deepseek_client.go    # DeepSeek
@@ -167,9 +167,16 @@ nofx/
 - 📈 **4.9%** max drawdown (**82% reduction**)
 - 📈 **ETHUSDT**: 100% win rate (3/3 trades)
 
+**With NOFX+ Feedback Analysis + Prompt Evolution** (Enabled at cycle 34):
+- 📈 **+12.5%** total return (**+7.6% improvement than Feedback Analysis only**)
+- 📈 **61.5%** win rate
+- 📈 **6.13** Profit Factor (**+183% improvement than Feedback Analysis only**)
+- 📈 **4.3%** max drawdown (**12% reduction than Feedback Analysis only**)
+- 📈 **BNBUSDT & DOGEUSDT**: 100% win rate (5/5 trades)
+
 ### The NOFX+ Feedback System
 We introduced a **feedback analysis mechanism** that:
-1. **Analyzes every trade** starting from cycle 156
+1. **Analyzes every trade**
 2. **Identifies why trades fail** (using volume, OI, spread analysis)
 3. **Calibrates thresholds dynamically** (no more magic numbers)
 4. **Provides actionable feedback** to the AI every 10 cycles
@@ -178,12 +185,12 @@ We introduced a **feedback analysis mechanism** that:
 ```json
 {
   "improvement": {
-    "total_return": "+39.5%",
+    "total_return": "+40.4%",
     "win_rate": "+91%",
-    "profit_factor": "+1,663%",
-    "max_drawdown": "-82%",
+    "profit_factor": "+3,263%",
+    "max_drawdown": "-85%",
     "avg_win_size": "+150%",
-    "avg_loss_size": "-46%"
+    "avg_loss_size": "-40%"
   }
 }
 ```

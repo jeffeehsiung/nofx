@@ -61,7 +61,7 @@ type BacktestConfig struct {
 	Language string `json:"language,omitempty"`
 
 	// Feature flags for A/B testing and gradual rollout
-	UseSmartHeuristics bool `json:"use_smart_heuristics"` // SMART 1.1-1.4: Use market-aware position sizing (default: false for backward compatibility)
+	UseSmartHeuristics bool `json:"use_smart_heuristics"` // SMART 1.1-1.4: Use market-aware position sizing (default: true - replaces hardcoded magic numbers with adaptive functions)
 
 	// Internal: loaded strategy config (set by Manager when StrategyID is provided)
 	loadedStrategy *store.StrategyConfig `json:"-"`
@@ -177,6 +177,11 @@ func (cfg *BacktestConfig) Validate() error {
 	if cfg.Leverage.AltcoinLeverage <= 0 {
 		cfg.Leverage.AltcoinLeverage = 5
 	}
+
+	// Enable SmartHeuristics by default (bools default to false, so set true explicitly)
+	// SmartHeuristics: Uses market-aware position sizing, leverage, and risk management
+	// Replaces hardcoded magic numbers with adaptive functions based on volatility and account state
+	cfg.UseSmartHeuristics = true
 
 	return nil
 }

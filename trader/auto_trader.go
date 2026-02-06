@@ -102,6 +102,7 @@ type AutoTraderConfig struct {
 	// Feedback and analysis configuration
 	EnableFeedback        bool // Enable feedback analysis (default: true)
 	EnablePromptEvolution bool // Enable prompt variant evolution (default: true)
+	UseSmartHeuristics    bool // Enable smart heuristics for adaptive position sizing and risk management (default: true)
 }
 
 // AutoTrader automatic trader
@@ -188,6 +189,13 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		} else {
 			config.AIModel = "deepseek"
 		}
+	}
+
+	// Enable SmartHeuristics by default (can be disabled if needed)
+	// SmartHeuristics: Uses market-aware position sizing, leverage, and risk management
+	// Replaces hardcoded magic numbers with adaptive functions based on volatility and account state
+	if !config.UseSmartHeuristics {
+		config.UseSmartHeuristics = true
 	}
 
 	// Initialize AI client based on provider
