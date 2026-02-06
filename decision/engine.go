@@ -1305,7 +1305,6 @@ func fixMissingQuotes(jsonStr string) string {
 func removeNumberThousandSeparators(jsonStr string) string {
 	// Remove thousand separators from JSON numbers: "price": 7,787 -> "price": 7787
 	// Only remove commas between digits when they're in numeric JSON value contexts
-	// (after : or [ and before } or , or ])
 	// Skip commas inside quoted strings - they're legitimate text separators
 
 	var result strings.Builder
@@ -1326,15 +1325,20 @@ func removeNumberThousandSeparators(jsonStr string) string {
 			i > 0 && i < len(jsonStr)-1 &&
 			jsonStr[i-1] >= '0' && jsonStr[i-1] <= '9' &&
 			jsonStr[i+1] >= '0' && jsonStr[i+1] <= '9' {
-			// Check if this looks like a number context (preceded by : or [ and followed by digit)
-			// This filters out commas in quoted reasoning text
+			// Check if this looks like a number context (preceded by : or [, with only whitespace/digits/commas in between)
 			foundNumberContext := false
-			for j := i - 2; j >= 0; j-- {
-				if jsonStr[j] == ':' || jsonStr[j] == '[' {
+			for j := i - 1; j >= 0; j-- {
+				ch := jsonStr[j]
+				if ch == ':' || ch == '[' {
 					foundNumberContext = true
 					break
 				}
-				if jsonStr[j] == '"' || jsonStr[j] == '}' {
+				// If we hit a quote or closing brace, we're not in number context
+				if ch == '"' || ch == '}' || ch == ']' {
+					break
+				}
+				// Only allow digits, commas, whitespace, and minus sign in number context
+				if !(ch >= '0' && ch <= '9') && ch != ',' && ch != ' ' && ch != '\t' && ch != '-' && ch != '+' && ch != '.' {
 					break
 				}
 			}

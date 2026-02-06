@@ -157,6 +157,7 @@ func (s *Server) setupRoutes() {
 			protected.GET("/traders/:id/prompt-variants", s.handleGetTraderPromptVariants)
 			protected.GET("/traders/:id/prompt-performance", s.handleGetTraderPromptPerformance)
 			protected.POST("/traders/:id/prompt-activate", s.handleActivateTraderPromptVariant)
+			protected.GET("/traders/:id/analysis", s.handleGetTraderAnalysis)
 			protected.POST("/traders/:id/sync-balance", s.handleSyncBalance)
 			protected.POST("/traders/:id/close-position", s.handleClosePosition)
 			protected.PUT("/traders/:id/competition", s.handleToggleCompetition)
@@ -1231,6 +1232,35 @@ func (s *Server) handleActivateTraderPromptVariant(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Variant activated successfully"})
+}
+
+// handleGetTraderAnalysis returns feedback and prompt optimization analysis for a trader
+func (s *Server) handleGetTraderAnalysis(c *gin.Context) {
+	traderID := c.Param("id")
+	if traderID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Trader ID is required"})
+		return
+	}
+
+	trader, err := s.traderManager.GetTrader(traderID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Trader not found: %v", err)})
+		return
+	}
+
+	// Get feedback analysis from trader
+	feedback := trader.GetFeedbackAnalysis()
+	if feedback == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"trader_id": traderID,
+			"message":   "No analysis available yet - trader needs more trading cycles to generate feedback",
+			"timestamp": time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	// Return feedback analysis directly - struct fields will be marshaled as snake_case by json tags
+	c.JSON(http.StatusOK, feedback)
 }
 
 // handleToggleCompetition Toggle trader competition visibility
@@ -2730,27 +2760,6 @@ func (s *Server) handleStatistics(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, stats)
-}
-
-// handleCompetition Competition overview (compare all traders)
-func (s *Server) handleCompetition(c *gin.Context) {
-	userID := c.GetString("user_id")
-
-	// Ensure user's traders are loaded into memory
-	err := s.traderManager.LoadUserTradersFromStore(s.store, userID)
-	if err != nil {
-		logger.Infof("⚠️ Failed to load traders for user %s: %v", userID, err)
-	}
-
-	competition, err := s.traderManager.GetCompetitionData()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to get competition data: %v", err),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, competition)
 }
 
 // handleEquityHistory Return rate historical data

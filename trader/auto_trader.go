@@ -2093,6 +2093,9 @@ func (at *AutoTrader) GetFeedbackAnalysis() *backtest.FeedbackAnalysis {
 	if at.feedbackGenerator == nil {
 		return nil
 	}
+	if at.lastFeedback != nil {
+		return at.lastFeedback
+	}
 	var analysis *backtest.FeedbackAnalysis
 	var err error
 	if at.mcpClient != nil {
