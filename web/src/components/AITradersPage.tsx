@@ -1647,24 +1647,9 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
               ×
             </button>
             <div className="mb-4">
-              <div className="flex items-center justify-between gap-4">
-                <h2 className="text-xl font-bold" style={{ color: '#EAECEF' }}>
-                  {language === 'zh' ? '交易分析' : 'Trading Analysis'}
-                </h2>
-                {traders && traders.length > 1 && (
-                  <select
-                    value={analysisTraderId}
-                    onChange={(e) => setAnalysisTraderId(e.target.value)}
-                    className="px-3 py-2 bg-slate-800 border border-slate-700 rounded text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
-                  >
-                    {traders.map((trader) => (
-                      <option key={trader.trader_id} value={trader.trader_id}>
-                        {trader.trader_id.substring(0, 20)}... ({trader.ai_model})
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
+              <h2 className="text-xl font-bold" style={{ color: '#EAECEF' }}>
+                {language === 'zh' ? '交易分析' : 'Trading Analysis'}
+              </h2>
             </div>
             <LiveTraderAnalysis traderId={analysisTraderId} />
           </div>
