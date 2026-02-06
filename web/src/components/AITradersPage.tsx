@@ -214,13 +214,6 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     { refreshInterval: 5000 }
   )
 
-  // Auto-select the first trader for analysis when traders are loaded
-  useEffect(() => {
-    if (traders && traders.length > 0 && !analysisTraderId) {
-      setAnalysisTraderId(traders[0].trader_id)
-    }
-  }, [traders, analysisTraderId])
-
   // 加载AI模型和交易所配置
   useEffect(() => {
     const loadConfigs = async () => {
