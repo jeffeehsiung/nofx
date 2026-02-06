@@ -27,7 +27,7 @@
 8. [Code Audit & Unused Functions](#8-code-audit--unused-functions)
 9. [Getting Started](#9-getting-started)
 10. [Contributing](#10-contributing)
-11. [Screenshots](#11-screenshots)
+11. [NoFx+ Screenshots](#11-nofx-screenshots)
 12. [NoFx Original Repo](#12-nofx-original-repo)
 
 ---
@@ -446,7 +446,7 @@ git checkout -b feature/your-feature
 
 ---
 
-## NoFx+ Screenshots
+## 11. NoFx+ Screenshots
 
 ### Live Traders w/ Prompt Variant Evolution & Feedback Analysis Display
 | Live Prompt Variants & Feedback | Concised Feedback Embedded in UserPrompt |
