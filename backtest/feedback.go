@@ -653,6 +653,9 @@ func (fg *FeedbackGenerator) buildLLMFullAnalysisPrompt(analysis *FeedbackAnalys
 
 	sb.WriteString("\n# Task\n")
 	sb.WriteString("Derive success and failure patterns from outcomes and microstructure. Provide insights and recommendations for next trades.\n")
+	sb.WriteString("For market_conditions: Analyze the trading data and describe the market regime characteristics (trend, volatility, liquidity) in 30-80 chars.\n")
+	sb.WriteString("Even with 10-20 trades, you have enough data to identify patterns. Do NOT return 'insufficient data' messages.\n")
+	sb.WriteString("Only return empty string if literally no trades/outcomes are provided above.\n")
 	sb.WriteString("Output JSON only with fields: success_patterns, failure_patterns, key_insights, recommended_actions, market_conditions.\n")
 
 	return sb.String()
@@ -1074,7 +1077,11 @@ func (fg *FeedbackGenerator) GenerateFeedback() (*FeedbackAnalysis, error) {
 	}
 
 	// Market regime analysis
-	if !llmApplied || analysis.MarketConditions == "" {
+	// Filter out unhelpful LLM responses like "Insufficient data..."
+	if !llmApplied || analysis.MarketConditions == "" ||
+		strings.Contains(strings.ToLower(analysis.MarketConditions), "insufficient") ||
+		strings.Contains(strings.ToLower(analysis.MarketConditions), "zero") ||
+		len(analysis.MarketConditions) < 20 {
 		analysis.MarketConditions = fg.analyzeMarketConditions(metrics, outcomes)
 	}
 

@@ -154,7 +154,7 @@ func NewRunner(cfg BacktestConfig, mcpClient mcp.AIClient) (*Runner, error) {
 	strategyEngine := decision.NewStrategyEngine(strategyConfig)
 	// Initialize feedback loop with smart defaults
 	enableFeedback := cfg.EnableFeedback
-	enableLLM := enableFeedback && client != nil
+	enableLLM := enableFeedback && cfg.EnableLLMFeedback && client != nil
 	feedbackConfig := SmartFeedbackConfig(cfg.DecisionCadenceNBars, enableFeedback, enableLLM)
 	feedbackGenerator := NewFeedbackGenerator(cfg.RunID, cfg.InitialBalance, feedbackConfig)
 

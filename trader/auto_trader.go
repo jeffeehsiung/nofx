@@ -101,6 +101,7 @@ type AutoTraderConfig struct {
 
 	// Feedback and analysis configuration
 	EnableFeedback        bool // Enable feedback analysis (default: true)
+	EnableLLMFeedback     bool // Enable LLM-assisted feedback analysis (default: true)
 	EnablePromptEvolution bool // Enable prompt variant evolution (default: true)
 	UseSmartHeuristics    bool // Enable smart heuristics for adaptive position sizing and risk management (default: true)
 }
@@ -429,7 +430,7 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	// Initialize analysis systems (feedback, factor, compliance) for live trading
 	// Use smart defaults based on trader configuration
 	enableFeedback := config.EnableFeedback
-	enableLLM := enableFeedback && mcpClient != nil
+	enableLLM := enableFeedback && config.EnableLLMFeedback && mcpClient != nil
 	feedbackConfig := backtest.SmartFeedbackConfig(
 		20, // Default 20-bar cadence for live trading
 		enableFeedback,

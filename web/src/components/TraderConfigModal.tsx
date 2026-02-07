@@ -37,6 +37,7 @@ interface FormState {
   scan_interval_minutes: number
   initial_balance?: number
   enable_feedback: boolean
+  enable_llm_feedback: boolean
   enable_prompt_evolution: boolean
 }
 
@@ -70,6 +71,7 @@ export function TraderConfigModal({
     show_in_competition: true,
     scan_interval_minutes: 3,
     enable_feedback: true,
+    enable_llm_feedback: true,
     enable_prompt_evolution: true,
   })
   const [isSaving, setIsSaving] = useState(false)
@@ -111,6 +113,7 @@ export function TraderConfigModal({
         strategy_id: traderData.strategy_id || '',
         trading_mode: traderData.trading_mode || '',
         enable_feedback: traderData.enable_feedback ?? true,
+        enable_llm_feedback: traderData.enable_llm_feedback ?? true,
         enable_prompt_evolution: traderData.enable_prompt_evolution ?? true,
       })
     } else if (!isEditMode) {
@@ -124,6 +127,7 @@ export function TraderConfigModal({
         show_in_competition: true,
         scan_interval_minutes: 3,
         enable_feedback: true,
+        enable_llm_feedback: true,
         enable_prompt_evolution: true,
       })
     }
@@ -181,6 +185,7 @@ export function TraderConfigModal({
         show_in_competition: formData.show_in_competition,
         scan_interval_minutes: formData.scan_interval_minutes,
         enable_feedback: formData.enable_feedback,
+        enable_llm_feedback: formData.enable_llm_feedback,
         enable_prompt_evolution: formData.enable_prompt_evolution,
       }
 
@@ -535,6 +540,18 @@ export function TraderConfigModal({
                     />
                     <span className="text-sm text-[#EAECEF]">
                       {language === 'zh' ? '启用反馈分析' : 'Enable Feedback Analysis'}
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.enable_llm_feedback}
+                      onChange={(e) => handleInputChange('enable_llm_feedback', e.target.checked)}
+                      disabled={!formData.enable_feedback}
+                      className="accent-[#F0B90B] disabled:opacity-50"
+                    />
+                    <span className="text-sm text-[#EAECEF]">
+                      {language === 'zh' ? '启用LLM反馈分析' : 'Enable LLM Feedback'}
                     </span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">

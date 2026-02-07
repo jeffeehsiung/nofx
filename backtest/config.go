@@ -48,6 +48,7 @@ type BacktestConfig struct {
 	CacheAI               bool     `json:"cache_ai"`
 	ReplayOnly            bool     `json:"replay_only"`
 	EnableFeedback        bool     `json:"enable_feedback"`         // Enable feedback analysis
+	EnableLLMFeedback     bool     `json:"enable_llm_feedback"`     // Enable LLM-assisted feedback analysis
 	EnablePromptEvolution bool     `json:"enable_prompt_evolution"` // Enable prompt variant evolution
 
 	AICfg    AIConfig       `json:"ai"`

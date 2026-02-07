@@ -4,6 +4,7 @@ import { X, Settings } from 'lucide-react'
 
 interface TraderSettings {
   enableFeedback: boolean
+  enableLLMFeedback: boolean
   enablePromptEvolution: boolean
 }
 
@@ -24,6 +25,7 @@ export function TraderSettingsModal({
   onSave,
   initialSettings = {
     enableFeedback: true,
+    enableLLMFeedback: true,
     enablePromptEvolution: true,
   },
 }: TraderSettingsModalProps) {
@@ -103,6 +105,26 @@ export function TraderSettingsModal({
                 {language === 'zh'
                   ? '实时分析失败交易原因'
                   : 'Analyze failed trades in real-time'}
+              </div>
+            </div>
+          </label>
+
+          <label className="flex items-center gap-3 cursor-pointer p-3 rounded" style={{ background: '#1E2329' }}>
+            <input
+              type="checkbox"
+              checked={settings.enableLLMFeedback}
+              onChange={() => handleToggle('enableLLMFeedback')}
+              disabled={!settings.enableFeedback}
+              className="accent-[#F0B90B] disabled:opacity-50"
+            />
+            <div>
+              <div className="text-sm font-medium" style={{ color: '#EAECEF' }}>
+                {language === 'zh' ? '启用LLM反馈分析' : 'Enable LLM Feedback'}
+              </div>
+              <div className="text-xs mt-0.5" style={{ color: '#848E9C' }}>
+                {language === 'zh'
+                  ? '使用LLM生成更深入的交易反馈'
+                  : 'Use LLMs to generate deeper feedback insights'}
               </div>
             </div>
           </label>

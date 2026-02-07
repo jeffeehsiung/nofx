@@ -461,6 +461,7 @@ type CreateTraderRequest struct {
 	ShowInCompetition     *bool   `json:"show_in_competition"`     // Pointer type, nil means use default value true
 	PaperTrading          *bool   `json:"paper_trading"`           // Pointer type, nil means use default value false
 	EnableFeedback        *bool   `json:"enable_feedback"`         // Pointer type, nil means use default value true
+	EnableLLMFeedback     *bool   `json:"enable_llm_feedback"`     // Pointer type, nil means use default value true
 	EnablePromptEvolution *bool   `json:"enable_prompt_evolution"` // Pointer type, nil means use default value true
 	// The following fields are kept for backward compatibility, new version uses strategy config
 	BTCETHLeverage       int    `json:"btc_eth_leverage"`
@@ -598,6 +599,11 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 		enableFeedback = *req.EnableFeedback
 	}
 
+	enableLLMFeedback := true // Default to enable LLM feedback
+	if req.EnableLLMFeedback != nil {
+		enableLLMFeedback = *req.EnableLLMFeedback
+	}
+
 	enablePromptEvolution := true // Default to enable prompt evolution
 	if req.EnablePromptEvolution != nil {
 		enablePromptEvolution = *req.EnablePromptEvolution
@@ -733,6 +739,7 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 		ShowInCompetition:     showInCompetition,
 		PaperTrading:          paperTrading,
 		EnableFeedback:        enableFeedback,
+		EnableLLMFeedback:     enableLLMFeedback,
 		EnablePromptEvolution: enablePromptEvolution,
 		ScanIntervalMinutes:   scanIntervalMinutes,
 		IsRunning:             false,
@@ -779,6 +786,7 @@ type UpdateTraderRequest struct {
 	IsCrossMargin         *bool   `json:"is_cross_margin"`
 	ShowInCompetition     *bool   `json:"show_in_competition"`
 	EnableFeedback        *bool   `json:"enable_feedback"`
+	EnableLLMFeedback     *bool   `json:"enable_llm_feedback"`
 	EnablePromptEvolution *bool   `json:"enable_prompt_evolution"`
 	// The following fields are kept for backward compatibility, new version uses strategy config
 	BTCETHLeverage       int    `json:"btc_eth_leverage"`
@@ -836,6 +844,11 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 		enableFeedback = *req.EnableFeedback
 	}
 
+	enableLLMFeedback := existingTrader.EnableLLMFeedback // Keep original value
+	if req.EnableLLMFeedback != nil {
+		enableLLMFeedback = *req.EnableLLMFeedback
+	}
+
 	enablePromptEvolution := existingTrader.EnablePromptEvolution // Keep original value
 	if req.EnablePromptEvolution != nil {
 		enablePromptEvolution = *req.EnablePromptEvolution
@@ -890,6 +903,7 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 		IsCrossMargin:         isCrossMargin,
 		ShowInCompetition:     showInCompetition,
 		EnableFeedback:        enableFeedback,
+		EnableLLMFeedback:     enableLLMFeedback,
 		EnablePromptEvolution: enablePromptEvolution,
 		ScanIntervalMinutes:   scanIntervalMinutes,
 		IsRunning:             existingTrader.IsRunning, // Keep original value
@@ -2184,6 +2198,7 @@ func (s *Server) handleGetTraderConfig(c *gin.Context) {
 		"use_coin_pool":           traderConfig.UseCoinPool,
 		"use_oi_top":              traderConfig.UseOITop,
 		"enable_feedback":         traderConfig.EnableFeedback,
+		"enable_llm_feedback":     traderConfig.EnableLLMFeedback,
 		"enable_prompt_evolution": traderConfig.EnablePromptEvolution,
 		"show_in_competition":     traderConfig.ShowInCompetition,
 		"trading_mode":            traderConfig.TradingMode,

@@ -146,6 +146,7 @@ function truncateAddress(address: string, startLen = 6, endLen = 4): string {
 
 type TraderSettings = {
   enableFeedback: boolean
+  enableLLMFeedback: boolean
   enablePromptEvolution: boolean
 }
 
@@ -411,6 +412,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         is_cross_margin: data.is_cross_margin,
         show_in_competition: data.show_in_competition,
         enable_feedback: data.enable_feedback,
+        enable_llm_feedback: data.enable_llm_feedback,
         enable_prompt_evolution: data.enable_prompt_evolution,
       }
 
@@ -441,6 +443,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       const config = await api.getTraderConfig(trader.trader_id)
       setSettingsInitial({
         enableFeedback: config.enable_feedback ?? true,
+        enableLLMFeedback: config.enable_llm_feedback ?? true,
         enablePromptEvolution: config.enable_prompt_evolution ?? true,
       })
     } catch (error) {
@@ -466,6 +469,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         is_cross_margin: config.is_cross_margin,
         show_in_competition: config.show_in_competition,
         enable_feedback: settings.enableFeedback,
+        enable_llm_feedback: settings.enableLLMFeedback,
         enable_prompt_evolution: settings.enablePromptEvolution,
         btc_eth_leverage: config.btc_eth_leverage,
         altcoin_leverage: config.altcoin_leverage,

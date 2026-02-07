@@ -791,6 +791,7 @@ export function BacktestPage() {
     cacheAI: true,
     replayOnly: false,
     enableFeedback: true,
+    enableLLMFeedback: true,
     enablePromptEvolution: true,
     aiModelId: '',
     strategyId: '', // Optional: use saved strategy from Strategy Studio
@@ -972,6 +973,7 @@ export function BacktestPage() {
         cache_ai: formState.cacheAI,
         replay_only: formState.replayOnly,
         enable_feedback: formState.enableFeedback,
+        enable_llm_feedback: formState.enableLLMFeedback,
         enable_prompt_evolution: formState.enablePromptEvolution,
         ai_model_id: formState.aiModelId,
         language: detectedLang,
@@ -1616,6 +1618,16 @@ export function BacktestPage() {
                           className="accent-[#F0B90B]"
                         />
                         {language === 'zh' ? '启用反馈分析' : 'Enable Feedback'}
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer ml-4">
+                        <input
+                          type="checkbox"
+                          checked={formState.enableLLMFeedback}
+                          onChange={(e) => handleFormChange('enableLLMFeedback', e.target.checked)}
+                          disabled={!formState.enableFeedback}
+                          className="accent-[#F0B90B] disabled:opacity-50"
+                        />
+                        {language === 'zh' ? '启用LLM反馈分析' : 'Enable LLM Feedback'}
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer ml-4">
                         <input
