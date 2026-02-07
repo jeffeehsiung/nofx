@@ -686,9 +686,15 @@ func fixCommonJSONIssues(text string) string {
 	// Pattern: ,\s*} or ,\s*]
 	text = regexp.MustCompile(`,(\s*[}\]])`).ReplaceAllString(text, "$1")
 
-	// Remove thousands separators in numbers (e.g., "1,000" -> "1000")
-	// Pattern: digit, comma, three digits
-	text = regexp.MustCompile(`(\d),(\d{3})`).ReplaceAllString(text, "${1}${2}")
+	// Remove thousands separators in numbers (e.g., "1,000" -> "1000", "69,500-69,800" -> "69500-69800")
+	// Apply repeatedly to handle all comma groups (e.g., "1,000,000" needs 2 passes)
+	for {
+		before := text
+		text = regexp.MustCompile(`(\d),(\d{3})`).ReplaceAllString(text, "${1}${2}")
+		if before == text {
+			break
+		}
+	}
 
 	// Fix double colons (e.g., "key":: "value" -> "key": "value")
 	text = regexp.MustCompile(`:+`).ReplaceAllString(text, ":")
