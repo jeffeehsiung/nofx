@@ -71,11 +71,17 @@ build-frontend:
 
 # Run backend in development mode
 run:
+	@echo "🔨 Building backend..."
+	go build -o nofxplus
+	@echo "✅ Backend built: ./nofxplus"
 	@echo "🚀 Starting backend..."
 	go run main.go
 
 # Run frontend in development mode
 run-frontend:
+	@echo "🔨 Building frontend..."
+	cd web && npm run build
+	@echo "✅ Frontend built: ./web/dist"
 	@echo "🚀 Starting frontend dev server..."
 	cd web && npm run dev
 

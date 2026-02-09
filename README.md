@@ -389,27 +389,54 @@ echo "Found $total functions"
 
 > 💡 **Recommended Workflow**: **Run a backtest first before starting live trading**. Live trading will load strategy parameters from your backtest results if available. Starting without a backtest means creating a fresh strategy from scratch, requiring **~1 week of live trading data** before the feedback mechanism can optimize your strategy, and **even longer for prompt evolution** to take effect. This is because we need sufficient behavioral data to statistically optimize your strategy and decision thresholds.
 
-### Quick Start (5 Minutes)
+### Quick Start (Automated - 5 Minutes)
+
+**The easiest way - let our setup script handle everything:**
+
 ```bash
 # 1. Clone repository
 git clone https://github.com/jeffeehsiung/nofxplus.git
 cd nofxplus
 
-# 2. Setup configuration
-cp .env.example .env
-# Edit with your API keys
+# 2. Run automated setup (macOS/Linux)
+./setup.sh
 
-# 3. Start
-make clean
-go clean --cache
-make build
-make build-frontend
-make run                 # Start backend
-make run-frontend        # Start frontend
+# 3. Start the application
+make run                 # Backend
+make run-frontend        # Frontend (in another terminal)
 
-# 4. Access web interface
-open http://localhost:3000
+# 4. Open in browser
+http://localhost:3000
 ```
+
+That's it! The setup script will:
+- ✅ Check all prerequisites (Go, Node.js, TA-Lib)
+- ✅ Install dependencies
+- ✅ Generate encryption keys
+- ✅ Build backend & frontend
+- ✅ Verify everything is working (27 checks)
+- ✅ Show startup instructions
+
+### Manual Setup (Windows / Advanced Users)
+
+For detailed setup instructions, multiple OS options, Docker deployment, and troubleshooting:
+
+👉 **See [SETUP_GUIDE.md](SETUP_GUIDE.md)** for complete documentation
+
+### Access Your NOFX+ Instance
+
+Once running, open your browser:
+
+```
+http://localhost:3000
+```
+
+Then:
+1. **Configure AI Models** - Add your AI API keys (DeepSeek, OpenAI, Claude, etc.)
+2. **Configure Exchanges** - Set up Binance, Bybit, or other exchange credentials
+3. **Create Strategy** - Build your first trading strategy in Strategy Studio
+4. **Create Trader** - Combine AI model + Exchange + Strategy
+5. **Start Trading** - Launch your first trader!
 
 ---
 
