@@ -1,5 +1,11 @@
 # 🎓 NOFX+: Real-time Feedback AI Trading Platform - Developer Onboarding Guide
 
+> ⚠️ **Important**: This repository contains **NOFX+ (nofxplus)** - the production-hardened fork with enhancements. 
+> - **Local Setup** (`./setup.sh`): Runs **NOFX+ (your version)** with all enhancements
+> - **Docker Deployment** (`install.sh`): Pulls **original NOFX** from official repo (no nofxplus enhancements)
+> 
+> For NOFX+ features, use local setup. Docker is for official NOFX deployment.
+
 ## 🚀 From NOFX to NOFX+ - The Production Evolution
 
 **NOFX+ (nofxplus)** is a **production-hardened fork** of the original NOFX trading system that:

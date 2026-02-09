@@ -56,8 +56,8 @@ test-coverage:
 # Build backend binary
 build:
 	@echo "🔨 Building backend..."
-	go build -o nofx
-	@echo "✅ Backend built: ./nofx"
+	go build -o nofxplus
+	@echo "✅ Backend built: ./nofxplus"
 
 # Build frontend
 build-frontend:
