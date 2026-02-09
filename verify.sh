@@ -8,7 +8,8 @@
 # Usage: ./verify.sh
 ################################################################################
 
-set -e
+# Don't exit on errors - we want to continue checking and report all issues
+set +e
 
 # Color codes
 RED='\033[0;31m'
@@ -67,7 +68,7 @@ main() {
     print_header "System Prerequisites"
     
     if command_exists go; then
-        GO_VERSION=$(go version | grep -oP 'go\K[0-9.]+')
+        GO_VERSION=$(go version | sed -E 's/.*go([0-9.]+).*/\1/')
         if version_ge "$GO_VERSION" "1.21"; then
             check_pass "Go $GO_VERSION installed"
         else
@@ -78,7 +79,7 @@ main() {
     fi
     
     if command_exists node; then
-        NODE_VERSION=$(node -v | grep -oP 'v\K[0-9.]+')
+        NODE_VERSION=$(node -v | sed -E 's/v([0-9.]+).*/\1/')
         if version_ge "$NODE_VERSION" "18"; then
             check_pass "Node.js $NODE_VERSION installed"
         else
@@ -96,7 +97,7 @@ main() {
     fi
     
     if command_exists git; then
-        GIT_VERSION=$(git --version | grep -oP 'git version \K[0-9.]+')
+        GIT_VERSION=$(git --version | sed -E 's/.*version ([0-9.]+).*/\1/')
         check_pass "Git $GIT_VERSION installed"
     else
         check_fail "Git is not installed"
@@ -302,7 +303,7 @@ main() {
         echo ""
         check_info "To start the application:"
         echo "  1. Run: make run (backend)"
-        echo "  2. In another terminal: cd web && npm start (frontend)"
+        echo "  2. In another terminal: make run-frontend (frontend)"
         echo "  3. Open: http://localhost:3000"
     else
         echo ""

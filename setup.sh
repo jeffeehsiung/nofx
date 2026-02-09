@@ -326,7 +326,8 @@ generate_encryption_keys() {
     # Generate AES-256 encryption key (32-byte Base64)
     DATA_ENCRYPTION_KEY=$(openssl rand -base64 32 2>/dev/null)
     
-    # Generate RSA private key (2048-bit) and convert newlines to \n
+    # Generate RSA private key (2048-bit) in PKCS#1 format with escaped newlines for .env storage
+    # Use genrsa -traditional to get "BEGIN RSA PRIVATE KEY" format instead of PKCS#8
     RSA_KEY_TEMP=$(openssl genrsa 2048 2>/dev/null)
     RSA_PRIVATE_KEY=$(echo "$RSA_KEY_TEMP" | sed 's/$/\\n/' | tr -d '\n' | sed 's/\\n$//')
     
@@ -366,16 +367,19 @@ step_setup_environment() {
     
     # Update .env file with generated keys
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS sed syntax
+        # macOS sed syntax - need to use @ delimiter instead of | to handle backslashes in RSA key
         sed -i '' "s|your-jwt-secret-change-this-in-production|$JWT_SECRET|g" "$ENV_FILE"
         sed -i '' "s|your-base64-encoded-32-byte-key|$DATA_ENCRYPTION_KEY|g" "$ENV_FILE"
-        # For RSA key, we need to handle the newlines carefully
-        sed -i '' "s|-----BEGIN RSA PRIVATE KEY-----\\\\nYOUR_KEY_HERE\\\\n-----END RSA PRIVATE KEY-----|$RSA_PRIVATE_KEY|g" "$ENV_FILE"
+        # Use printf to properly escape the RSA key value for sed substitution
+        RSA_KEY_ESCAPED=$(printf '%s\n' "$RSA_PRIVATE_KEY" | sed -e 's:[&/\]:\\&:g')
+        sed -i '' "s|rsa-key-with-escaped-newlines|$RSA_KEY_ESCAPED|g" "$ENV_FILE"
     else
         # Linux sed syntax
         sed -i "s|your-jwt-secret-change-this-in-production|$JWT_SECRET|g" "$ENV_FILE"
         sed -i "s|your-base64-encoded-32-byte-key|$DATA_ENCRYPTION_KEY|g" "$ENV_FILE"
-        sed -i "s|-----BEGIN RSA PRIVATE KEY-----\\\\nYOUR_KEY_HERE\\\\n-----END RSA PRIVATE KEY-----|$RSA_PRIVATE_KEY|g" "$ENV_FILE"
+        # Use printf to properly escape the RSA key value for sed substitution
+        RSA_KEY_ESCAPED=$(printf '%s\n' "$RSA_PRIVATE_KEY" | sed -e 's:[&/\]:\\&:g')
+        sed -i "s|rsa-key-with-escaped-newlines|$RSA_KEY_ESCAPED|g" "$ENV_FILE"
     fi
     
     # Interactive API key configuration
@@ -544,6 +548,18 @@ step_verify_installation() {
     fi
     
     print_success "Installation verification complete!"
+    
+    # Run the comprehensive verification script
+    print_info ""
+    print_info "Running comprehensive environment verification..."
+    print_info ""
+    
+    if [ -f "$NOFX_REPO/verify.sh" ]; then
+        chmod +x "$NOFX_REPO/verify.sh"
+        "$NOFX_REPO/verify.sh"
+    else
+        print_warning "verify.sh not found - skipping comprehensive verification"
+    fi
 }
 
 ################################################################################
