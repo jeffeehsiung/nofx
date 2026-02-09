@@ -33,7 +33,7 @@ Then start your app:
 make run
 
 # Terminal 2: Frontend (new terminal)
-cd web && npm start
+make run-frontend
 
 # Open browser
 http://localhost:3000
@@ -301,8 +301,9 @@ make run
 
 **Terminal 2 (new):**
 ```bash
-cd web
-npm start
+make run-frontend
+# or
+cd web && npm run dev
 ```
 
 **Open in browser:**
@@ -675,7 +676,7 @@ Shows:
 make run
 
 # Start frontend (new terminal)
-cd web && npm start
+make run-frontend
 
 # Rebuild backend only
 make build
@@ -1081,7 +1082,7 @@ Once setup completes:
 
 2. **Start the frontend (new terminal):**
    ```bash
-   cd web && npm start
+   make run-frontend
    ```
 
 3. **Open browser:**
